@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary: #1565c0;
+  --color-success: #2e7d32;
+  --color-warning: #f57f17;
+  --color-danger: #c62828;
+  --color-border: #e0e0e0;
+  --color-bg: #ffffff;
+  --color-surface: #f8f9fa;
+  --color-text: #212121;
+  --color-text-secondary: #757575;
+  --radius: 6px;
+  --radius-card: 12px;
+  --radius-badge: 4px;
+  --sidebar-collapsed: 60px;
+  --sidebar-expanded: 150px;
+  --header-h: 64px;
+  --transition: 150ms ease;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter);
+  --color-primary: #1565c0;
+  --color-success: #2e7d32;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Excel-like grid helpers */
+.grid-cell-focus {
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}

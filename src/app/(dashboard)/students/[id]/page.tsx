@@ -1,0 +1,23 @@
+import Link from "next/link";
+import { StudentDetailPage } from "@/components/student/StudentDetailPage";
+import { getLeadById } from "@/lib/student-detail";
+
+type Props = { params: Promise<{ id: string }> };
+
+export default async function StudentPage({ params }: Props) {
+  const { id } = await params;
+  const lead = getLeadById(id);
+
+  if (!lead) {
+    return (
+      <div className="rounded-[12px] border border-[#e0e0e0] p-8 text-center">
+        <p className="text-[#757575]">Student not found.</p>
+        <Link href="/" className="mt-4 inline-block text-[#1565c0] underline">
+          Back to Leads
+        </Link>
+      </div>
+    );
+  }
+
+  return <StudentDetailPage lead={lead} />;
+}
