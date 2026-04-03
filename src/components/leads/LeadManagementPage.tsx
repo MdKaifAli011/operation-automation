@@ -420,20 +420,7 @@ export function LeadManagementPage() {
           </div>
         </div>
 
-        <div className={SX.leadStatBar}>
-          <span className="font-semibold tabular-nums text-[#1565c0]">
-            Ongoing {summary.ongoing}
-          </span>
-          <span className="h-3 w-px bg-[#d0d0d0]" aria-hidden />
-          <span className="font-semibold tabular-nums text-[#e65100]">
-            Follow-up {summary.followup}
-          </span>
-          <span className="h-3 w-px bg-[#d0d0d0]" aria-hidden />
-          <span className="font-semibold tabular-nums text-[#c62828]">
-            Not interested {summary.notInterested}
-          </span>
-        </div>
-
+       
         <div className={SX.leadTabBar}>
           {tabBtn("ongoing", "Ongoing")}
           {tabBtn("followup", "Follow-up")}
