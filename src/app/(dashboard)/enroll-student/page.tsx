@@ -5,7 +5,7 @@ import { useState } from "react";
 
 const ENROLLED = [
   {
-    id: "LMS-2026-0341",
+    id: "Testprepkart-2026-0341",
     name: "Rahul Sharma",
     course: "NEET",
     batch: "2026-27",
@@ -48,7 +48,7 @@ export default function EnrollStudentPage() {
       {done && (
         <div className="rounded-[6px] border border-[#c8e6c9] bg-[#e8f5e9] px-4 py-3 text-sm text-[#2e7d32]">
           ✓ Student Enrolled Successfully · Enrollment ID:{" "}
-          <strong>LMS-2026-0341</strong>
+          <strong>Testprepkart-2026-0341</strong>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="rounded-[6px] bg-white px-3 py-1 text-[#1565c0]">
               Download Admission Form
