@@ -9,6 +9,8 @@ import { LeadSheetTable } from "./LeadSheetTable";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 
+type LeadMainTab = "ongoing" | "not_interested" | "followup" | "converted";
+
 function sortLeads(
   list: Lead[],
   key: SortKey,
@@ -23,6 +25,8 @@ function sortLeads(
       cmp = a.studentName.localeCompare(b.studentName);
     } else if (key === "course") {
       cmp = a.course.localeCompare(b.course);
+    } else if (key === "country") {
+      cmp = a.country.localeCompare(b.country);
     } else if (key === "rowTone") {
       cmp = a.rowTone.localeCompare(b.rowTone);
     }
@@ -32,7 +36,7 @@ function sortLeads(
 
 export function LeadManagementPage() {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
-  const [sheetTab, setSheetTab] = useState<SheetTabId>("ongoing");
+  const [mainTab, setMainTab] = useState<LeadMainTab>("ongoing");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -65,7 +69,8 @@ export function LeadManagementPage() {
         (l) =>
           l.studentName.toLowerCase().includes(q) ||
           l.phone.includes(q) ||
-          l.course.toLowerCase().includes(q),
+          l.course.toLowerCase().includes(q) ||
+          l.country.toLowerCase().includes(q),
       );
     }
     if (dateFrom) {
@@ -137,7 +142,7 @@ export function LeadManagementPage() {
   const convertedLeadsFullPipeline = useMemo(
     () =>
       filtered.filter(
-        (l) => l.sheetTab === "converted" && l.pipelineSteps === 5,
+        (l) => l.sheetTab === "converted" && l.pipelineSteps === 4,
       ),
     [filtered],
   );
@@ -149,18 +154,10 @@ export function LeadManagementPage() {
       (l) => l.sheetTab === "not_interested",
     ).length;
     const converted = leads.filter(
-      (l) => l.sheetTab === "converted" && l.pipelineSteps === 5,
+      (l) => l.sheetTab === "converted" && l.pipelineSteps === 4,
     ).length;
     return { ongoing, followup, notInterested, converted };
   }, [leads]);
-
-  const summary = useMemo(() => {
-    return {
-      ongoing: counts.ongoing,
-      followup: counts.followup,
-      notInterested: counts.notInterested,
-    };
-  }, [counts]);
 
   const onUpdateLead = useCallback((id: string, patch: Partial<Lead>) => {
     setLeads((prev) =>
@@ -181,21 +178,32 @@ export function LeadManagementPage() {
     setSelectedIds(new Set());
   };
 
-  const tabBtn = (id: SheetTabId, label: string) => {
-    const c =
-      id === "ongoing"
-        ? counts.ongoing
-        : id === "followup"
-          ? counts.followup
-          : id === "not_interested"
-            ? counts.notInterested
-            : counts.converted;
-    const active = sheetTab === id;
+  const ongoingTabTotal =
+    todaysOngoingLeads.length + ongoingLeadsRest.length;
+
+  const tabCounts = useMemo(
+    () => ({
+      ongoing: ongoingTabTotal,
+      not_interested: notInterestedLeads.length,
+      followup: followUpLeads.length,
+      converted: convertedLeadsFullPipeline.length,
+    }),
+    [
+      ongoingTabTotal,
+      notInterestedLeads.length,
+      followUpLeads.length,
+      convertedLeadsFullPipeline.length,
+    ],
+  );
+
+  const tabBtn = (id: LeadMainTab, label: string) => {
+    const c = tabCounts[id];
+    const active = mainTab === id;
     return (
       <button
         key={id}
         type="button"
-        onClick={() => setSheetTab(id)}
+        onClick={() => setMainTab(id)}
         className={cn(
           SX.leadTabBtn,
           active ? SX.leadTabActive : SX.leadTabIdle,
@@ -219,6 +227,64 @@ export function LeadManagementPage() {
 
   return (
     <div className={SX.leadPageRoot}>
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {(
+          [
+            {
+              key: "ongoing",
+              label: "Ongoing",
+              value: counts.ongoing,
+              bar: "border-l-primary bg-white",
+              accent: "text-primary",
+            },
+            {
+              key: "followup",
+              label: "Follow-up",
+              value: counts.followup,
+              bar: "border-l-emerald-500 bg-white",
+              accent: "text-emerald-600",
+            },
+            {
+              key: "ni",
+              label: "Not interested",
+              value: counts.notInterested,
+              bar: "border-l-rose-500 bg-white",
+              accent: "text-rose-600",
+            },
+            {
+              key: "conv",
+              label: "Converted",
+              value: counts.converted,
+              bar: "border-l-indigo-600 bg-white",
+              accent: "text-indigo-700",
+            },
+          ] as const
+        ).map((c) => (
+          <div
+            key={c.key}
+            className={cn(
+              "overflow-hidden rounded-xl border border-slate-200/90 shadow-sm ring-1 ring-slate-900/[0.03]",
+              "border-l-4",
+              c.bar,
+            )}
+          >
+            <div className="px-4 py-3.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                {c.label}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-3xl font-bold tabular-nums tracking-tight",
+                  c.accent,
+                )}
+              >
+                {c.value}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <div className={SX.leadWorkbook}>
         <div className={SX.leadToolbar}>
           <div className="relative">
@@ -328,6 +394,7 @@ export function LeadManagementPage() {
                     ["studentName", "Name"],
                     ["rowTone", "Status"],
                     ["course", "Course"],
+                    ["country", "Country"],
                   ] as const
                 ).map(([k, label]) => (
                   <button
@@ -359,7 +426,7 @@ export function LeadManagementPage() {
 
           <select
             disabled={selectedIds.size === 0}
-            className={cn(SX.leadSelectSm, "w-[min(100%,200px)] shrink-0")}
+            className={cn(SX.leadSelectSm, "ml-auto w-[min(100%,200px)] shrink-0")}
             defaultValue=""
             onChange={(e) => {
               const v = e.target.value;
@@ -383,66 +450,44 @@ export function LeadManagementPage() {
             <option value="not_interested">Not Interested</option>
             <option value="followup">Follow-up Later</option>
           </select>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className={SX.leadBtnGreen}
-              onClick={() => {
-                const id = String(Date.now());
-                setLeads((prev) => [
-                  {
-                    id,
-                    date: format(today, "yyyy-MM-dd"),
-                    followUpDate: null,
-                    studentName: "New Student",
-                    parentName: "",
-                    counsellor: "Priya",
-                    course: "NEET",
-                    phone: "",
-                    pipelineSteps: 0,
-                    rowTone: "new",
-                    sheetTab: "ongoing",
-                  },
-                  ...prev,
-                ]);
-              }}
-            >
-              + Add Student
-            </button>
-            <button type="button" className={SX.leadBtnOutline}>
-              Save
-              <span className="inline-flex items-center gap-1 text-[11px] font-normal text-[#757575]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#2e7d32]" />
-                Auto-save ON
-              </span>
-            </button>
-          </div>
         </div>
 
        
         <div className={SX.leadTabBar}>
           {tabBtn("ongoing", "Ongoing")}
-          {tabBtn("followup", "Follow-up")}
           {tabBtn("not_interested", "Not Interested")}
+          {tabBtn("followup", "Follow-ups")}
           {tabBtn("converted", "Converted")}
         </div>
 
         <div className={SX.leadSheetBody}>
-          {sheetTab === "ongoing" && (
-            <>
-              <div>
-                <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>
-                    Today&apos;s queue · {format(today, "dd MMM yyyy")}
-                  </h2>
-                  <p className={SX.leadSectionMeta}>
-                    {todaysOngoingLeads.length} row
-                    {todaysOngoingLeads.length === 1 ? "" : "s"} · new today +
-                    follow-ups due
-                  </p>
+          {mainTab === "ongoing" && (
+            <div className="space-y-10 px-2 pb-4 pt-2 sm:px-4">
+              <section aria-labelledby="daily-leads-heading">
+                <div className="mb-4 flex flex-col gap-2 border-b border-amber-200/50 pb-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                      <h2
+                        id="daily-leads-heading"
+                        className="text-base font-bold tracking-tight text-slate-900"
+                      >
+                        Daily &amp; today
+                      </h2>
+                      <span className="rounded-full bg-amber-100/90 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200/80">
+                        {format(today, "dd MMM yyyy")}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[13px] text-slate-500">
+                      New intakes today and follow-ups due —{" "}
+                      <span className="font-medium text-slate-700">
+                        {todaysOngoingLeads.length}
+                      </span>{" "}
+                      {todaysOngoingLeads.length === 1 ? "row" : "rows"}
+                    </p>
+                  </div>
                 </div>
                 <LeadSheetTable
+                  variant="daily"
                   className={cn(SX.leadGridFlush, "border-x-0")}
                   leads={todaysOngoingLeads}
                   onUpdateLead={onUpdateLead}
@@ -461,16 +506,33 @@ export function LeadManagementPage() {
                   }}
                   visibleIds={todaysOngoingLeads.map((l) => l.id)}
                 />
-              </div>
-              <div className="border-t border-[#d0d0d0]">
-                <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>Ongoing pipeline</h2>
-                  <p className={SX.leadSectionMeta}>
-                    {ongoingLeadsRest.length} row
-                    {ongoingLeadsRest.length === 1 ? "" : "s"} · not added today
-                  </p>
+              </section>
+
+              <section aria-labelledby="pipeline-heading">
+                <div className="mb-4 flex flex-col gap-2 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                      <h2
+                        id="pipeline-heading"
+                        className="text-base font-bold tracking-tight text-slate-900"
+                      >
+                        Ongoing pipeline
+                      </h2>
+                      <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-sky-200/80">
+                        Full sheet
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[13px] text-slate-500">
+                      Rest of active leads (not in today&apos;s queue) —{" "}
+                      <span className="font-medium text-slate-700">
+                        {ongoingLeadsRest.length}
+                      </span>{" "}
+                      {ongoingLeadsRest.length === 1 ? "row" : "rows"}
+                    </p>
+                  </div>
                 </div>
                 <LeadSheetTable
+                  variant="standard"
                   className={cn(SX.leadGridFlush, "border-x-0")}
                   leads={ongoingLeadsRest}
                   onUpdateLead={onUpdateLead}
@@ -489,11 +551,11 @@ export function LeadManagementPage() {
                   }}
                   visibleIds={ongoingLeadsRest.map((l) => l.id)}
                 />
-              </div>
-            </>
+              </section>
+            </div>
           )}
 
-          {sheetTab === "followup" && (
+          {mainTab === "followup" && (
             <div>
               <div className={SX.leadSectionHead}>
                 <h2 className={SX.leadSectionTitle}>Follow-up</h2>
@@ -524,7 +586,7 @@ export function LeadManagementPage() {
             </div>
           )}
 
-          {sheetTab === "not_interested" && (
+          {mainTab === "not_interested" && (
             <div>
               <div className={SX.leadSectionHead}>
                 <h2 className={SX.leadSectionTitle}>Not interested</h2>
@@ -555,7 +617,7 @@ export function LeadManagementPage() {
             </div>
           )}
 
-          {sheetTab === "converted" && (
+          {mainTab === "converted" && (
             <div>
               <div className={SX.leadSectionHead}>
                 <h2 className={SX.leadSectionTitle}>Converted</h2>

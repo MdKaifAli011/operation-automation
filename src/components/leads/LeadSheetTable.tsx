@@ -14,7 +14,8 @@ import { createPortal } from "react-dom";
 import type { Lead } from "@/lib/types";
 import { COURSE_OPTIONS } from "@/lib/mock-data";
 import { cn } from "@/lib/cn";
-import { rowToneBg } from "./row-styles";
+import { formatLeadPhone } from "@/lib/phone-display";
+import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 
 const COL_KEYS = [
@@ -23,6 +24,7 @@ const COL_KEYS = [
   "parentName",
   "counsellor",
   "course",
+  "country",
   "phone",
 ] as const;
 type ColKey = (typeof COL_KEYS)[number];
@@ -38,6 +40,7 @@ const DEFAULT_WIDTHS: Record<string, number> = {
   parentName: 140,
   counsellor: 110,
   course: 108,
+  country: 108,
   phone: 132,
   status: 128,
   followUp: 112,
@@ -55,6 +58,8 @@ type Props = {
   visibleIds: string[];
   /** Flush to parent sheet: no outer radius, optional top border off when stacked. */
   className?: string;
+  /** `daily` = today’s digest: no A–J row, warmer chrome. `standard` = full worksheet grid. */
+  variant?: "standard" | "daily";
 };
 
 export function LeadSheetTable({
@@ -65,6 +70,7 @@ export function LeadSheetTable({
   onSelectAll,
   visibleIds,
   className,
+  variant = "standard",
 }: Props) {
   const baseId = useId();
   const [widths, setWidths] = useState(DEFAULT_WIDTHS);
@@ -129,7 +135,8 @@ export function LeadSheetTable({
         w.studentName +
         w.parentName +
         w.counsellor +
-        w.course,
+        w.course +
+        w.country,
     };
   }, [widths]);
 
@@ -232,10 +239,15 @@ export function LeadSheetTable({
     [actionMenu, leads],
   );
 
+  const isDaily = variant === "daily";
+
   return (
     <div
       className={cn(
-        "relative overflow-auto rounded-[2px] border border-[#d0d0d0] bg-white",
+        "relative overflow-auto rounded-xl shadow-sm",
+        isDaily
+          ? "rounded-2xl border border-amber-200/60 bg-gradient-to-b from-amber-50/50 via-white to-white ring-1 ring-amber-100/70"
+          : "border border-slate-200/90 bg-white ring-1 ring-slate-900/[0.04]",
         className,
       )}
     >
@@ -244,11 +256,89 @@ export function LeadSheetTable({
         className="w-max min-w-full border-collapse text-[13px]"
         style={{ tableLayout: "fixed" }}
       >
-        <thead className="sticky top-0 z-20 bg-[#f2f2f2] text-[11px] font-semibold uppercase tracking-[0.04em] text-[#424242]">
+        <thead className="sticky top-0 z-20 bg-slate-50/95 text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-600 backdrop-blur-sm">
+          {!isDaily && (
+          <tr className="bg-slate-100/90 text-[10px] font-bold tracking-widest text-slate-400">
+            <th
+              style={{ width: widths.idx, minWidth: widths.idx }}
+              className="sticky left-0 z-30 border border-slate-200 px-1 py-1 text-center"
+            >
+              #
+            </th>
+            <th
+              style={{ width: widths.date, minWidth: widths.date }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              A
+            </th>
+            <th
+              style={{
+                width: widths.studentName,
+                minWidth: widths.studentName,
+                left: stickyLeft.studentName,
+              }}
+              className="sticky z-[21] border border-slate-200 px-1 py-1 text-center"
+            >
+              B
+            </th>
+            <th
+              style={{ width: widths.parentName, minWidth: widths.parentName }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              C
+            </th>
+            <th
+              style={{ width: widths.counsellor, minWidth: widths.counsellor }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              D
+            </th>
+            <th
+              style={{ width: widths.course, minWidth: widths.course }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              E
+            </th>
+            <th
+              style={{ width: widths.country, minWidth: widths.country }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              F
+            </th>
+            <th
+              style={{
+                width: widths.phone,
+                minWidth: widths.phone,
+                left: stickyLeft.phone,
+              }}
+              className="sticky z-[21] border border-slate-200 px-1 py-1 text-center"
+            >
+              G
+            </th>
+            <th
+              style={{ width: widths.status, minWidth: widths.status }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              H
+            </th>
+            <th
+              style={{ width: widths.followUp, minWidth: widths.followUp }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              I
+            </th>
+            <th
+              style={{ width: widths.action, minWidth: widths.action }}
+              className="border border-slate-200 px-1 py-1 text-center"
+            >
+              J
+            </th>
+          </tr>
+          )}
           <tr>
             <th
               style={{ width: widths.idx, minWidth: widths.idx }}
-              className="sticky left-0 z-30 border border-[#d0d0d0] bg-[#f2f2f2] px-1 py-2 text-center"
+              className="sticky left-0 z-30 border border-slate-200 bg-slate-50/95 px-1 py-2 text-center"
             >
               <input
                 type="checkbox"
@@ -269,7 +359,7 @@ export function LeadSheetTable({
                 minWidth: widths.studentName,
                 left: stickyLeft.studentName,
               }}
-              className="sticky z-[21] border border-[#d0d0d0] bg-[#f2f2f2] px-2 py-2 text-left"
+              className="sticky z-[21] border border-slate-200 bg-slate-50/95 px-2 py-2 text-left"
             >
               <div className="flex items-center justify-between gap-1">
                 <span>Student Name</span>
@@ -297,13 +387,19 @@ export function LeadSheetTable({
             >
               Course
             </ResizableTh>
+            <ResizableTh
+              w={widths.country}
+              onResizeStart={(ev) => beginResize("country", ev)}
+            >
+              Country
+            </ResizableTh>
             <th
               style={{
                 width: widths.phone,
                 minWidth: widths.phone,
                 left: stickyLeft.phone,
               }}
-              className="sticky z-[21] border border-[#d0d0d0] bg-[#f2f2f2] px-2 py-2 text-left"
+              className="sticky z-[21] border border-slate-200 bg-slate-50/95 px-2 py-2 text-left"
             >
               <div className="flex items-center justify-between">
                 <span>Phone</span>
@@ -327,7 +423,7 @@ export function LeadSheetTable({
             </ResizableTh>
             <th
               style={{ width: widths.action, minWidth: widths.action }}
-              className="border border-[#d0d0d0] bg-[#f2f2f2] px-1 py-2 text-center"
+              className="border border-slate-200 bg-slate-50/95 px-1 py-2 text-center"
             >
               Action
             </th>
@@ -340,13 +436,13 @@ export function LeadSheetTable({
               <tr
                 key={lead.id}
                 className={cn(
-                  "min-h-[40px] border-b border-[#d0d0d0] transition-colors duration-150 hover:bg-[#f5f5f5]",
+                  "min-h-[40px] border-b border-slate-200 transition-colors duration-150 hover:bg-slate-50/90",
                   tone,
                 )}
               >
                 <td
                   style={{ width: widths.idx }}
-                  className="sticky left-0 z-10 border border-[#d0d0d0] bg-[#f2f2f2] px-1 py-1 text-center text-xs text-[#757575]"
+                  className="sticky left-0 z-10 border border-slate-200 bg-slate-50/95 px-1 py-1 text-center text-xs text-[#757575]"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <input
@@ -377,7 +473,7 @@ export function LeadSheetTable({
                   {editing?.leadId === lead.id && editing.field === "date" ? (
                     <input
                       type="date"
-                      className="w-full rounded-[4px] border border-[#1565c0] bg-white px-1 py-1 text-[13px]"
+                      className="w-full rounded-[4px] border border-primary bg-white px-1 py-1 text-[13px]"
                       defaultValue={lead.date}
                       onBlur={(e) => {
                         onUpdateLead(lead.id, { date: e.target.value });
@@ -407,7 +503,7 @@ export function LeadSheetTable({
                     left: stickyLeft.studentName,
                   }}
                   className={cn(
-                    "sticky z-10 border border-[#d0d0d0] px-2 py-1",
+                    "sticky z-10 border border-slate-200 px-2 py-1",
                     tone,
                   )}
                   onClick={() =>
@@ -421,7 +517,7 @@ export function LeadSheetTable({
                   {editing?.leadId === lead.id &&
                   editing.field === "studentName" ? (
                     <input
-                      className="w-full rounded-[4px] border border-[#1565c0] bg-white px-1 py-1 font-semibold"
+                      className="w-full rounded-[4px] border border-primary bg-white px-1 py-1 font-semibold"
                       defaultValue={lead.studentName}
                       onBlur={(e) => {
                         onUpdateLead(lead.id, {
@@ -434,7 +530,10 @@ export function LeadSheetTable({
                   ) : (
                     <Link
                       href={`/students/${lead.id}`}
-                      className="font-semibold text-[#1565c0] underline"
+                      className={cn(
+                        "font-semibold underline underline-offset-2",
+                        rowToneNameLinkClass(lead.rowTone),
+                      )}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {lead.studentName}
@@ -488,7 +587,7 @@ export function LeadSheetTable({
                 <td
                   style={{ width: widths.course }}
                   className={cn(
-                    "border border-[#d0d0d0] px-1 py-1",
+                    "border border-slate-200 px-1 py-1",
                     selectedCell?.leadId === lead.id &&
                       selectedCell.field === "course" &&
                       "grid-cell-focus",
@@ -511,9 +610,36 @@ export function LeadSheetTable({
                       onCancel={() => setEditing(null)}
                     />
                   ) : (
-                    <span>{lead.course}</span>
+                    <span className="inline-flex w-full items-center justify-between gap-1">
+                      <span>{lead.course}</span>
+                      <ChevronDownGlyph
+                        className="h-3.5 w-3.5 shrink-0 text-slate-400"
+                        aria-hidden
+                      />
+                    </span>
                   )}
                 </td>
+                <TextCell
+                  lead={lead}
+                  field="country"
+                  width={widths.country}
+                  selected={
+                    selectedCell?.leadId === lead.id &&
+                    selectedCell.field === "country"
+                  }
+                  onSelect={() =>
+                    setSelectedCell({ leadId: lead.id, field: "country" })
+                  }
+                  editing={
+                    editing?.leadId === lead.id && editing.field === "country"
+                  }
+                  onEdit={() =>
+                    setEditing({ leadId: lead.id, field: "country" })
+                  }
+                  onCommit={(v) => onUpdateLead(lead.id, { country: v })}
+                  onCancelEdit={() => setEditing(null)}
+                  tone={tone}
+                />
                 <td
                   style={{
                     width: widths.phone,
@@ -521,7 +647,7 @@ export function LeadSheetTable({
                     left: stickyLeft.phone,
                   }}
                   className={cn(
-                    "sticky z-10 border border-[#d0d0d0] px-2 py-1",
+                    "sticky z-10 border border-slate-200 px-2 py-1",
                     tone,
                   )}
                   onClick={() =>
@@ -534,7 +660,7 @@ export function LeadSheetTable({
                 >
                   {editing?.leadId === lead.id && editing.field === "phone" ? (
                     <input
-                      className="w-full rounded-[4px] border border-[#1565c0] bg-white px-1 py-1"
+                      className="w-full rounded-[4px] border border-primary bg-white px-1 py-1"
                       defaultValue={lead.phone}
                       onBlur={(e) => {
                         onUpdateLead(lead.id, { phone: e.target.value });
@@ -546,23 +672,24 @@ export function LeadSheetTable({
                     <a
                       href={`tel:${lead.phone}`}
                       title="Click to call"
-                      className="text-[#1565c0] underline"
+                      className="font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <span aria-hidden>📞 </span>
-                      {lead.phone}
+                      <span className="tabular-nums">
+                        {formatLeadPhone(lead)}
+                      </span>
                     </a>
                   )}
                 </td>
                 <td
                   style={{ width: widths.status }}
-                  className={cn("border border-[#d0d0d0] px-2 py-1", tone)}
+                  className={cn("border border-slate-200 px-2 py-1", tone)}
                 >
                   <PipelineDots completed={lead.pipelineSteps} />
                 </td>
                 <td
                   style={{ width: widths.followUp }}
-                  className={cn("border border-[#d0d0d0] px-2 py-1 text-[12px]", tone)}
+                  className={cn("border border-slate-200 px-2 py-1 text-[12px]", tone)}
                 >
                   {lead.followUpDate ? (
                     <span
@@ -580,11 +707,11 @@ export function LeadSheetTable({
                 </td>
                 <td
                   style={{ width: widths.action }}
-                  className={cn("border border-[#d0d0d0] px-0 py-1 text-center", tone)}
+                  className={cn("border border-slate-200 px-0 py-1 text-center", tone)}
                 >
                   <button
                     type="button"
-                    className="rounded-[4px] px-2 py-1 text-lg leading-none text-[#212121] hover:bg-[#eeeeee]"
+                    className="rounded-lg px-2 py-1 text-lg leading-none text-slate-700 transition-colors hover:bg-slate-100"
                     aria-expanded={actionMenu?.leadId === lead.id}
                     aria-haspopup="menu"
                     aria-controls={`${baseId}-menu-${lead.id}`}
@@ -626,7 +753,7 @@ export function LeadSheetTable({
             ref={actionMenuRef}
             id={`${baseId}-menu-${actionMenu.leadId}`}
             role="menu"
-            className="fixed z-[200] min-w-[180px] rounded-[6px] border border-[#d0d0d0] bg-white py-1 text-left text-sm shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+            className="fixed z-[200] min-w-[180px] rounded-[6px] border border-slate-200 bg-white py-1 text-left text-sm shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
             style={{
               top: actionMenu.top,
               left: actionMenu.left,
@@ -636,7 +763,7 @@ export function LeadSheetTable({
             <button
               type="button"
               role="menuitem"
-              className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
+              className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
               onClick={() => applyStatus(menuLead, "interested")}
             >
               Interested
@@ -644,7 +771,7 @@ export function LeadSheetTable({
             <button
               type="button"
               role="menuitem"
-              className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
+              className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
               onClick={() => applyStatus(menuLead, "not_interested")}
             >
               Not Interested
@@ -652,7 +779,7 @@ export function LeadSheetTable({
             <button
               type="button"
               role="menuitem"
-              className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
+              className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
               onClick={() => {
                 setActionMenu(null);
                 window.dispatchEvent(
@@ -683,7 +810,7 @@ function ResizableTh({
   return (
     <th
       style={{ width: w, minWidth: w }}
-      className="relative border border-[#d0d0d0] bg-[#f2f2f2] px-2 py-2 text-left"
+      className="relative border border-slate-200 bg-slate-50/95 px-2 py-2 text-left"
     >
       <div className="flex items-center justify-between gap-1 pr-1">
         <span>{children}</span>
@@ -715,7 +842,7 @@ function DataCell({
     <td
       style={{ width, minWidth: width }}
       className={cn(
-        "border border-[#d0d0d0] px-1 py-1",
+        "border border-slate-200 px-1 py-1",
         selected && !editing && "grid-cell-focus",
       )}
       onClick={onSelect}
@@ -754,7 +881,7 @@ function TextCell({
     <td
       style={{ width, minWidth: width }}
       className={cn(
-        "border border-[#d0d0d0] px-2 py-1",
+        "border border-slate-200 px-2 py-1",
         selected && !editing && "grid-cell-focus",
         tone,
       )}
@@ -763,7 +890,7 @@ function TextCell({
     >
       {editing ? (
         <input
-          className="w-full rounded-[4px] border border-[#1565c0] bg-white px-1 py-1"
+          className="w-full rounded-[4px] border border-primary bg-white px-1 py-1"
           defaultValue={val}
           onBlur={(e) => {
             onCommit(e.target.value);
@@ -775,6 +902,21 @@ function TextCell({
         val
       )}
     </td>
+  );
+}
+
+function ChevronDownGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -791,7 +933,7 @@ function CourseEditor({
   return (
     <div className="flex flex-col gap-1">
       <select
-        className="w-full rounded-[4px] border border-[#1565c0] bg-white px-1 py-1 text-[13px]"
+        className="w-full rounded-[4px] border border-primary bg-white px-1 py-1 text-[13px]"
         value={COURSE_OPTIONS.includes(v as (typeof COURSE_OPTIONS)[number]) ? v : "Other"}
         onChange={(e) => {
           const nv = e.target.value;
@@ -813,14 +955,14 @@ function CourseEditor({
       <div className="flex gap-1">
         <button
           type="button"
-          className="rounded-[4px] bg-[#2e7d32] px-2 py-0.5 text-xs text-white"
+          className="rounded-md bg-success px-2 py-0.5 text-xs text-white"
           onClick={() => onCommit(v)}
         >
           OK
         </button>
         <button
           type="button"
-          className="text-xs text-[#1565c0] underline"
+          className="text-xs text-primary underline"
           onClick={onCancel}
         >
           Cancel

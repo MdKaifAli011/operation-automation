@@ -1,17 +1,35 @@
 import type { RowTone } from "@/lib/types";
 
+/** Student name link color aligned to row status (reference UI). */
+export function rowToneNameLinkClass(tone: RowTone): string {
+  switch (tone) {
+    case "interested":
+      return "text-emerald-700 decoration-emerald-600/35";
+    case "not_interested":
+      return "text-rose-700 decoration-rose-500/35";
+    case "followup_later":
+      return "text-amber-800 decoration-amber-600/35";
+    case "new":
+      return "text-sky-800 decoration-sky-600/35";
+    case "called_no_response":
+      return "text-slate-700 decoration-slate-400";
+    default:
+      return "text-primary decoration-primary/30";
+  }
+}
+
 export function rowToneBg(tone: RowTone): string {
   switch (tone) {
     case "interested":
-      return "bg-[#e8f5e9]";
+      return "bg-emerald-50/90";
     case "not_interested":
-      return "bg-[#ffebee]";
+      return "bg-rose-50/90";
     case "followup_later":
-      return "bg-[#fffde7]";
+      return "bg-amber-50/90";
     case "new":
-      return "bg-[#e3f2fd]";
+      return "bg-sky-50/90";
     case "called_no_response":
-      return "bg-[#f5f5f5]";
+      return "bg-slate-100/90";
     default:
       return "bg-white";
   }

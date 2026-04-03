@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
 import type { Lead } from "@/lib/types";
 import { COURSE_OPTIONS, FACULTY_SEED } from "@/lib/mock-data";
+import { formatLeadPhone } from "@/lib/phone-display";
 import { extrasForLead } from "@/lib/student-detail";
 import { SX } from "@/components/student/student-excel-ui";
 import {
@@ -25,9 +26,10 @@ const STEPS = [
   { id: "step-1", n: 1, label: "Demo" },
   { id: "step-2", n: 2, label: "Brochure" },
   { id: "step-3", n: 3, label: "Fees" },
-  { id: "step-4", n: 4, label: "Enrollment" },
-  { id: "step-5", n: 5, label: "Schedule" },
+  { id: "step-4", n: 4, label: "Schedule" },
 ] as const;
+
+const PIPELINE_TOTAL = STEPS.length;
 
 type Props = { lead: Lead };
 
@@ -38,7 +40,6 @@ export function StudentDetailPage({ lead }: Props) {
   const [notes, setNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
-  const [enrolledOk, setEnrolledOk] = useState(false);
   const [scheduleView, setScheduleView] = useState<"table" | "calendar">(
     "table",
   );
@@ -61,7 +62,7 @@ export function StudentDetailPage({ lead }: Props) {
           ? "Not Interested"
           : "Converted";
 
-  const pipeDone = Math.min(Math.max(completed, 0), 5);
+  const pipeDone = Math.min(Math.max(completed, 0), PIPELINE_TOTAL);
 
   return (
     <div className={SX.pageWrap}>
@@ -105,9 +106,9 @@ export function StudentDetailPage({ lead }: Props) {
                 {lead.phone ? (
                   <a
                     href={`tel:${lead.phone}`}
-                    className="font-medium text-[#202124] hover:underline"
+                    className="font-medium tabular-nums text-[#202124] hover:underline"
                   >
-                    {lead.phone}
+                    {formatLeadPhone(lead)}
                   </a>
                 ) : (
                   <span className="text-[#9aa0a6]">—</span>
@@ -160,7 +161,7 @@ export function StudentDetailPage({ lead }: Props) {
               </span>
               <span className={SX.studentHeroSubLabel}>Pipeline</span>{" "}
               <span className={SX.studentHeroSubVal}>
-                {pipeDone}/5
+                {pipeDone}/{PIPELINE_TOTAL}
               </span>
               <span className="mx-2 text-[#dadce0]" aria-hidden>
                 ·
@@ -196,13 +197,6 @@ export function StudentDetailPage({ lead }: Props) {
               {activeStep === 2 && <BrochureSection />}
               {activeStep === 3 && <FeeSection lead={lead} />}
               {activeStep === 4 && (
-                <EnrollmentSection
-                  lead={lead}
-                  enrolledOk={enrolledOk}
-                  onSubmit={() => setEnrolledOk(true)}
-                />
-              )}
-              {activeStep === 5 && (
                 <ScheduleSection
                   view={scheduleView}
                   onViewChange={setScheduleView}
@@ -214,9 +208,8 @@ export function StudentDetailPage({ lead }: Props) {
 
           <aside className={SX.asidePane}>
             <p className={SX.asideIntro}>
-              <span className="font-semibold text-[#37474f]">Context</span> — Notes
-              and calls follow this student across steps. Same layout as your lead
-              sheet.
+              <span className="font-semibold text-slate-700">Workspace</span> — Notes,
+              activity, and calls stay with this student across every step.
             </p>
             <div className={SX.sidePanel}>
               <div className={SX.sideHead}>Notes</div>
@@ -233,73 +226,9 @@ export function StudentDetailPage({ lead }: Props) {
                   }}
                 />
                 {notesSaved && (
-                  <p className="mt-2 flex items-center gap-1 text-[12px] text-[#2e7d32]">
+                  <p className="mt-2 flex items-center gap-1 text-[12px] text-success">
                     <IconCheck className="h-3.5 w-3.5" /> Saved
                   </p>
-                )}
-              </div>
-            </div>
-
-            <div className={SX.sidePanel}>
-              <div className={SX.sideHead}>Call history</div>
-              <div className={SX.sideBody}>
-                <table className={SX.dataTable}>
-                  <thead>
-                    <tr>
-                      <th className={SX.dataTh}>Date</th>
-                      <th className={SX.dataTh}>Outcome</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className={SX.dataTd}>02 Apr 2026</td>
-                      <td className={SX.dataTd}>
-                        <span className="rounded-[2px] bg-[#e8f5e9] px-1.5 py-0.5 text-[11px] font-medium text-[#2e7d32]">
-                          Interested
-                        </span>
-                        <p className="mt-1 text-[12px] italic text-[#757575]">
-                          Discussed fee plan.
-                        </p>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className={cn(SX.dataTd, SX.zebraRow)}>28 Mar 2026</td>
-                      <td className={cn(SX.dataTd, SX.zebraRow)}>
-                        <span className="rounded-[2px] bg-[#f5f5f5] px-1.5 py-0.5 text-[11px] text-[#616161]">
-                          No answer
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <button
-                  type="button"
-                  className={cn(SX.btnGhost, "mt-3 w-full justify-center border border-dashed border-[#d0d0d0] py-2")}
-                  onClick={() => setCallOpen((v) => !v)}
-                >
-                  + Log call
-                </button>
-                {callOpen && (
-                  <form
-                    className="mt-3 space-y-2 border border-[#d0d0d0] bg-[#fafafa] p-2 text-[13px]"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setCallOpen(false);
-                    }}
-                  >
-                    <input type="date" className={SX.input} />
-                    <input placeholder="Duration" className={SX.input} />
-                    <select className={cn(SX.select, "w-full")}>
-                      <option>Interested</option>
-                      <option>No Answer</option>
-                      <option>Callback</option>
-                      <option>Not Interested</option>
-                    </select>
-                    <input placeholder="Notes" className={SX.input} />
-                    <button type="submit" className={cn(SX.btnPrimary, "w-full")}>
-                      Save call
-                    </button>
-                  </form>
                 )}
               </div>
             </div>
@@ -340,7 +269,7 @@ export function StudentDetailPage({ lead }: Props) {
                       <tr key={i}>
                         <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
                           <span className="inline-flex items-start gap-2">
-                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] border border-[#d0d0d0] bg-white text-[#1565c0]">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-primary">
                               <StepIcon className="h-3 w-3" />
                             </span>
                             <span>{text}</span>
@@ -360,6 +289,73 @@ export function StudentDetailPage({ lead }: Props) {
                 </table>
               </div>
             </div>
+
+            <div className={SX.sidePanel}>
+              <div className={SX.sideHead}>Call history</div>
+              <div className={SX.sideBody}>
+                <table className={SX.dataTable}>
+                  <thead>
+                    <tr>
+                      <th className={SX.dataTh}>Date</th>
+                      <th className={SX.dataTh}>Outcome</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className={SX.dataTd}>02 Apr 2026</td>
+                      <td className={SX.dataTd}>
+                        <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">
+                          Interested
+                        </span>
+                        <p className="mt-1 text-[12px] italic text-slate-500">
+                          Discussed fee plan.
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className={cn(SX.dataTd, SX.zebraRow)}>28 Mar 2026</td>
+                      <td className={cn(SX.dataTd, SX.zebraRow)}>
+                        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+                          No answer
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <button
+                  type="button"
+                  className={cn(
+                    SX.btnGhost,
+                    "mt-3 w-full justify-center rounded-lg border border-dashed border-slate-300 py-2.5 text-slate-700",
+                  )}
+                  onClick={() => setCallOpen((v) => !v)}
+                >
+                  + Log call
+                </button>
+                {callOpen && (
+                  <form
+                    className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-[13px]"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setCallOpen(false);
+                    }}
+                  >
+                    <input type="date" className={SX.input} />
+                    <input placeholder="Duration" className={SX.input} />
+                    <select className={cn(SX.select, "w-full")}>
+                      <option>Interested</option>
+                      <option>No Answer</option>
+                      <option>Callback</option>
+                      <option>Not Interested</option>
+                    </select>
+                    <input placeholder="Notes" className={SX.input} />
+                    <button type="submit" className={cn(SX.btnPrimary, "w-full")}>
+                      Save call
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
           </aside>
         </div>
       </div>
@@ -376,68 +372,86 @@ function Stepper({
   activeStep: number;
   onStepSelect: (step: number) => void;
 }) {
-  const activeLabel = STEPS.find((x) => x.n === activeStep)?.label ?? "";
-  const doneCount = Math.min(Math.max(completed, 0), 5);
+  const doneCount = Math.min(Math.max(completed, 0), PIPELINE_TOTAL);
+  const pct = (doneCount / PIPELINE_TOTAL) * 100;
+
   return (
-    <div className={SX.stepperShell}>
-      <div className={SX.stepperTrack}>
-        <div className={SX.stepperGrid} role="tablist" aria-label="Pipeline steps">
-          {STEPS.map((s) => {
-            const done = completed >= s.n;
-            const selected = activeStep === s.n;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                title={`Step ${s.n}: ${s.label}`}
-                onClick={() => onStepSelect(s.n)}
-                className={cn(
-                  "flex min-h-[40px] w-full items-center justify-center gap-1.5 px-2 py-2 text-[11px] font-semibold leading-tight transition-colors duration-150 sm:min-h-[42px] sm:text-[12px]",
-                  done && "bg-[#e8f5e9] text-[#1b5e20]",
-                  !done &&
-                    selected &&
-                    "bg-white text-[#0d47a1] ring-2 ring-inset ring-[#1565c0]",
-                  !done &&
-                    !selected &&
-                    "bg-white text-[#616161] hover:bg-[#f7f7f7]",
-                  done && selected && "ring-2 ring-inset ring-[#2e7d32]",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] border text-[10px] tabular-nums",
-                    done
-                      ? "border-[#2e7d32] bg-[#2e7d32] text-white"
-                      : "border-[#bdbdbd] bg-white",
+    <div className="border-b border-slate-200/90 bg-gradient-to-b from-white to-slate-50/40 px-4 py-5 sm:px-6">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div
+            className="flex flex-wrap items-center gap-x-1 gap-y-2"
+            role="tablist"
+            aria-label="Pipeline steps"
+          >
+            {STEPS.map((s, i) => {
+              const done = completed >= s.n;
+              const selected = activeStep === s.n;
+              const last = i === STEPS.length - 1;
+              return (
+                <Fragment key={s.id}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    title={`Step ${s.n}: ${s.label}`}
+                    onClick={() => onStepSelect(s.n)}
+                    className={cn(
+                      "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-2 text-left text-[12px] font-semibold shadow-sm transition-all duration-200",
+                      done &&
+                        "border-emerald-200/90 bg-emerald-50/95 text-emerald-900 ring-1 ring-emerald-100",
+                      !done &&
+                        selected &&
+                        "border-primary/40 bg-white text-slate-800 ring-2 ring-primary/25",
+                      !done &&
+                        !selected &&
+                        "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50/80",
+                    )}
+                  >
+                    {done ? (
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-900/15">
+                        <IconCheck className="h-3.5 w-3.5" />
+                      </span>
+                    ) : (
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-[11px] font-bold tabular-nums text-slate-500">
+                        {s.n}
+                      </span>
+                    )}
+                    <span className="min-w-0 truncate sm:max-w-[9rem]">
+                      {s.label}
+                    </span>
+                  </button>
+                  {!last && (
+                    <span
+                      className="hidden px-0.5 text-slate-300 sm:inline"
+                      aria-hidden
+                    >
+                      ›
+                    </span>
                   )}
-                >
-                  {done ? (
-                    <IconCheck className="h-3 w-3 shrink-0" />
-                  ) : (
-                    s.n
-                  )}
-                </span>
-                <span className="min-w-0 truncate">{s.label}</span>
-              </button>
-            );
-          })}
+                </Fragment>
+              );
+            })}
+          </div>
+          <p className="shrink-0 text-sm text-slate-600 lg:text-right">
+            <strong className="text-lg font-bold tabular-nums text-slate-900">
+              {doneCount}
+            </strong>
+            <span className="text-slate-500"> of {PIPELINE_TOTAL} completed</span>
+          </p>
         </div>
-      </div>
-      <div className={SX.stepperStatusBar}>
-        <span>
-          Working on{" "}
-          <strong className="font-semibold text-[#1565c0]">{activeLabel}</strong>
-          <span className="text-[#90a4ae]">
-            {" "}
-            · Step {activeStep} of 5
-          </span>
-        </span>
-        <span className="tabular-nums">
-          Progress:{" "}
-          <strong className="text-[#37474f]">{doneCount}</strong>/5 steps
-        </span>
+
+        <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-slate-200/90 shadow-inner">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm transition-[width] duration-500 ease-out"
+            style={{ width: `${pct}%` }}
+            role="progressbar"
+            aria-valuenow={doneCount}
+            aria-valuemin={0}
+            aria-valuemax={PIPELINE_TOTAL}
+            aria-label={`${doneCount} of ${PIPELINE_TOTAL} pipeline steps completed`}
+          />
+        </div>
       </div>
     </div>
   );
@@ -465,11 +479,11 @@ function StepFooter({
         ← Previous
       </button>
       <span className="max-w-[min(100%,200px)] truncate text-center text-[11px] text-[#78909c]">
-        Step {activeStep}/5 · {label}
+        Step {activeStep}/{PIPELINE_TOTAL} · {label}
       </span>
       <button
         type="button"
-        disabled={activeStep >= 5}
+        disabled={activeStep >= PIPELINE_TOTAL}
         onClick={() => onStepChange(activeStep + 1)}
         className={cn(
           SX.btnPrimary,
@@ -624,95 +638,174 @@ function DemoForm({
         ? ["Physics", "Chemistry", "Mathematics"]
         : ["English", "GK", "Reasoning"];
   const [subj, setSubj] = useState(subs[0]);
-  const teacher =
+  const defaultTeacher =
     subj === "Biology"
       ? "Dr. Meena Singh"
       : subj === "Physics"
         ? "Mr. Ravi Kumar"
         : FACULTY_SEED[0].name;
+  const [teacher, setTeacher] = useState(defaultTeacher);
+  const [demoDate, setDemoDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [demoTime, setDemoTime] = useState("10:00");
+
+  const pickSubject = (s: string) => {
+    setSubj(s);
+    const t =
+      s === "Biology"
+        ? "Dr. Meena Singh"
+        : s === "Physics"
+          ? "Mr. Ravi Kumar"
+          : FACULTY_SEED[0].name;
+    setTeacher(t);
+  };
 
   return (
-    <div className="space-y-3 border border-[#d0d0d0] bg-[#fafafa] p-4">
-      <label className="block text-[13px]">
-        <span className="text-[#616161]">Course name</span>
-        <select
-          className={cn(SX.select, "mt-1 w-full max-w-md")}
-          value={course}
-          onChange={(e) => {
-            const v = e.target.value;
-            setCourse(v);
-            const next =
-              v === "NEET"
-                ? "Biology"
-                : v === "JEE"
-                  ? "Physics"
-                  : "English";
-            setSubj(next);
-          }}
-        >
-          {COURSE_OPTIONS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div>
-        <span className="text-[13px] text-[#616161]">Subject</span>
-        <div className="mt-1 flex flex-wrap gap-3">
+    <div
+      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-slate-900/[0.04] sm:p-5"
+      role="form"
+      aria-label="Schedule demo class"
+    >
+      <div className="border-b border-slate-100 pb-4">
+        <h3 className="text-[15px] font-bold text-slate-900">Schedule a trial class</h3>
+        <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
+          Pick course, subject, and faculty — then set date and time in{" "}
+          <strong className="font-semibold text-slate-700">IST</strong>. We show a
+          local-time hint from the student&apos;s country.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <label className="block text-[13px]">
+          <span className="font-medium text-slate-700">Course</span>
+          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
+            Programme for this trial
+          </span>
+          <select
+            className={cn(SX.select, "mt-1 w-full")}
+            value={course}
+            onChange={(e) => {
+              const v = e.target.value;
+              setCourse(v);
+              const next =
+                v === "NEET"
+                  ? "Biology"
+                  : v === "JEE"
+                    ? "Physics"
+                    : "English";
+              pickSubject(next);
+            }}
+          >
+            {COURSE_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-[13px]">
+          <span className="font-medium text-slate-700">Assigned teacher</span>
+          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
+            Suggested from subject; you can override
+          </span>
+          <select
+            className={cn(SX.select, "mt-1 w-full")}
+            value={teacher}
+            onChange={(e) => setTeacher(e.target.value)}
+          >
+            <option value={defaultTeacher}>{defaultTeacher}</option>
+            {FACULTY_SEED.map((f) => (
+              <option key={f.id} value={f.name}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <fieldset className="mt-5">
+        <legend className="text-[13px] font-medium text-slate-700">Subject</legend>
+        <p className="mb-2 text-[11px] text-slate-500">
+          One subject per trial row — add another demo later for more subjects.
+        </p>
+        <div className="flex flex-wrap gap-2">
           {subs.map((s) => (
-            <label key={s} className="flex items-center gap-1.5 text-[13px]">
+            <label
+              key={s}
+              className={cn(
+                "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[13px] transition-colors",
+                subj === s
+                  ? "border-primary bg-sky-50 font-medium text-primary ring-1 ring-primary/20"
+                  : "border-slate-200 bg-slate-50/80 text-slate-700 hover:border-slate-300",
+              )}
+            >
               <input
                 type="radio"
                 name="demo-subj"
+                className="sr-only"
                 checked={subj === s}
-                onChange={() => setSubj(s)}
+                onChange={() => pickSubject(s)}
               />
               {s}
             </label>
           ))}
         </div>
-      </div>
-      <label className="block text-[13px]">
-        <span className="text-[#616161]">Teacher</span>
-        <select className={cn(SX.select, "mt-1 w-full max-w-md")}>
-          <option>{teacher}</option>
-          {FACULTY_SEED.map((f) => (
-            <option key={f.id}>{f.name}</option>
-          ))}
-        </select>
-      </label>
-      <div className="flex flex-wrap gap-3">
-        <label className="text-[13px]">
-          <span className="text-[#616161]">Demo date</span>
-          <input type="date" className={cn(SX.input, "mt-1 block")} />
+      </fieldset>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="block text-[13px]">
+          <span className="font-medium text-slate-700">Demo date</span>
+          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
+            When the student will join
+          </span>
+          <input
+            type="date"
+            value={demoDate}
+            onChange={(e) => setDemoDate(e.target.value)}
+            className={cn(SX.input, "mt-1 w-full")}
+          />
         </label>
-        <label className="text-[13px]">
-          <span className="text-[#616161]">Demo time (IST)</span>
-          <input type="time" defaultValue="10:00" className={cn(SX.input, "mt-1 block")} />
+        <label className="block text-[13px]">
+          <span className="font-medium text-slate-700">Start time (IST)</span>
+          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
+            India Standard Time
+          </span>
+          <input
+            type="time"
+            value={demoTime}
+            onChange={(e) => setDemoTime(e.target.value)}
+            className={cn(SX.input, "mt-1 w-full")}
+          />
         </label>
       </div>
-      <p className="text-[12px] text-[#757575]">
-        10:00 AM IST = 12:30 PM SGT (Asia/Singapore) — based on student country.
-      </p>
-      <div className="flex flex-wrap gap-2 pt-1">
+
+      <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50/80 px-3 py-2.5 text-[12px] leading-snug text-slate-700">
+        <span className="font-semibold text-sky-900">Timezone tip · </span>
+        Example: 10:00 IST ≈ 12:30 SGT for Singapore — adjust comms for{" "}
+        <strong>{lead.country}</strong>.
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
+        <button type="button" className={SX.btnSecondary} onClick={onCancel}>
+          Cancel
+        </button>
         <button
           type="button"
-          className="inline-flex items-center rounded-[2px] border border-[#2e7d32] bg-[#2e7d32] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-[#27692a]"
+          className={cn(
+            "inline-flex items-center rounded-lg border border-success bg-success px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#27692a]",
+          )}
           onClick={() =>
             onSchedule({
               subject: subj,
               teacher,
-              date: format(new Date(), "dd/MM/yyyy"),
-              time: "10:00 AM",
+              date: format(parseISO(demoDate), "dd/MM/yyyy"),
+              time: demoTime.includes(":")
+                ? `${demoTime} IST`
+                : demoTime,
               status: "Scheduled",
             })
           }
         >
           Schedule demo
-        </button>
-        <button type="button" className={SX.btnGhost} onClick={onCancel}>
-          Cancel
         </button>
       </div>
     </div>
@@ -796,10 +889,11 @@ function BrochureSection() {
 
 function FeeSection({ lead }: { lead: Lead }) {
   const [discount, setDiscount] = useState(10);
+  const [emiEnabled, setEmiEnabled] = useState(false);
   const [emi, setEmi] = useState(12);
   const total = 85000;
   const finalFee = Math.round(total * (1 - discount / 100));
-  const monthly = Math.round(finalFee / emi);
+  const monthly = emiEnabled ? Math.round(finalFee / emi) : 0;
   const [currency, setCurrency] = useState("INR");
   const rates: Record<string, number> = {
     INR: 1,
@@ -816,187 +910,138 @@ function FeeSection({ lead }: { lead: Lead }) {
       <div className={SX.sectionHead}>
         <div>
           <h2 className={SX.sectionTitle}>Step 3 · Fee structure</h2>
-          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
-            Edit discount and EMI in the grid; totals update like a spreadsheet.
+          <p className="mt-0.5 max-w-[520px] text-[11px] text-slate-500">
+            Adjust discount; enable EMI when the family wants a payment plan. Totals
+            update live.
           </p>
         </div>
       </div>
       <div className={SX.sectionBody}>
-      <div className="overflow-auto">
-        <table className={cn(SX.dataTable, "min-w-[520px]")}>
-          <thead>
-            <tr>
-              <th className={SX.dataTh}>Course</th>
-              <th className={SX.dataTh}>Total fee</th>
-              <th className={SX.dataTh}>Discount (%)</th>
-              <th className={SX.dataTh}>Final fee</th>
-              <th className={SX.dataTh}>EMI</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className={SX.dataTd}>{lead.course}</td>
-              <td className={SX.dataTd}>₹85,000</td>
-              <td className={SX.dataTd}>
-                <input
-                  type="number"
-                  className={cn(SX.input, "w-20")}
-                  value={discount}
-                  onChange={(e) => setDiscount(Number(e.target.value))}
-                />
-              </td>
-              <td className={cn(SX.dataTd, "font-semibold tabular-nums")}>
-                ₹{finalFee.toLocaleString("en-IN")}
-              </td>
-              <td className={SX.dataTd}>
-                <select
-                  className={cn(SX.select, "w-full min-w-[100px]")}
-                  value={emi}
-                  onChange={(e) => setEmi(Number(e.target.value))}
-                >
-                  <option value={3}>3 months</option>
-                  <option value={6}>6 months</option>
-                  <option value={12}>12 months</option>
-                </select>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-2 text-[13px] tabular-nums text-[#424242]">
-        Monthly EMI: ₹{monthly.toLocaleString("en-IN")} × {emi} months = ₹
-        {finalFee.toLocaleString("en-IN")}
-      </p>
-      <div className="mt-4 border border-[#d0d0d0] bg-[#fafafa] p-3">
-        <label className="text-[13px] font-semibold text-[#212121]">Convert to student&apos;s currency</label>
-        <select
-          className={cn(SX.select, "mt-2")}
-          value={currency}
-          onChange={(e) => setCurrency(e.target.value)}
-        >
-          {["INR", "USD", "AED", "GBP", "EUR", "SGD"].map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <p className="mt-2 font-semibold tabular-nums">
-          ₹{finalFee.toLocaleString("en-IN")} ≈{" "}
-          {currency === "INR"
-            ? `₹${finalFee.toLocaleString("en-IN")}`
-            : `${converted.toFixed(2)} ${currency}`}
-        </p>
-        <p className="text-[12px] text-[#757575]">Exchange rate is approximate</p>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#e8e8e8] pt-3">
-        <span className="text-[13px] font-semibold">Send fee structure</span>
-        <button type="button" className="rounded-[2px] bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]">
-          WhatsApp
-        </button>
-        <button type="button" className={SX.btnPrimary}>
-          Email
-        </button>
-      </div>
-      </div>
-    </section>
-  );
-}
+        <div className="overflow-auto rounded-lg border border-slate-200">
+          <table className={cn(SX.dataTable, "min-w-[520px]")}>
+            <thead>
+              <tr>
+                <th className={SX.dataTh}>Course</th>
+                <th className={SX.dataTh}>Total fee</th>
+                <th className={SX.dataTh}>Discount (%)</th>
+                <th className={SX.dataTh}>Final fee</th>
+                <th className={SX.dataTh}>EMI plan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className={SX.dataTd}>{lead.course}</td>
+                <td className={SX.dataTd}>₹85,000</td>
+                <td className={SX.dataTd}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    className={cn(SX.input, "w-20")}
+                    value={discount}
+                    onChange={(e) => setDiscount(Number(e.target.value))}
+                    aria-label="Discount percent"
+                  />
+                </td>
+                <td className={cn(SX.dataTd, "font-semibold tabular-nums")}>
+                  ₹{finalFee.toLocaleString("en-IN")}
+                </td>
+                <td className={SX.dataTd}>
+                  {emiEnabled ? (
+                    <select
+                      className={cn(SX.select, "w-full min-w-[120px]")}
+                      value={emi}
+                      onChange={(e) => setEmi(Number(e.target.value))}
+                      aria-label="EMI months"
+                    >
+                      <option value={3}>3 months</option>
+                      <option value={6}>6 months</option>
+                      <option value={12}>12 months</option>
+                    </select>
+                  ) : (
+                    <span className="text-[13px] text-slate-400">—</span>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-function EnrollmentSection({
-  lead,
-  enrolledOk,
-  onSubmit,
-}: {
-  lead: Lead;
-  enrolledOk: boolean;
-  onSubmit: () => void;
-}) {
-  return (
-    <section className={SX.section}>
-      <div className={SX.sectionHead}>
-        <div>
-          <h2 className={SX.sectionTitle}>Step 4 · Enrollment form</h2>
-          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
-            Collect details in one pass. Submit when the family confirms.
+        {!emiEnabled && (
+          <div className="mt-3">
+            <button
+              type="button"
+              className={cn(
+                SX.btnSecondary,
+                "text-[13px] font-medium text-primary ring-1 ring-primary/25",
+              )}
+              onClick={() => setEmiEnabled(true)}
+            >
+              Enable EMI options
+            </button>
+            <p className="mt-1.5 text-[12px] text-slate-500">
+              Off by default. Turn on to choose tenure and show monthly estimates.
+            </p>
+          </div>
+        )}
+
+        {emiEnabled && (
+          <p className="mt-3 text-[13px] tabular-nums text-slate-700">
+            Monthly EMI:{" "}
+            <strong>₹{monthly.toLocaleString("en-IN")}</strong> × {emi} months =
+            ₹{finalFee.toLocaleString("en-IN")}
           </p>
-        </div>
-      </div>
-      <div className={SX.sectionBody}>
-      {enrolledOk && (
-        <div className="mb-4 flex items-center gap-2 border border-[#a5d6a7] bg-[#e8f5e9] px-3 py-2 text-[13px] font-medium text-[#1b5e20]">
-          <IconCheck className="h-4 w-4 shrink-0" />
-          Enrollment form submitted successfully
-        </div>
-      )}
-      <div className="grid gap-3 md:grid-cols-2">
-        <Field label="Student Full Name" defaultValue={lead.studentName} />
-        <Field label="Parent/Guardian Name" defaultValue={lead.parentName} />
-        <Field label="Date of Birth" type="date" />
-        <label className="text-[13px]">
-          <span className="text-[#616161]">Gender</span>
-          <select className={cn(SX.select, "mt-1 w-full")}>
-            <option>Male</option>
-            <option>Female</option>
-            <option>Other</option>
-            <option>Prefer not to say</option>
+        )}
+
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+          <label className="text-[13px] font-semibold text-slate-800">
+            Convert to student&apos;s currency
+          </label>
+          <select
+            className={cn(SX.select, "mt-2 max-w-xs")}
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+          >
+            {["INR", "USD", "AED", "GBP", "EUR", "SGD"].map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
-        </label>
-        <Field label="Course" defaultValue={lead.course} />
-        <Field label="Phone Number" defaultValue={lead.phone} />
-        <Field label="WhatsApp Number" />
-        <Field label="Email Address" />
-        <label className="md:col-span-2 text-[13px]">
-          <span className="text-[#616161]">Address</span>
-          <textarea rows={3} className={cn(SX.textarea, "mt-1")} />
-        </label>
-        <Field label="City" />
-        <Field label="State" />
-        <Field label="Country" defaultValue="India" />
-        <Field label="Emergency Contact Name" />
-        <Field label="Emergency Number" />
-        <Field label="Previous School / College" />
-        <label className="text-[13px]">
-          <span className="text-[#616161]">Board</span>
-          <select className={cn(SX.select, "mt-1 w-full")}>
-            <option>CBSE</option>
-            <option>ICSE</option>
-            <option>State Board</option>
-            <option>International</option>
-          </select>
-        </label>
-        <Field label="Digital signature (type full name)" />
-        <Field label="Date" type="date" defaultValue={format(new Date(), "yyyy-MM-dd")} />
-      </div>
-      <button
-        type="button"
-        className="mt-6 w-full rounded-[2px] border border-[#2e7d32] bg-[#2e7d32] py-2.5 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-[#27692a]"
-        onClick={onSubmit}
-      >
-        Submit enrollment form
-      </button>
+          <p className="mt-2 font-semibold tabular-nums text-slate-800">
+            ₹{finalFee.toLocaleString("en-IN")} ≈{" "}
+            {currency === "INR"
+              ? `₹${finalFee.toLocaleString("en-IN")}`
+              : `${converted.toFixed(2)} ${currency}`}
+          </p>
+          <p className="text-[12px] text-slate-500">Indicative rate — confirm before payment</p>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
+          <span className="mr-1 text-[13px] font-semibold text-slate-700">
+            Send fee structure
+          </span>
+          <button
+            type="button"
+            className="rounded-lg bg-[#25d366] px-3 py-2 text-[13px] font-medium text-white shadow-sm hover:bg-[#1fb855]"
+          >
+            WhatsApp
+          </button>
+          <button type="button" className={SX.btnPrimary}>
+            Email
+          </button>
+          <button
+            type="button"
+            className={cn(
+              SX.btnSecondary,
+              "border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100",
+            )}
+          >
+            Send enrollment form
+          </button>
+        </div>
       </div>
     </section>
-  );
-}
-
-function Field({
-  label,
-  defaultValue,
-  type = "text",
-}: {
-  label: string;
-  defaultValue?: string;
-  type?: string;
-}) {
-  return (
-    <label className="text-[13px]">
-      <span className="text-[#616161]">{label}</span>
-      <input
-        type={type}
-        defaultValue={defaultValue}
-        className={cn(SX.input, "mt-1")}
-      />
-    </label>
   );
 }
 
@@ -1013,7 +1058,7 @@ function ScheduleSection({
     <section className={SX.section}>
       <div className={SX.sectionHead}>
         <div className="min-w-0 flex-1">
-          <h2 className={SX.sectionTitle}>Step 5 · Class schedule</h2>
+          <h2 className={SX.sectionTitle}>Step 4 · Class schedule</h2>
           <p className="mt-0.5 max-w-[480px] text-[11px] text-[#757575]">
             Switch table vs week view. Confirmed classes appear in both.
           </p>

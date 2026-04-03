@@ -5,7 +5,7 @@ export const SX = {
   pageWrap: "flex flex-col gap-0 pb-10",
 
   outerSheet:
-    "overflow-hidden rounded-[2px] border border-[#c6c6c6] bg-[#f5f5f5] shadow-[0_1px_4px_rgba(0,0,0,0.07)]",
+    "overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/50 shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.03]",
 
   toolbar:
     "flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[#c6c6c6] bg-[linear-gradient(180deg,#fafafa_0%,#f0f0f0_100%)] px-3 py-2",
@@ -115,37 +115,39 @@ export const SX = {
   /** Lead Management (home grid) — same workbook language as student detail */
   leadPageRoot: "flex flex-col gap-0",
   leadWorkbook:
-    "overflow-hidden rounded-[2px] border border-[#c6c6c6] bg-[#ebebeb] shadow-[0_1px_4px_rgba(0,0,0,0.07)]",
+    "overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm shadow-slate-900/[0.04] ring-1 ring-slate-900/[0.03]",
   leadToolbar:
-    "flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-[#c6c6c6] bg-[linear-gradient(180deg,#fafafa_0%,#f0f0f0_100%)] px-2.5 py-1.5",
+    "flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 px-3 py-2.5",
   leadToolbarIconBtn:
-    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[2px] border border-[#d0d0d0] bg-white text-[#424242] transition-colors hover:bg-[#fafafa]",
+    "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50",
   leadSearch:
-    "h-8 min-w-[140px] max-w-[min(100%,320px)] flex-1 rounded-[2px] border border-[#d0d0d0] bg-white px-2.5 text-[13px] shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)] placeholder:text-[#9e9e9e] focus:border-[#1565c0] focus:outline-none focus:ring-1 focus:ring-[#1565c0]",
+    "h-9 min-w-[140px] max-w-[min(100%,320px)] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-[13px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)] placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
   leadSelectSm:
-    "h-8 rounded-[2px] border border-[#d0d0d0] bg-white px-2 text-[13px] disabled:opacity-45",
+    "h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] shadow-sm disabled:opacity-45",
   leadStatBar:
-    "flex flex-wrap items-center gap-x-6 gap-y-0.5 border-b border-[#d0d0d0] bg-white px-3 py-1.5 text-[12px] leading-tight",
-  leadTabBar: "flex min-h-[38px] w-full gap-px bg-[#c6c6c6] p-px",
+    "flex flex-wrap items-center gap-x-6 gap-y-0.5 border-b border-slate-200/90 bg-slate-50/50 px-3 py-2 text-[12px] leading-tight text-slate-600",
+  leadTabBar:
+    "flex min-h-[42px] w-full gap-1 border-b border-slate-200/90 bg-slate-50/40 px-2 pt-2",
   leadTabBtn:
-    "flex min-w-0 flex-1 items-center justify-center gap-1.5 px-2 py-2 text-center text-[12px] font-semibold transition-colors sm:px-3",
+    "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-t-lg px-2 py-2.5 text-center text-[12px] font-semibold transition-all sm:px-3",
   leadTabActive:
-    "bg-white text-[#1565c0] shadow-[inset_0_-2px_0_0_#1565c0]",
-  leadTabIdle: "bg-[#f5f5f5] text-[#616161] hover:bg-[#ececec]",
+    "bg-white text-primary shadow-[inset_0_-2px_0_0_#1565c0]",
+  leadTabIdle:
+    "text-slate-500 hover:bg-white/60 hover:text-slate-700",
   leadTabCount:
-    "rounded-[2px] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-  leadTabCountActive: "bg-[#e3f2fd] text-[#1565c0]",
-  leadTabCountIdle: "bg-[#e0e0e0] text-[#616161]",
-  leadSheetBody: "border-x border-b border-[#d0d0d0] bg-white",
+    "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+  leadTabCountActive: "bg-sky-100 text-primary",
+  leadTabCountIdle: "bg-slate-200/80 text-slate-600",
+  leadSheetBody: "border-x border-b border-slate-200/90 bg-white",
   leadSectionHead:
-    "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-[#d0d0d0] bg-[#f2f2f2] px-2 py-1.5",
-  leadSectionTitle: "text-[13px] font-bold tracking-tight text-[#212121]",
-  leadSectionMeta: "text-[11px] text-[#757575]",
+    "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-slate-200/90 bg-slate-50/70 px-3 py-2",
+  leadSectionTitle: "text-[13px] font-bold tracking-tight text-slate-800",
+  leadSectionMeta: "text-[11px] text-slate-500",
   leadGridFlush: "rounded-none border-t-0",
   leadPopover:
-    "absolute left-0 top-full z-50 mt-1 w-[280px] rounded-[2px] border border-[#d0d0d0] bg-white p-3 text-[#212121] shadow-[0_4px_16px_rgba(0,0,0,0.1)]",
+    "absolute left-0 top-full z-50 mt-1.5 w-[280px] rounded-xl border border-slate-200 bg-white p-3 text-slate-800 shadow-lg shadow-slate-900/10 ring-1 ring-slate-900/5",
   leadBtnGreen:
-    "inline-flex h-8 items-center rounded-[2px] border border-[#2e7d32] bg-[#2e7d32] px-3 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-[#27692a]",
+    "inline-flex h-9 items-center rounded-lg border border-success bg-success px-3.5 text-[13px] font-medium text-white shadow-sm shadow-emerald-900/10 transition-colors hover:bg-[#27692a]",
   leadBtnOutline:
-    "inline-flex h-8 items-center gap-1.5 rounded-[2px] border border-[#d0d0d0] bg-white px-3 text-[13px] font-medium text-[#212121] hover:bg-[#fafafa]",
+    "inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-800 shadow-sm transition-colors hover:bg-slate-50",
 } as const;

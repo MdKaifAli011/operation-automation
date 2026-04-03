@@ -29,7 +29,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "group/sidebar fixed left-0 top-0 z-40 flex h-full flex-col border-r border-[#e0e0e0] bg-white transition-[width] duration-150 ease-in-out",
+        "group/sidebar fixed left-0 top-0 z-40 flex h-full flex-col border-r border-slate-200/90 bg-white/95 shadow-[2px_0_12px_-4px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-[width] duration-200 ease-out",
         "w-[var(--sidebar-collapsed)] hover:w-[var(--sidebar-expanded)] max-md:w-[var(--sidebar-collapsed)] max-md:hover:w-[var(--sidebar-collapsed)]",
       )}
       style={{ transitionProperty: "width" }}
@@ -52,14 +52,16 @@ export function Sidebar() {
               className={cn(
                 "relative flex min-h-[44px] items-center gap-3 rounded-r-md px-2.5 text-[13px] font-medium transition-colors duration-150",
                 active
-                  ? "bg-[#e3f2fd] text-[#1565c0] before:absolute before:left-0 before:top-1/2 before:h-[30px] before:w-1 before:-translate-y-1/2 before:rounded-r before:bg-[#1565c0]"
-                  : "text-[#212121] hover:bg-[#f5f5f5] max-md:text-[#757575]",
+                  ? "bg-sky-50 text-primary before:absolute before:left-0 before:top-1/2 before:h-[32px] before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-primary"
+                  : "text-slate-700 hover:bg-slate-50 max-md:text-slate-500",
               )}
             >
               <span
                 className={cn(
                   "flex w-9 shrink-0 justify-center",
-                  active ? "text-[#1565c0]" : "text-[#9e9e9e] group-hover/sidebar:text-[#616161]",
+                  active
+                    ? "text-primary"
+                    : "text-slate-400 group-hover/sidebar:text-slate-600",
                 )}
               >
                 <Icon title={item.label} />

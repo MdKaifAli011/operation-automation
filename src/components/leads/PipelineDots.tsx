@@ -1,12 +1,17 @@
 "use client";
 
-const STEPS = ["Demo", "Brochure", "Fees", "Enrollment", "Schedule"] as const;
+const STEPS = ["Demo", "Brochure", "Fees", "Schedule"] as const;
+const MAX = 4;
 
 export function PipelineDots({ completed }: { completed: number }) {
-  const n = Math.min(5, Math.max(0, completed));
+  const n = Math.min(MAX, Math.max(0, completed));
   return (
     <div className="flex flex-col items-start gap-1">
-      <div className="flex items-center gap-0.5" role="img" aria-label={`${n} of 5 steps`}>
+      <div
+        className="flex items-center gap-0.5"
+        role="img"
+        aria-label={`${n} of ${MAX} steps`}
+      >
         {STEPS.map((label, i) => (
           <span
             key={label}
@@ -22,7 +27,9 @@ export function PipelineDots({ completed }: { completed: number }) {
           </span>
         ))}
       </div>
-      <span className="text-[11px] text-[#757575]">{n}/5 steps</span>
+      <span className="text-[11px] text-[#757575]">
+        {n}/{MAX} steps
+      </span>
     </div>
   );
 }

@@ -16,11 +16,17 @@ export type Lead = {
   parentName: string;
   counsellor: string;
   course: string;
+  country: string;
   phone: string;
-  pipelineSteps: number; // 0-5 completed
+  pipelineSteps: number; // 0–4 completed (Demo → Brochure → Fees → Schedule)
   rowTone: RowTone;
   sheetTab: SheetTabId;
 };
 
-export type SortKey = "date" | "studentName" | "course" | "rowTone";
+export type SortKey =
+  | "date"
+  | "studentName"
+  | "course"
+  | "country"
+  | "rowTone";
 export type SortDir = "asc" | "desc";

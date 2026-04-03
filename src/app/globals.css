@@ -5,18 +5,18 @@
   --color-success: #2e7d32;
   --color-warning: #f57f17;
   --color-danger: #c62828;
-  --color-border: #e0e0e0;
-  --color-bg: #ffffff;
-  --color-surface: #f8f9fa;
-  --color-text: #212121;
-  --color-text-secondary: #757575;
-  --radius: 6px;
-  --radius-card: 12px;
-  --radius-badge: 4px;
+  --color-border: #e2e8f0;
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-text: #0f172a;
+  --color-text-secondary: #64748b;
+  --radius: 8px;
+  --radius-card: 14px;
+  --radius-badge: 6px;
   --sidebar-collapsed: 72px;
   --sidebar-expanded: 220px;
   --header-h: 64px;
-  --transition: 150ms ease;
+  --transition: 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @theme inline {
@@ -31,6 +31,7 @@ body {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 :focus-visible {

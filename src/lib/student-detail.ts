@@ -13,7 +13,7 @@ export type StudentDetailExtras = {
 
 export function extrasForLead(lead: Lead): StudentDetailExtras {
   return {
-    country: "India",
+    country: lead.country,
     email: `${lead.studentName.split(" ")[0].toLowerCase()}@email.test`,
     statusLabel:
       lead.rowTone === "new"
