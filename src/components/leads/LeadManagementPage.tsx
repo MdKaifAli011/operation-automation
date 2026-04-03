@@ -1,11 +1,12 @@
 "use client";
 
-import { format, isSameDay, parseISO } from "date-fns";
+import { addDays, format, isSameDay, parseISO } from "date-fns";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lead, SheetTabId, SortDir, SortKey } from "@/lib/types";
 import { INITIAL_LEADS } from "@/lib/mock-data";
 import { FollowUpDialog } from "./FollowUpDialog";
 import { LeadSheetTable } from "./LeadSheetTable";
+import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 
 function sortLeads(
@@ -97,14 +98,49 @@ export function LeadManagementPage() {
     sortDir,
   ]);
 
-  const tabFiltered = useMemo(
-    () => filtered.filter((l) => l.sheetTab === sheetTab),
-    [filtered, sheetTab],
+  /** Ongoing tab · today’s area: new leads today (ongoing) OR follow-ups scheduled for today (still on follow-up sheet). */
+  const todaysOngoingLeads = useMemo(() => {
+    return filtered.filter((l) => {
+      const isNewToday =
+        l.sheetTab === "ongoing" && isSameDay(parseISO(l.date), today);
+      const isFollowUpDueToday =
+        l.sheetTab === "followup" &&
+        l.followUpDate != null &&
+        l.followUpDate !== "" &&
+        isSameDay(parseISO(l.followUpDate), today);
+      return isNewToday || isFollowUpDueToday;
+    });
+  }, [filtered, today]);
+
+  /** Ongoing tab: rest of pipeline (ongoing, not today) — avoids duplicating today’s rows in both tables. */
+  const ongoingLeadsRest = useMemo(
+    () =>
+      filtered.filter(
+        (l) =>
+          l.sheetTab === "ongoing" &&
+          !isSameDay(parseISO(l.date), today),
+      ),
+    [filtered, today],
   );
 
-  const todaysLeads = useMemo(() => {
-    return filtered.filter((l) => isSameDay(parseISO(l.date), today));
-  }, [filtered, today]);
+  const followUpLeads = useMemo(
+    () => filtered.filter((l) => l.sheetTab === "followup"),
+    [filtered],
+  );
+
+  const notInterestedLeads = useMemo(
+    () => filtered.filter((l) => l.sheetTab === "not_interested"),
+    [filtered],
+  );
+
+  /** Converted tab: sheet + full pipeline (all status dots). */
+  const convertedLeadsFullPipeline = useMemo(
+    () =>
+      filtered.filter(
+        (l) => l.sheetTab === "converted" && l.pipelineSteps === 5,
+      ),
+    [filtered],
+  );
 
   const counts = useMemo(() => {
     const ongoing = leads.filter((l) => l.sheetTab === "ongoing").length;
@@ -112,7 +148,9 @@ export function LeadManagementPage() {
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
     ).length;
-    const converted = leads.filter((l) => l.sheetTab === "converted").length;
+    const converted = leads.filter(
+      (l) => l.sheetTab === "converted" && l.pipelineSteps === 5,
+    ).length;
     return { ongoing, followup, notInterested, converted };
   }, [leads]);
 
@@ -130,10 +168,14 @@ export function LeadManagementPage() {
     );
   }, []);
 
-  const onBulkStatus = (tone: Lead["rowTone"], tab: SheetTabId) => {
+  const onBulkStatus = (
+    tone: Lead["rowTone"],
+    tab: SheetTabId,
+    extra?: Partial<Lead>,
+  ) => {
     setLeads((prev) =>
       prev.map((l) =>
-        selectedIds.has(l.id) ? { ...l, rowTone: tone, sheetTab: tab } : l,
+        selectedIds.has(l.id) ? { ...l, rowTone: tone, sheetTab: tab, ...extra } : l,
       ),
     );
     setSelectedIds(new Set());
@@ -148,25 +190,22 @@ export function LeadManagementPage() {
           : id === "not_interested"
             ? counts.notInterested
             : counts.converted;
+    const active = sheetTab === id;
     return (
       <button
         key={id}
         type="button"
         onClick={() => setSheetTab(id)}
         className={cn(
-          "rounded-t-md border border-b-0 border-[#e0e0e0] px-4 py-2 text-sm font-medium transition-colors duration-150",
-          sheetTab === id
-            ? "border-b-2 border-b-[#1565c0] bg-white text-[#1565c0] shadow-none"
-            : "bg-[#f8f9fa] text-[#757575]",
+          SX.leadTabBtn,
+          active ? SX.leadTabActive : SX.leadTabIdle,
         )}
       >
-        {label}{" "}
+        <span className="truncate">{label}</span>
         <span
           className={cn(
-            "ml-1 rounded-full px-2 py-0.5 text-xs",
-            sheetTab === id
-              ? "bg-[#e3f2fd] text-[#1565c0]"
-              : "bg-[#eeeeee] text-[#757575]",
+            SX.leadTabCount,
+            active ? SX.leadTabCountActive : SX.leadTabCountIdle,
           )}
         >
           {c}
@@ -175,282 +214,406 @@ export function LeadManagementPage() {
     );
   };
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-[6px] border border-[#e0e0e0] bg-white text-[#212121] hover:bg-[#f8f9fa]"
-            aria-expanded={filterOpen}
-            onClick={() => setFilterOpen((v) => !v)}
-            title="Filter"
-          >
-            <FilterIcon />
-          </button>
-          {filterOpen && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-[280px] rounded-[6px] border border-[#e0e0e0] bg-white p-4 shadow-none">
-              <p className="mb-2 text-xs font-medium uppercase text-[#757575]">
-                Date range
-              </p>
-              <div className="mb-3 flex gap-2">
-                <label className="flex-1 text-xs">
-                  <span className="text-[#757575]">From</span>
-                  <input
-                    type="date"
-                    className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                  />
-                </label>
-                <label className="flex-1 text-xs">
-                  <span className="text-[#757575]">To</span>
-                  <input
-                    type="date"
-                    className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                  />
-                </label>
-              </div>
-              <label className="mb-2 block text-xs">
-                <span className="text-[#757575]">Course</span>
-                <select
-                  className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1"
-                  value={filterCourse}
-                  onChange={(e) => setFilterCourse(e.target.value)}
-                >
-                  <option value="">All</option>
-                  <option value="NEET">NEET</option>
-                  <option value="JEE">JEE</option>
-                  <option value="CUET">CUET</option>
-                </select>
-              </label>
-              <label className="mb-2 block text-xs">
-                <span className="text-[#757575]">Status</span>
-                <select
-                  className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1"
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                >
-                  <option value="">All</option>
-                  <option value="new">New</option>
-                  <option value="interested">Interested</option>
-                  <option value="not_interested">Not Interested</option>
-                  <option value="followup_later">Follow-up Later</option>
-                  <option value="called_no_response">Called / No Response</option>
-                </select>
-              </label>
-              <label className="mb-2 block text-xs">
-                <span className="text-[#757575]">Counsellor</span>
-                <input
-                  className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1"
-                  value={filterCounsellor}
-                  onChange={(e) => setFilterCounsellor(e.target.value)}
-                  placeholder="Name"
-                />
-              </label>
-              <button
-                type="button"
-                className="mt-2 text-sm text-[#1565c0] underline"
-                onClick={() => {
-                  setDateFrom("");
-                  setDateTo("");
-                  setFilterCourse("");
-                  setFilterStatus("");
-                  setFilterCounsellor("");
-                }}
-              >
-                Clear filters
-              </button>
-            </div>
-          )}
-        </div>
+  const filterInput =
+    "mt-1 w-full rounded-[2px] border border-[#d0d0d0] px-2 py-1 text-[13px] shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]";
 
-        <div className="relative">
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-[6px] border border-[#e0e0e0] bg-white hover:bg-[#f8f9fa]"
-            aria-expanded={sortOpen}
-            onClick={() => setSortOpen((v) => !v)}
-            title="Sort"
-          >
-            <SortIcon />
-          </button>
-          {sortOpen && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-[220px] rounded-[6px] border border-[#e0e0e0] bg-white p-3 shadow-none">
-              {(
-                [
-                  ["date", "Date"],
-                  ["studentName", "Name"],
-                  ["rowTone", "Status"],
-                  ["course", "Course"],
-                ] as const
-              ).map(([k, label]) => (
+  return (
+    <div className={SX.leadPageRoot}>
+      <div className={SX.leadWorkbook}>
+        <div className={SX.leadToolbar}>
+          <div className="relative">
+            <button
+              type="button"
+              className={SX.leadToolbarIconBtn}
+              aria-expanded={filterOpen}
+              onClick={() => setFilterOpen((v) => !v)}
+              title="Filter"
+            >
+              <FilterIcon />
+            </button>
+            {filterOpen && (
+              <div className={SX.leadPopover}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#616161]">
+                  Date range
+                </p>
+                <div className="mb-3 flex gap-2">
+                  <label className="flex-1 text-[12px]">
+                    <span className="text-[#757575]">From</span>
+                    <input
+                      type="date"
+                      className={filterInput}
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                    />
+                  </label>
+                  <label className="flex-1 text-[12px]">
+                    <span className="text-[#757575]">To</span>
+                    <input
+                      type="date"
+                      className={filterInput}
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <label className="mb-2 block text-[12px]">
+                  <span className="text-[#757575]">Course</span>
+                  <select
+                    className={filterInput}
+                    value={filterCourse}
+                    onChange={(e) => setFilterCourse(e.target.value)}
+                  >
+                    <option value="">All</option>
+                    <option value="NEET">NEET</option>
+                    <option value="JEE">JEE</option>
+                    <option value="CUET">CUET</option>
+                  </select>
+                </label>
+                <label className="mb-2 block text-[12px]">
+                  <span className="text-[#757575]">Status</span>
+                  <select
+                    className={filterInput}
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                  >
+                    <option value="">All</option>
+                    <option value="new">New</option>
+                    <option value="interested">Interested</option>
+                    <option value="not_interested">Not Interested</option>
+                    <option value="followup_later">Follow-up Later</option>
+                    <option value="called_no_response">Called / No Response</option>
+                  </select>
+                </label>
+                <label className="mb-2 block text-[12px]">
+                  <span className="text-[#757575]">Counsellor</span>
+                  <input
+                    className={filterInput}
+                    value={filterCounsellor}
+                    onChange={(e) => setFilterCounsellor(e.target.value)}
+                    placeholder="Name"
+                  />
+                </label>
                 <button
-                  key={k}
                   type="button"
-                  className="flex w-full justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-[#f5f5f5]"
+                  className="mt-1 text-[13px] font-medium text-[#1565c0] underline-offset-2 hover:underline"
                   onClick={() => {
-                    setSortKey(k);
-                    setSortDir((d) =>
-                      sortKey === k ? (d === "asc" ? "desc" : "asc") : "asc",
-                    );
+                    setDateFrom("");
+                    setDateTo("");
+                    setFilterCourse("");
+                    setFilterStatus("");
+                    setFilterCounsellor("");
                   }}
                 >
-                  {label}
-                  {sortKey === k ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                  Clear filters
                 </button>
-              ))}
+              </div>
+            )}
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              className={SX.leadToolbarIconBtn}
+              aria-expanded={sortOpen}
+              onClick={() => setSortOpen((v) => !v)}
+              title="Sort"
+            >
+              <SortIcon />
+            </button>
+            {sortOpen && (
+              <div className={cn(SX.leadPopover, "w-[220px] p-2")}>
+                {(
+                  [
+                    ["date", "Date"],
+                    ["studentName", "Name"],
+                    ["rowTone", "Status"],
+                    ["course", "Course"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className="flex w-full justify-between rounded-[2px] px-2 py-1.5 text-left text-[13px] hover:bg-[#f5f5f5]"
+                    onClick={() => {
+                      setSortKey(k);
+                      setSortDir((d) =>
+                        sortKey === k ? (d === "asc" ? "desc" : "asc") : "asc",
+                      );
+                    }}
+                  >
+                    {label}
+                    {sortKey === k ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <input
+            type="search"
+            placeholder="Search student, phone, course…"
+            className={SX.leadSearch}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+
+          <select
+            disabled={selectedIds.size === 0}
+            className={cn(SX.leadSelectSm, "w-[min(100%,200px)] shrink-0")}
+            defaultValue=""
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "interested")
+                onBulkStatus("interested", "ongoing", { followUpDate: null });
+              if (v === "not_interested")
+                onBulkStatus("not_interested", "not_interested", {
+                  followUpDate: null,
+                });
+              if (v === "followup")
+                onBulkStatus("followup_later", "followup", {
+                  followUpDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
+                });
+              e.target.selectedIndex = 0;
+            }}
+          >
+            <option value="" disabled>
+              Bulk status…
+            </option>
+            <option value="interested">Interested</option>
+            <option value="not_interested">Not Interested</option>
+            <option value="followup">Follow-up Later</option>
+          </select>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={SX.leadBtnGreen}
+              onClick={() => {
+                const id = String(Date.now());
+                setLeads((prev) => [
+                  {
+                    id,
+                    date: format(today, "yyyy-MM-dd"),
+                    followUpDate: null,
+                    studentName: "New Student",
+                    parentName: "",
+                    counsellor: "Priya",
+                    course: "NEET",
+                    phone: "",
+                    pipelineSteps: 0,
+                    rowTone: "new",
+                    sheetTab: "ongoing",
+                  },
+                  ...prev,
+                ]);
+              }}
+            >
+              + Add Student
+            </button>
+            <button type="button" className={SX.leadBtnOutline}>
+              Save
+              <span className="inline-flex items-center gap-1 text-[11px] font-normal text-[#757575]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#2e7d32]" />
+                Auto-save ON
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className={SX.leadStatBar}>
+          <span className="font-semibold tabular-nums text-[#1565c0]">
+            Ongoing {summary.ongoing}
+          </span>
+          <span className="h-3 w-px bg-[#d0d0d0]" aria-hidden />
+          <span className="font-semibold tabular-nums text-[#e65100]">
+            Follow-up {summary.followup}
+          </span>
+          <span className="h-3 w-px bg-[#d0d0d0]" aria-hidden />
+          <span className="font-semibold tabular-nums text-[#c62828]">
+            Not interested {summary.notInterested}
+          </span>
+        </div>
+
+        <div className={SX.leadTabBar}>
+          {tabBtn("ongoing", "Ongoing")}
+          {tabBtn("followup", "Follow-up")}
+          {tabBtn("not_interested", "Not Interested")}
+          {tabBtn("converted", "Converted")}
+        </div>
+
+        <div className={SX.leadSheetBody}>
+          {sheetTab === "ongoing" && (
+            <>
+              <div>
+                <div className={SX.leadSectionHead}>
+                  <h2 className={SX.leadSectionTitle}>
+                    Today&apos;s queue · {format(today, "dd MMM yyyy")}
+                  </h2>
+                  <p className={SX.leadSectionMeta}>
+                    {todaysOngoingLeads.length} row
+                    {todaysOngoingLeads.length === 1 ? "" : "s"} · new today +
+                    follow-ups due
+                  </p>
+                </div>
+                <LeadSheetTable
+                  className={cn(SX.leadGridFlush, "border-x-0")}
+                  leads={todaysOngoingLeads}
+                  onUpdateLead={onUpdateLead}
+                  selectedIds={selectedIds}
+                  onToggleRow={(id, checked) => {
+                    setSelectedIds((prev) => {
+                      const n = new Set(prev);
+                      if (checked) n.add(id);
+                      else n.delete(id);
+                      return n;
+                    });
+                  }}
+                  onSelectAll={(checked, ids) => {
+                    if (checked) setSelectedIds(new Set(ids));
+                    else setSelectedIds(new Set());
+                  }}
+                  visibleIds={todaysOngoingLeads.map((l) => l.id)}
+                />
+              </div>
+              <div className="border-t border-[#d0d0d0]">
+                <div className={SX.leadSectionHead}>
+                  <h2 className={SX.leadSectionTitle}>Ongoing pipeline</h2>
+                  <p className={SX.leadSectionMeta}>
+                    {ongoingLeadsRest.length} row
+                    {ongoingLeadsRest.length === 1 ? "" : "s"} · not added today
+                  </p>
+                </div>
+                <LeadSheetTable
+                  className={cn(SX.leadGridFlush, "border-x-0")}
+                  leads={ongoingLeadsRest}
+                  onUpdateLead={onUpdateLead}
+                  selectedIds={selectedIds}
+                  onToggleRow={(id, checked) => {
+                    setSelectedIds((prev) => {
+                      const n = new Set(prev);
+                      if (checked) n.add(id);
+                      else n.delete(id);
+                      return n;
+                    });
+                  }}
+                  onSelectAll={(checked, ids) => {
+                    if (checked) setSelectedIds(new Set(ids));
+                    else setSelectedIds(new Set());
+                  }}
+                  visibleIds={ongoingLeadsRest.map((l) => l.id)}
+                />
+              </div>
+            </>
+          )}
+
+          {sheetTab === "followup" && (
+            <div>
+              <div className={SX.leadSectionHead}>
+                <h2 className={SX.leadSectionTitle}>Follow-up</h2>
+                <p className={SX.leadSectionMeta}>
+                  {followUpLeads.length} lead
+                  {followUpLeads.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <LeadSheetTable
+                className={cn(SX.leadGridFlush, "border-x-0")}
+                leads={followUpLeads}
+                onUpdateLead={onUpdateLead}
+                selectedIds={selectedIds}
+                onToggleRow={(id, checked) => {
+                  setSelectedIds((prev) => {
+                    const n = new Set(prev);
+                    if (checked) n.add(id);
+                    else n.delete(id);
+                    return n;
+                  });
+                }}
+                onSelectAll={(checked, ids) => {
+                  if (checked) setSelectedIds(new Set(ids));
+                  else setSelectedIds(new Set());
+                }}
+                visibleIds={followUpLeads.map((l) => l.id)}
+              />
+            </div>
+          )}
+
+          {sheetTab === "not_interested" && (
+            <div>
+              <div className={SX.leadSectionHead}>
+                <h2 className={SX.leadSectionTitle}>Not interested</h2>
+                <p className={SX.leadSectionMeta}>
+                  {notInterestedLeads.length} lead
+                  {notInterestedLeads.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <LeadSheetTable
+                className={cn(SX.leadGridFlush, "border-x-0")}
+                leads={notInterestedLeads}
+                onUpdateLead={onUpdateLead}
+                selectedIds={selectedIds}
+                onToggleRow={(id, checked) => {
+                  setSelectedIds((prev) => {
+                    const n = new Set(prev);
+                    if (checked) n.add(id);
+                    else n.delete(id);
+                    return n;
+                  });
+                }}
+                onSelectAll={(checked, ids) => {
+                  if (checked) setSelectedIds(new Set(ids));
+                  else setSelectedIds(new Set());
+                }}
+                visibleIds={notInterestedLeads.map((l) => l.id)}
+              />
+            </div>
+          )}
+
+          {sheetTab === "converted" && (
+            <div>
+              <div className={SX.leadSectionHead}>
+                <h2 className={SX.leadSectionTitle}>Converted</h2>
+                <p className={SX.leadSectionMeta}>
+                  Full pipeline · {convertedLeadsFullPipeline.length} lead
+                  {convertedLeadsFullPipeline.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <LeadSheetTable
+                className={cn(SX.leadGridFlush, "border-x-0")}
+                leads={convertedLeadsFullPipeline}
+                onUpdateLead={onUpdateLead}
+                selectedIds={selectedIds}
+                onToggleRow={(id, checked) => {
+                  setSelectedIds((prev) => {
+                    const n = new Set(prev);
+                    if (checked) n.add(id);
+                    else n.delete(id);
+                    return n;
+                  });
+                }}
+                onSelectAll={(checked, ids) => {
+                  if (checked) setSelectedIds(new Set(ids));
+                  else setSelectedIds(new Set());
+                }}
+                visibleIds={convertedLeadsFullPipeline.map((l) => l.id)}
+              />
             </div>
           )}
         </div>
-
-        <input
-          type="search"
-          placeholder="Search student, phone, course..."
-          className="h-9 w-[min(100%,320px)] rounded-[6px] border border-[#e0e0e0] px-3 text-sm focus:outline focus:outline-2 focus:outline-[#1565c0]"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        <select
-          disabled={selectedIds.size === 0}
-          className="h-9 rounded-[6px] border border-[#e0e0e0] bg-white px-2 text-sm disabled:opacity-50"
-          defaultValue=""
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === "interested") onBulkStatus("interested", "ongoing");
-            if (v === "not_interested")
-              onBulkStatus("not_interested", "not_interested");
-            if (v === "followup") onBulkStatus("followup_later", "followup");
-            e.target.selectedIndex = 0;
-          }}
-        >
-          <option value="" disabled>
-            Bulk status change
-          </option>
-          <option value="interested">Interested</option>
-          <option value="not_interested">Not Interested</option>
-          <option value="followup">Follow-up Later</option>
-        </select>
-
-        <div className="ml-auto flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="rounded-[6px] bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#256628]"
-            onClick={() => {
-              const id = String(Date.now());
-              setLeads((prev) => [
-                {
-                  id,
-                  date: format(today, "yyyy-MM-dd"),
-                  studentName: "New Student",
-                  parentName: "",
-                  counsellor: "Priya",
-                  course: "NEET",
-                  phone: "",
-                  pipelineSteps: 0,
-                  rowTone: "new",
-                  sheetTab: "ongoing",
-                },
-                ...prev,
-              ]);
-            }}
-          >
-            + Add Student
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-2 rounded-[6px] border border-[#e0e0e0] bg-white px-4 py-2 text-sm font-medium text-[#212121] hover:bg-[#f8f9fa]"
-          >
-            Save
-            <span className="inline-flex items-center gap-1 text-xs font-normal text-[#757575]">
-              <span className="h-2 w-2 rounded-full bg-[#2e7d32]" />
-              Auto-save ON
-            </span>
-          </button>
-        </div>
       </div>
-
-      <div className="flex flex-wrap items-center gap-0 rounded-[6px] bg-[#f8f9fa] px-4 py-2 text-sm">
-        <span className="font-bold text-[#1565c0]">
-          Ongoing: {summary.ongoing}
-        </span>
-        <span className="mx-3 h-4 w-px bg-[#e0e0e0]" aria-hidden />
-        <span className="font-bold text-[#f57f17]">
-          Follow-up: {summary.followup}
-        </span>
-        <span className="mx-3 h-4 w-px bg-[#e0e0e0]" aria-hidden />
-        <span className="font-bold text-[#c62828]">
-          Not Interested: {summary.notInterested}
-        </span>
-      </div>
-
-      <div className="flex flex-wrap gap-1 border-b border-[#e0e0e0]">
-        {tabBtn("ongoing", "Ongoing")}
-        {tabBtn("followup", "Follow-up")}
-        {tabBtn("not_interested", "Not Interested")}
-        {tabBtn("converted", "Converted")}
-      </div>
-
-      <section className="flex flex-col gap-2">
-        <h2 className="text-base font-bold text-[#212121]">
-          Today&apos;s Leads — {format(today, "dd MMMM yyyy")}
-        </h2>
-        <p className="text-sm text-[#757575]">
-          {todaysLeads.length} new leads today
-        </p>
-        <LeadSheetTable
-          leads={todaysLeads}
-          onUpdateLead={onUpdateLead}
-          selectedIds={selectedIds}
-          onToggleRow={(id, checked) => {
-            setSelectedIds((prev) => {
-              const n = new Set(prev);
-              if (checked) n.add(id);
-              else n.delete(id);
-              return n;
-            });
-          }}
-          onSelectAll={(checked, ids) => {
-            if (checked) setSelectedIds(new Set(ids));
-            else setSelectedIds(new Set());
-          }}
-          visibleIds={todaysLeads.map((l) => l.id)}
-        />
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <h2 className="text-base font-bold text-[#212121]">Ongoing Leads</h2>
-        <LeadSheetTable
-          leads={tabFiltered}
-          onUpdateLead={onUpdateLead}
-          selectedIds={selectedIds}
-          onToggleRow={(id, checked) => {
-            setSelectedIds((prev) => {
-              const n = new Set(prev);
-              if (checked) n.add(id);
-              else n.delete(id);
-              return n;
-            });
-          }}
-          onSelectAll={(checked, ids) => {
-            if (checked) setSelectedIds(new Set(ids));
-            else setSelectedIds(new Set());
-          }}
-          visibleIds={tabFiltered.map((l) => l.id)}
-        />
-      </section>
 
       <FollowUpDialog
         open={followUpId !== null}
         onClose={() => setFollowUpId(null)}
-        onSubmit={() => {
+        onSubmit={(data) => {
           if (followUpId) {
+            const fu =
+              data.date && data.date.length >= 8
+                ? data.date
+                : format(addDays(new Date(), 1), "yyyy-MM-dd");
             onUpdateLead(followUpId, {
               rowTone: "followup_later",
               sheetTab: "followup",
+              followUpDate: fu,
             });
           }
         }}

@@ -10,11 +10,11 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-white">
       <Sidebar />
       <div
-        className="flex min-h-screen flex-col pl-[60px] transition-[padding] duration-150 ease-in-out"
+        className="flex min-h-screen flex-col pl-[var(--sidebar-collapsed)] transition-[padding] duration-150 ease-in-out"
         style={{ marginLeft: 0 }}
       >
         <Header />
-        <main className="flex-1 overflow-auto bg-white p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-auto bg-[#f5f5f5] p-2 md:p-4">{children}</main>
       </div>
     </div>
   );

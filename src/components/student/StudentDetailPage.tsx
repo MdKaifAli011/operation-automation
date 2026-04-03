@@ -2,10 +2,23 @@
 
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { Lead } from "@/lib/types";
 import { COURSE_OPTIONS, FACULTY_SEED } from "@/lib/mock-data";
 import { extrasForLead } from "@/lib/student-detail";
+import { SX } from "@/components/student/student-excel-ui";
+import {
+  IconBookMarked,
+  IconCalendar,
+  IconCalendarLarge,
+  IconCheck,
+  IconCloudUpload,
+  IconGlobe,
+  IconMail,
+  IconPhone,
+  IconPlus,
+  IconSparkles,
+} from "@/components/icons/CrmIcons";
 import { cn } from "@/lib/cn";
 
 const STEPS = [
@@ -21,7 +34,7 @@ type Props = { lead: Lead };
 export function StudentDetailPage({ lead }: Props) {
   const extras = useMemo(() => extrasForLead(lead), [lead]);
   const completed = lead.pipelineSteps;
-  const [highlight, setHighlight] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = useState(1);
   const [notes, setNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
@@ -30,183 +43,325 @@ export function StudentDetailPage({ lead }: Props) {
     "table",
   );
 
-  const scrollTo = useCallback((id: string) => {
-    const el = document.getElementById(id);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setHighlight(id);
-    window.setTimeout(() => setHighlight(null), 1500);
-  }, []);
-
   const badgeClass =
     lead.rowTone === "interested"
-      ? "bg-[#e8f5e9] text-[#2e7d32]"
+      ? "bg-[#e8f5e9] text-[#1b5e20] ring-1 ring-[#c8e6c9]"
       : lead.rowTone === "not_interested"
-        ? "bg-[#ffebee] text-[#c62828]"
+        ? "bg-[#ffebee] text-[#b71c1c] ring-1 ring-[#ffcdd2]"
         : lead.rowTone === "followup_later"
-          ? "bg-[#fffde7] text-[#f57f17]"
-          : "bg-[#e3f2fd] text-[#1565c0]";
+          ? "bg-[#fff8e1] text-[#e65100] ring-1 ring-[#ffe082]"
+          : "bg-[#e3f2fd] text-[#0d47a1] ring-1 ring-[#bbdefb]";
+
+  const sheetTabLabel =
+    lead.sheetTab === "ongoing"
+      ? "Ongoing"
+      : lead.sheetTab === "followup"
+        ? "Follow-up"
+        : lead.sheetTab === "not_interested"
+          ? "Not Interested"
+          : "Converted";
+
+  const pipeDone = Math.min(Math.max(completed, 0), 5);
 
   return (
-    <div className="flex flex-col gap-6 pb-12">
-      <Link
-        href="/"
-        className="inline-flex w-fit items-center gap-1 text-sm font-medium text-[#1565c0] underline"
-      >
-        ← Back to Leads
-      </Link>
-
-      <header className="flex flex-col gap-3 border-b border-[#e0e0e0] pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <h1 className="text-2xl font-bold text-[#212121]">{lead.studentName}</h1>
-          <span
-            className={cn(
-              "rounded-[4px] px-3 py-1 text-xs font-medium",
-              badgeClass,
-            )}
-          >
-            {extras.statusLabel}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-4 text-sm text-[#757575]">
-          <span>
-            📞 {lead.phone}{" "}
-            <button type="button" className="text-[#1565c0]" title="Edit">
-              ✎
-            </button>
-          </span>
-          <span className="rounded-[4px] bg-[#e3f2fd] px-2 py-0.5 text-xs font-medium text-[#1565c0]">
-            📚 {lead.course}
-          </span>
-          <span>
-            🌍 {extras.country}{" "}
-            <button type="button" className="text-[#1565c0]" title="Edit">
-              ✎
-            </button>
-          </span>
-          <span>
-            📅 {format(parseISO(lead.date), "dd-MMMM-yyyy")}{" "}
-            <button type="button" className="text-[#1565c0]" title="Edit">
-              ✎
-            </button>
-          </span>
-        </div>
-      </header>
-
-      <Stepper
-        completed={completed}
-        onStepClick={scrollTo}
-      />
-
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <div className="min-w-0 flex-[3] space-y-6">
-          <DemoSection lead={lead} highlight={highlight} />
-          <BrochureSection highlight={highlight} />
-          <FeeSection lead={lead} highlight={highlight} />
-          <EnrollmentSection
-            lead={lead}
-            highlight={highlight}
-            enrolledOk={enrolledOk}
-            onSubmit={() => setEnrolledOk(true)}
-          />
-          <ScheduleSection
-            view={scheduleView}
-            onViewChange={setScheduleView}
-            highlight={highlight}
-          />
-        </div>
-
-        <aside className="w-full shrink-0 space-y-6 lg:w-[25%] lg:min-w-[260px]">
-          <div className="rounded-[12px] border border-[#e0e0e0] p-4">
-            <label className="text-sm font-medium text-[#212121]">Notes</label>
-            <textarea
-              rows={8}
-              className="mt-2 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2 text-sm focus:outline focus:outline-2 focus:outline-[#1565c0]"
-              placeholder="Add notes about this student..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              onBlur={() => {
-                setNotesSaved(true);
-                window.setTimeout(() => setNotesSaved(false), 2000);
-              }}
-            />
-            {notesSaved && (
-              <p className="mt-1 text-xs text-[#2e7d32]">Saved ✓</p>
-            )}
+    <div className={SX.pageWrap}>
+      <div className={SX.outerSheet}>
+        <header className={SX.studentHero}>
+          <div className={SX.studentHeroTop}>
+            <Link href="/" className={SX.studentHeroBack}>
+              ← Back to Leads
+            </Link>
+            <span className="text-[#dadce0]" aria-hidden>
+              |
+            </span>
+            <span className={SX.studentHeroMetaTop}>
+              Lead workspace · <span className="tabular-nums">ID {lead.id}</span>
+            </span>
           </div>
 
-          <div className="rounded-[12px] border border-[#e0e0e0] p-4">
-            <h3 className="text-sm font-medium text-[#212121]">Call History</h3>
-            <ul className="mt-3 space-y-3 border-t border-[#e0e0e0] pt-3 text-sm">
-              <li className="border-b border-[#f0f0f0] pb-2">
-                <div className="text-[#757575]">02 Apr 2026</div>
-                <span className="mt-1 inline-block rounded-[4px] bg-[#e8f5e9] px-2 py-0.5 text-xs text-[#2e7d32]">
-                  Interested
-                </span>
-                <p className="mt-1 italic text-[#757575]">Discussed fee plan.</p>
-              </li>
-              <li>
-                <div className="text-[#757575]">28 Mar 2026</div>
-                <span className="mt-1 inline-block rounded-[4px] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#757575]">
-                  No Answer
-                </span>
-              </li>
-            </ul>
-            <button
-              type="button"
-              className="mt-3 text-sm font-medium text-[#1565c0] underline"
-              onClick={() => setCallOpen((v) => !v)}
-            >
-              + Log Call
-            </button>
-            {callOpen && (
-              <form
-                className="mt-3 space-y-2 rounded-[6px] border border-[#e0e0e0] p-3 text-sm"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  setCallOpen(false);
-                }}
+          <div className={SX.studentHeroBody}>
+            <div className={SX.studentHeroTitleRow}>
+              <h1 className={SX.studentHeroName}>{lead.studentName}</h1>
+              <span
+                className={cn(
+                  "shrink-0 rounded-md px-3 py-1 text-[12px] font-bold uppercase tracking-wide",
+                  badgeClass,
+                )}
               >
-                <input type="date" className="w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1" />
-                <input placeholder="Duration" className="w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1" />
-                <select className="w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1">
-                  <option>Interested</option>
-                  <option>No Answer</option>
-                  <option>Callback</option>
-                  <option>Not Interested</option>
-                </select>
-                <input placeholder="Notes" className="w-full rounded-[6px] border border-[#e0e0e0] px-2 py-1" />
-                <button
-                  type="submit"
-                  className="w-full rounded-[6px] bg-[#1565c0] py-2 text-white"
-                >
-                  Save Call
-                </button>
-              </form>
+                {extras.statusLabel}
+              </span>
+            </div>
+
+            <div
+              className={SX.studentHeroIconRow}
+              role="group"
+              aria-label="Primary contact details"
+            >
+              <span className={SX.studentHeroIconItem}>
+                <IconPhone
+                  className={cn(SX.studentHeroIcon, "text-[#ec407a]")}
+                  aria-hidden
+                />
+                {lead.phone ? (
+                  <a
+                    href={`tel:${lead.phone}`}
+                    className="font-medium text-[#202124] hover:underline"
+                  >
+                    {lead.phone}
+                  </a>
+                ) : (
+                  <span className="text-[#9aa0a6]">—</span>
+                )}
+              </span>
+              <span className={SX.studentHeroIconItem}>
+                <IconBookMarked
+                  className={cn(SX.studentHeroIcon, "text-[#1565c0]")}
+                  aria-hidden
+                />
+                <span className={SX.studentHeroCourseBadge}>{lead.course}</span>
+              </span>
+              <span className={SX.studentHeroIconItem}>
+                <IconGlobe
+                  className={cn(SX.studentHeroIcon, "text-[#1565c0]")}
+                  aria-hidden
+                />
+                <span className="font-medium text-[#202124]">
+                  {extras.country}
+                </span>
+              </span>
+              <span className={SX.studentHeroIconItem}>
+                <IconCalendar
+                  className={cn(SX.studentHeroIcon, "text-[#7e57c2]")}
+                  aria-hidden
+                />
+                <span className="font-medium tabular-nums text-[#202124]">
+                  {format(parseISO(lead.date), "dd/MM/yyyy")}
+                </span>
+              </span>
+            </div>
+
+            <p className={SX.studentHeroSubline}>
+              <span className={SX.studentHeroSubLabel}>Parent</span>{" "}
+              <span className={SX.studentHeroSubVal}>
+                {lead.parentName || "—"}
+              </span>
+              <span className="mx-2 text-[#dadce0]" aria-hidden>
+                ·
+              </span>
+              <span className={SX.studentHeroSubLabel}>Counsellor</span>{" "}
+              <span className={SX.studentHeroSubVal}>{lead.counsellor}</span>
+              <span className="mx-2 text-[#dadce0]" aria-hidden>
+                ·
+              </span>
+              <span className={SX.studentHeroSubLabel}>Sheet</span>{" "}
+              <span className={SX.studentHeroSubVal}>{sheetTabLabel}</span>
+              <span className="mx-2 text-[#dadce0]" aria-hidden>
+                ·
+              </span>
+              <span className={SX.studentHeroSubLabel}>Pipeline</span>{" "}
+              <span className={SX.studentHeroSubVal}>
+                {pipeDone}/5
+              </span>
+              <span className="mx-2 text-[#dadce0]" aria-hidden>
+                ·
+              </span>
+              <span className={SX.studentHeroSubLabel}>Email</span>{" "}
+              <a
+                href={`mailto:${extras.email}`}
+                className="font-medium text-[#1565c0] hover:underline"
+                title={extras.email}
+              >
+                {extras.email}
+              </a>
+            </p>
+            {lead.followUpDate && (
+              <p className="mt-2 text-[12px] font-medium text-[#e65100]">
+                Next follow-up:{" "}
+                {format(parseISO(lead.followUpDate), "dd MMM yyyy")}
+              </p>
             )}
           </div>
+        </header>
 
-          <div className="rounded-[12px] border border-[#e0e0e0] p-4">
-            <h3 className="text-sm font-medium text-[#212121]">Activity</h3>
-            <ul className="relative mt-4 space-y-4 border-l border-[#e0e0e0] pl-4 text-sm">
-              {[
-                ["✉", "Brochure sent via WhatsApp", "2 hours ago"],
-                ["📞", "Call logged — Interested", "1 day ago"],
-                ["📅", "Demo scheduled for Biology", "2 days ago"],
-                ["➕", "Lead created", "3 days ago"],
-              ].map(([icon, text, time], i) => (
-                <li key={i} className="relative">
-                  <span className="absolute -left-[21px] top-0 flex h-3 w-3 items-center justify-center rounded-full bg-[#1565c0] text-[10px] text-white">
-                    ·
-                  </span>
-                  <span className="text-[#212121]">
-                    {icon} {text}
-                  </span>
-                  <div className="text-xs text-[#757575]">{time}</div>
-                </li>
-              ))}
-            </ul>
+        <Stepper
+          completed={completed}
+          activeStep={activeStep}
+          onStepSelect={setActiveStep}
+        />
+
+        <div className={SX.mainSplit}>
+          <div className={SX.mainPane}>
+            <div className="min-h-0 flex-1">
+              {activeStep === 1 && <DemoSection lead={lead} />}
+              {activeStep === 2 && <BrochureSection />}
+              {activeStep === 3 && <FeeSection lead={lead} />}
+              {activeStep === 4 && (
+                <EnrollmentSection
+                  lead={lead}
+                  enrolledOk={enrolledOk}
+                  onSubmit={() => setEnrolledOk(true)}
+                />
+              )}
+              {activeStep === 5 && (
+                <ScheduleSection
+                  view={scheduleView}
+                  onViewChange={setScheduleView}
+                />
+              )}
+            </div>
+            <StepFooter activeStep={activeStep} onStepChange={setActiveStep} />
           </div>
-        </aside>
+
+          <aside className={SX.asidePane}>
+            <p className={SX.asideIntro}>
+              <span className="font-semibold text-[#37474f]">Context</span> — Notes
+              and calls follow this student across steps. Same layout as your lead
+              sheet.
+            </p>
+            <div className={SX.sidePanel}>
+              <div className={SX.sideHead}>Notes</div>
+              <div className={SX.sideBody}>
+                <textarea
+                  rows={8}
+                  className={cn(SX.textarea, "min-h-[140px] resize-y")}
+                  placeholder="Type notes here — visible to your team in this session."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  onBlur={() => {
+                    setNotesSaved(true);
+                    window.setTimeout(() => setNotesSaved(false), 2000);
+                  }}
+                />
+                {notesSaved && (
+                  <p className="mt-2 flex items-center gap-1 text-[12px] text-[#2e7d32]">
+                    <IconCheck className="h-3.5 w-3.5" /> Saved
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className={SX.sidePanel}>
+              <div className={SX.sideHead}>Call history</div>
+              <div className={SX.sideBody}>
+                <table className={SX.dataTable}>
+                  <thead>
+                    <tr>
+                      <th className={SX.dataTh}>Date</th>
+                      <th className={SX.dataTh}>Outcome</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className={SX.dataTd}>02 Apr 2026</td>
+                      <td className={SX.dataTd}>
+                        <span className="rounded-[2px] bg-[#e8f5e9] px-1.5 py-0.5 text-[11px] font-medium text-[#2e7d32]">
+                          Interested
+                        </span>
+                        <p className="mt-1 text-[12px] italic text-[#757575]">
+                          Discussed fee plan.
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className={cn(SX.dataTd, SX.zebraRow)}>28 Mar 2026</td>
+                      <td className={cn(SX.dataTd, SX.zebraRow)}>
+                        <span className="rounded-[2px] bg-[#f5f5f5] px-1.5 py-0.5 text-[11px] text-[#616161]">
+                          No answer
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <button
+                  type="button"
+                  className={cn(SX.btnGhost, "mt-3 w-full justify-center border border-dashed border-[#d0d0d0] py-2")}
+                  onClick={() => setCallOpen((v) => !v)}
+                >
+                  + Log call
+                </button>
+                {callOpen && (
+                  <form
+                    className="mt-3 space-y-2 border border-[#d0d0d0] bg-[#fafafa] p-2 text-[13px]"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setCallOpen(false);
+                    }}
+                  >
+                    <input type="date" className={SX.input} />
+                    <input placeholder="Duration" className={SX.input} />
+                    <select className={cn(SX.select, "w-full")}>
+                      <option>Interested</option>
+                      <option>No Answer</option>
+                      <option>Callback</option>
+                      <option>Not Interested</option>
+                    </select>
+                    <input placeholder="Notes" className={SX.input} />
+                    <button type="submit" className={cn(SX.btnPrimary, "w-full")}>
+                      Save call
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+
+            <div className={SX.sidePanel}>
+              <div className={SX.sideHead}>Activity</div>
+              <div className={SX.sideBody}>
+                <table className={SX.dataTable}>
+                  <thead>
+                    <tr>
+                      <th className={SX.dataTh}>Event</th>
+                      <th className={SX.dataTh}>When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      {
+                        StepIcon: IconMail,
+                        text: "Brochure sent (WhatsApp)",
+                        time: "2h ago",
+                      },
+                      {
+                        StepIcon: IconPhone,
+                        text: "Call — Interested",
+                        time: "1d ago",
+                      },
+                      {
+                        StepIcon: IconCalendar,
+                        text: "Demo scheduled · Biology",
+                        time: "2d ago",
+                      },
+                      {
+                        StepIcon: IconPlus,
+                        text: "Lead created",
+                        time: "3d ago",
+                      },
+                    ].map(({ StepIcon, text, time }, i) => (
+                      <tr key={i}>
+                        <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
+                          <span className="inline-flex items-start gap-2">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] border border-[#d0d0d0] bg-white text-[#1565c0]">
+                              <StepIcon className="h-3 w-3" />
+                            </span>
+                            <span>{text}</span>
+                          </span>
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTdMuted,
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {time}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );
@@ -214,78 +369,157 @@ export function StudentDetailPage({ lead }: Props) {
 
 function Stepper({
   completed,
-  onStepClick,
+  activeStep,
+  onStepSelect,
 }: {
   completed: number;
-  onStepClick: (id: string) => void;
+  activeStep: number;
+  onStepSelect: (step: number) => void;
 }) {
+  const activeLabel = STEPS.find((x) => x.n === activeStep)?.label ?? "";
+  const doneCount = Math.min(Math.max(completed, 0), 5);
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {STEPS.map((s, i) => {
-          const done = completed >= s.n;
-          const current = completed === s.n - 1;
-          return (
-            <div key={s.id} className="flex min-w-[120px] flex-1 items-center gap-2">
+    <div className={SX.stepperShell}>
+      <div className={SX.stepperTrack}>
+        <div className={SX.stepperGrid} role="tablist" aria-label="Pipeline steps">
+          {STEPS.map((s) => {
+            const done = completed >= s.n;
+            const selected = activeStep === s.n;
+            return (
               <button
+                key={s.id}
                 type="button"
-                onClick={() => onStepClick(s.id)}
+                role="tab"
+                aria-selected={selected}
+                title={`Step ${s.n}: ${s.label}`}
+                onClick={() => onStepSelect(s.n)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-150",
-                  done
-                    ? "border-[#2e7d32] bg-[#2e7d32] text-white"
-                    : current
-                      ? "border-[#1565c0] bg-[#1565c0] text-white"
-                      : "border-[#e0e0e0] bg-white text-[#757575]",
+                  "flex min-h-[40px] w-full items-center justify-center gap-1.5 px-2 py-2 text-[11px] font-semibold leading-tight transition-colors duration-150 sm:min-h-[42px] sm:text-[12px]",
+                  done && "bg-[#e8f5e9] text-[#1b5e20]",
+                  !done &&
+                    selected &&
+                    "bg-white text-[#0d47a1] ring-2 ring-inset ring-[#1565c0]",
+                  !done &&
+                    !selected &&
+                    "bg-white text-[#616161] hover:bg-[#f7f7f7]",
+                  done && selected && "ring-2 ring-inset ring-[#2e7d32]",
                 )}
               >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[10px]">
-                  {done ? "✓" : s.n}
+                <span
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] border text-[10px] tabular-nums",
+                    done
+                      ? "border-[#2e7d32] bg-[#2e7d32] text-white"
+                      : "border-[#bdbdbd] bg-white",
+                  )}
+                >
+                  {done ? (
+                    <IconCheck className="h-3 w-3 shrink-0" />
+                  ) : (
+                    s.n
+                  )}
                 </span>
-                {s.label}
+                <span className="min-w-0 truncate">{s.label}</span>
               </button>
-              {i < STEPS.length - 1 && (
-                <div className="hidden h-px flex-1 bg-[#e0e0e0] md:block" />
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-      <p className="mt-3 text-center text-sm text-[#757575]">
-        {Math.min(Math.max(completed, 0), 5)} of 5 steps completed
-      </p>
+      <div className={SX.stepperStatusBar}>
+        <span>
+          Working on{" "}
+          <strong className="font-semibold text-[#1565c0]">{activeLabel}</strong>
+          <span className="text-[#90a4ae]">
+            {" "}
+            · Step {activeStep} of 5
+          </span>
+        </span>
+        <span className="tabular-nums">
+          Progress:{" "}
+          <strong className="text-[#37474f]">{doneCount}</strong>/5 steps
+        </span>
+      </div>
     </div>
   );
 }
 
-function DemoSection({ lead, highlight }: { lead: Lead; highlight: string | null }) {
+function StepFooter({
+  activeStep,
+  onStepChange,
+}: {
+  activeStep: number;
+  onStepChange: (n: number) => void;
+}) {
+  const label = STEPS.find((s) => s.n === activeStep)?.label ?? "";
+  return (
+    <div className={SX.footerBar}>
+      <button
+        type="button"
+        disabled={activeStep <= 1}
+        onClick={() => onStepChange(activeStep - 1)}
+        className={cn(
+          SX.btnSecondary,
+          "justify-self-start disabled:cursor-not-allowed disabled:opacity-40",
+        )}
+      >
+        ← Previous
+      </button>
+      <span className="max-w-[min(100%,200px)] truncate text-center text-[11px] text-[#78909c]">
+        Step {activeStep}/5 · {label}
+      </span>
+      <button
+        type="button"
+        disabled={activeStep >= 5}
+        onClick={() => onStepChange(activeStep + 1)}
+        className={cn(
+          SX.btnPrimary,
+          "justify-self-end disabled:cursor-not-allowed disabled:opacity-40",
+        )}
+      >
+        Next →
+      </button>
+    </div>
+  );
+}
+
+function DemoSection({ lead }: { lead: Lead }) {
   const [expanded, setExpanded] = useState(false);
   const [rows, setRows] = useState<
     { subject: string; teacher: string; date: string; time: string; status: string }[]
   >([]);
-  const id = "step-1";
-
   return (
-    <section
-      id={id}
-      className={cn(
-        "scroll-mt-24 rounded-[12px] border border-[#e0e0e0] p-6 transition-shadow duration-150",
-        highlight === id && "ring-2 ring-[#1565c0]",
-      )}
-    >
-      <h2 className="border-l-4 border-[#1565c0] pl-3 text-base font-bold text-[#212121]">
-        Step 1: Demo Classes
-      </h2>
+    <section className={SX.section}>
+      <div className={SX.sectionHead}>
+        <div>
+          <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
+          <p className="mt-0.5 max-w-[520px] text-[11px] font-normal leading-snug text-[#757575]">
+            Schedule trials by subject. Rows behave like a worksheet — add as many
+            as you need.
+          </p>
+        </div>
+      </div>
+      <div className={SX.sectionBody}>
       {rows.length === 0 && !expanded ? (
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 py-8 text-[#757575]">
-          <span className="text-4xl">📅</span>
-          <p>No demo scheduled yet</p>
+        <div className="flex flex-col items-center justify-center gap-3 border border-dashed border-[#b0bec5] bg-[#fafbfc] px-4 py-8 text-center">
+          <IconCalendarLarge />
+          <div className="space-y-1">
+            <p className="text-[13px] font-semibold text-[#37474f]">
+              No demo scheduled yet
+            </p>
+            <p className="mx-auto max-w-[300px] text-[12px] leading-relaxed text-[#78909c]">
+              Use Create demo to add date, time, and teacher. Everything stays in
+              the table below.
+            </p>
+          </div>
           <button
             type="button"
-            className="rounded-[6px] border border-[#1565c0] px-4 py-2 text-sm font-medium text-[#1565c0]"
+            className={cn(
+              SX.btnSecondary,
+              "border-[#1565c0] text-[#1565c0] hover:bg-[#e3f2fd]",
+            )}
             onClick={() => setExpanded(true)}
           >
-            + Create Demo
+            + Create demo
           </button>
         </div>
       ) : rows.length === 0 && expanded ? (
@@ -298,42 +532,42 @@ function DemoSection({ lead, highlight }: { lead: Lead; highlight: string | null
           }}
         />
       ) : (
-        <div className="mt-4 overflow-auto">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+        <div className="overflow-auto">
+          <table className={cn(SX.dataTable, "min-w-[640px]")}>
             <thead>
-              <tr className="bg-[#f8f9fa] text-left text-xs uppercase">
-                <th className="border border-[#e0e0e0] px-2 py-2">#</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Subject</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Teacher</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Date</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Time (IST)</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Local</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Status</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Actions</th>
+              <tr>
+                <th className={SX.dataTh}>#</th>
+                <th className={SX.dataTh}>Subject</th>
+                <th className={SX.dataTh}>Teacher</th>
+                <th className={SX.dataTh}>Date</th>
+                <th className={SX.dataTh}>Time (IST)</th>
+                <th className={SX.dataTh}>Local</th>
+                <th className={SX.dataTh}>Status</th>
+                <th className={SX.dataTh}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i} className="min-h-[40px]">
-                  <td className="border border-[#e0e0e0] px-2 py-2">{i + 1}</td>
-                  <td className="border border-[#e0e0e0] px-2 py-2">{r.subject}</td>
-                  <td className="border border-[#e0e0e0] px-2 py-2">{r.teacher}</td>
-                  <td className="border border-[#e0e0e0] px-2 py-2">{r.date}</td>
-                  <td className="border border-[#e0e0e0] px-2 py-2">{r.time}</td>
-                  <td className="border border-[#e0e0e0] px-2 py-2 text-[#757575]">
+                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{i + 1}</td>
+                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.subject}</td>
+                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.teacher}</td>
+                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.date}</td>
+                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.time}</td>
+                  <td className={cn(SX.dataTdMuted, i % 2 === 1 && SX.zebraRow)}>
                     12:30 PM SGT
                   </td>
-                  <td className="border border-[#e0e0e0] px-2 py-2">
-                    <select className="rounded-[6px] border border-[#e0e0e0] px-1 py-0.5 text-xs">
+                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
+                    <select className={cn(SX.select, "w-full min-w-[100px] text-[12px]")}>
                       <option>Scheduled</option>
                       <option>Completed</option>
                       <option>Cancelled</option>
                     </select>
                   </td>
-                  <td className="border border-[#e0e0e0] px-2 py-2 text-[#1565c0]">
+                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow, "text-[#1565c0]")}>
                     Edit · Delete ·{" "}
-                    <button type="button" className="rounded-full bg-[#e3f2fd] px-2 py-0.5 text-xs">
-                      Send Link
+                    <button type="button" className="rounded-[2px] bg-[#e3f2fd] px-2 py-0.5 text-[12px] font-medium">
+                      Send link
                     </button>
                   </td>
                 </tr>
@@ -342,12 +576,12 @@ function DemoSection({ lead, highlight }: { lead: Lead; highlight: string | null
           </table>
           <button
             type="button"
-            className="mt-3 text-sm font-medium text-[#1565c0] underline"
+            className={cn(SX.btnGhost, "mt-3")}
             onClick={() => setExpanded(true)}
           >
-            + Add Another Demo
+            + Add another demo
           </button>
-          <p className="mt-2 text-xs text-[#757575]">
+          <p className="mt-2 text-[12px] text-[#757575]">
             Students can schedule multiple demos across different subjects.
           </p>
           {expanded && (
@@ -362,6 +596,7 @@ function DemoSection({ lead, highlight }: { lead: Lead; highlight: string | null
           )}
         </div>
       )}
+      </div>
     </section>
   );
 }
@@ -397,13 +632,23 @@ function DemoForm({
         : FACULTY_SEED[0].name;
 
   return (
-    <div className="mt-4 space-y-3 rounded-[6px] border border-[#e0e0e0] p-4">
-      <label className="block text-sm">
-        <span className="text-[#757575]">Course Name</span>
+    <div className="space-y-3 border border-[#d0d0d0] bg-[#fafafa] p-4">
+      <label className="block text-[13px]">
+        <span className="text-[#616161]">Course name</span>
         <select
-          className="mt-1 w-full max-w-md rounded-[6px] border border-[#e0e0e0] px-2 py-2"
+          className={cn(SX.select, "mt-1 w-full max-w-md")}
           value={course}
-          onChange={(e) => setCourse(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setCourse(v);
+            const next =
+              v === "NEET"
+                ? "Biology"
+                : v === "JEE"
+                  ? "Physics"
+                  : "English";
+            setSubj(next);
+          }}
         >
           {COURSE_OPTIONS.map((c) => (
             <option key={c} value={c}>
@@ -413,13 +658,14 @@ function DemoForm({
         </select>
       </label>
       <div>
-        <span className="text-sm text-[#757575]">Subject</span>
+        <span className="text-[13px] text-[#616161]">Subject</span>
         <div className="mt-1 flex flex-wrap gap-3">
           {subs.map((s) => (
-            <label key={s} className="flex items-center gap-1 text-sm">
+            <label key={s} className="flex items-center gap-1.5 text-[13px]">
               <input
-                type="checkbox"
-                defaultChecked
+                type="radio"
+                name="demo-subj"
+                checked={subj === s}
                 onChange={() => setSubj(s)}
               />
               {s}
@@ -427,9 +673,9 @@ function DemoForm({
           ))}
         </div>
       </div>
-      <label className="block text-sm">
-        <span className="text-[#757575]">Teacher</span>
-        <select className="mt-1 w-full max-w-md rounded-[6px] border border-[#e0e0e0] px-2 py-2">
+      <label className="block text-[13px]">
+        <span className="text-[#616161]">Teacher</span>
+        <select className={cn(SX.select, "mt-1 w-full max-w-md")}>
           <option>{teacher}</option>
           {FACULTY_SEED.map((f) => (
             <option key={f.id}>{f.name}</option>
@@ -437,22 +683,22 @@ function DemoForm({
         </select>
       </label>
       <div className="flex flex-wrap gap-3">
-        <label className="text-sm">
-          <span className="text-[#757575]">Demo Date</span>
-          <input type="date" className="mt-1 block rounded-[6px] border border-[#e0e0e0] px-2 py-2" />
+        <label className="text-[13px]">
+          <span className="text-[#616161]">Demo date</span>
+          <input type="date" className={cn(SX.input, "mt-1 block")} />
         </label>
-        <label className="text-sm">
-          <span className="text-[#757575]">Demo Time (IST)</span>
-          <input type="time" defaultValue="10:00" className="mt-1 block rounded-[6px] border border-[#e0e0e0] px-2 py-2" />
+        <label className="text-[13px]">
+          <span className="text-[#616161]">Demo time (IST)</span>
+          <input type="time" defaultValue="10:00" className={cn(SX.input, "mt-1 block")} />
         </label>
       </div>
-      <p className="text-xs text-[#757575]">
+      <p className="text-[12px] text-[#757575]">
         10:00 AM IST = 12:30 PM SGT (Asia/Singapore) — based on student country.
       </p>
-      <div className="flex gap-3 pt-2">
+      <div className="flex flex-wrap gap-2 pt-1">
         <button
           type="button"
-          className="rounded-[6px] bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
+          className="inline-flex items-center rounded-[2px] border border-[#2e7d32] bg-[#2e7d32] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-[#27692a]"
           onClick={() =>
             onSchedule({
               subject: subj,
@@ -463,13 +709,9 @@ function DemoForm({
             })
           }
         >
-          Schedule Demo
+          Schedule demo
         </button>
-        <button
-          type="button"
-          className="text-sm text-[#757575] underline"
-          onClick={onCancel}
-        >
+        <button type="button" className={SX.btnGhost} onClick={onCancel}>
           Cancel
         </button>
       </div>
@@ -477,35 +719,35 @@ function DemoForm({
   );
 }
 
-function BrochureSection({ highlight }: { highlight: string | null }) {
+function BrochureSection() {
   const [file, setFile] = useState<File | null>(null);
   const [genPreview, setGenPreview] = useState(false);
-  const id = "step-2";
-
   return (
-    <section
-      id={id}
-      className={cn(
-        "scroll-mt-24 rounded-[12px] border border-[#e0e0e0] p-6 transition-shadow duration-150",
-        highlight === id && "ring-2 ring-[#1565c0]",
-      )}
-    >
-      <h2 className="border-l-4 border-[#1565c0] pl-3 text-base font-bold">
-        Step 2: Course Brochure
-      </h2>
-      <div className="mt-4 grid gap-6 md:grid-cols-2">
+    <section className={SX.section}>
+      <div className={SX.sectionHead}>
         <div>
-          <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center rounded-[6px] border border-dashed border-[#e0e0e0] bg-[#fafafa] px-4 text-center text-sm text-[#757575]">
+          <h2 className={SX.sectionTitle}>Step 2 · Course brochure</h2>
+          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
+            Upload or generate a PDF, then send to the student from here.
+          </p>
+        </div>
+      </div>
+      <div className={SX.sectionBody}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-[#d0d0d0] bg-[#fafafa] px-4 text-center text-[13px] text-[#616161]">
             <input
               type="file"
               accept=".pdf,image/*"
               className="hidden"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
-            ☁ Click to upload or drag PDF/image here
+            <IconCloudUpload />
+            <span>Upload PDF or image</span>
+            <span className="text-[12px] text-[#9e9e9e]">PDF, JPG, PNG</span>
           </label>
           {file && (
-            <p className="mt-2 text-sm">
+            <p className="mt-2 text-[13px]">
               {file.name} ({Math.round(file.size / 1024)} KB) ·{" "}
               <button type="button" className="text-[#1565c0] underline">
                 Preview
@@ -518,39 +760,41 @@ function BrochureSection({ highlight }: { highlight: string | null }) {
           )}
         </div>
         <div>
-          <label className="text-sm font-medium">Generate from performance notes</label>
+          <label className="text-[13px] font-semibold text-[#212121]">Generate from performance notes</label>
           <textarea
             rows={4}
-            className="mt-2 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2 text-sm"
-            placeholder="Enter demo performance notes, strengths, areas to improve..."
+            className={cn(SX.textarea, "mt-2")}
+            placeholder="Demo performance notes, strengths, areas to improve…"
           />
           <button
             type="button"
-            className="mt-2 rounded-[6px] bg-[#1565c0] px-4 py-2 text-sm font-medium text-white"
+            className={cn(SX.btnPrimary, "mt-2 gap-2")}
             onClick={() => {
               window.setTimeout(() => setGenPreview(true), 400);
             }}
           >
-            ✨ Generate Brochure
+            <IconSparkles className="h-4 w-4 text-white" />
+            Generate brochure
           </button>
           {genPreview && (
-            <p className="mt-2 text-sm text-[#2e7d32]">Preview ready · Preview</p>
+            <p className="mt-2 text-[13px] text-[#2e7d32]">Preview ready</p>
           )}
         </div>
       </div>
-      <div className="mt-6 flex flex-wrap gap-3">
-        <button type="button" className="rounded-[6px] bg-[#25d366] px-4 py-2 text-sm font-medium text-white">
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-[#e8e8e8] pt-4">
+        <button type="button" className="rounded-[2px] bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]">
           Send via WhatsApp
         </button>
-        <button type="button" className="rounded-[6px] bg-[#1565c0] px-4 py-2 text-sm font-medium text-white">
-          Send via Email
+        <button type="button" className={SX.btnPrimary}>
+          Send via email
         </button>
+      </div>
       </div>
     </section>
   );
 }
 
-function FeeSection({ lead, highlight }: { lead: Lead; highlight: string | null }) {
+function FeeSection({ lead }: { lead: Lead }) {
   const [discount, setDiscount] = useState(10);
   const [emi, setEmi] = useState(12);
   const total = 85000;
@@ -566,48 +810,47 @@ function FeeSection({ lead, highlight }: { lead: Lead; highlight: string | null 
     SGD: 0.016,
   };
   const converted = finalFee * (rates[currency] ?? 1);
-  const id = "step-3";
 
   return (
-    <section
-      id={id}
-      className={cn(
-        "scroll-mt-24 rounded-[12px] border border-[#e0e0e0] p-6 transition-shadow duration-150",
-        highlight === id && "ring-2 ring-[#1565c0]",
-      )}
-    >
-      <h2 className="border-l-4 border-[#1565c0] pl-3 text-base font-bold">
-        Step 3: Fee Structure
-      </h2>
-      <div className="mt-4 overflow-auto">
-        <table className="w-full min-w-[520px] border-collapse text-sm">
+    <section className={SX.section}>
+      <div className={SX.sectionHead}>
+        <div>
+          <h2 className={SX.sectionTitle}>Step 3 · Fee structure</h2>
+          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
+            Edit discount and EMI in the grid; totals update like a spreadsheet.
+          </p>
+        </div>
+      </div>
+      <div className={SX.sectionBody}>
+      <div className="overflow-auto">
+        <table className={cn(SX.dataTable, "min-w-[520px]")}>
           <thead>
-            <tr className="bg-[#f8f9fa] text-left">
-              <th className="border border-[#e0e0e0] px-2 py-2">Course</th>
-              <th className="border border-[#e0e0e0] px-2 py-2">Total Fee</th>
-              <th className="border border-[#e0e0e0] px-2 py-2">Discount (%)</th>
-              <th className="border border-[#e0e0e0] px-2 py-2">Final Fee</th>
-              <th className="border border-[#e0e0e0] px-2 py-2">EMI Options</th>
+            <tr>
+              <th className={SX.dataTh}>Course</th>
+              <th className={SX.dataTh}>Total fee</th>
+              <th className={SX.dataTh}>Discount (%)</th>
+              <th className={SX.dataTh}>Final fee</th>
+              <th className={SX.dataTh}>EMI</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="border border-[#e0e0e0] px-2 py-2">{lead.course}</td>
-              <td className="border border-[#e0e0e0] px-2 py-2">₹85,000</td>
-              <td className="border border-[#e0e0e0] px-2 py-2">
+              <td className={SX.dataTd}>{lead.course}</td>
+              <td className={SX.dataTd}>₹85,000</td>
+              <td className={SX.dataTd}>
                 <input
                   type="number"
-                  className="w-16 rounded-[6px] border border-[#e0e0e0] px-1"
+                  className={cn(SX.input, "w-20")}
                   value={discount}
                   onChange={(e) => setDiscount(Number(e.target.value))}
                 />
               </td>
-              <td className="border border-[#e0e0e0] px-2 py-2 font-semibold">
+              <td className={cn(SX.dataTd, "font-semibold tabular-nums")}>
                 ₹{finalFee.toLocaleString("en-IN")}
               </td>
-              <td className="border border-[#e0e0e0] px-2 py-2">
+              <td className={SX.dataTd}>
                 <select
-                  className="rounded-[6px] border border-[#e0e0e0] px-1 py-0.5"
+                  className={cn(SX.select, "w-full min-w-[100px]")}
                   value={emi}
                   onChange={(e) => setEmi(Number(e.target.value))}
                 >
@@ -620,14 +863,14 @@ function FeeSection({ lead, highlight }: { lead: Lead; highlight: string | null 
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-sm">
+      <p className="mt-2 text-[13px] tabular-nums text-[#424242]">
         Monthly EMI: ₹{monthly.toLocaleString("en-IN")} × {emi} months = ₹
         {finalFee.toLocaleString("en-IN")}
       </p>
-      <div className="mt-4 rounded-[6px] border border-[#e0e0e0] p-4">
-        <label className="text-sm font-medium">Convert to student&apos;s currency</label>
+      <div className="mt-4 border border-[#d0d0d0] bg-[#fafafa] p-3">
+        <label className="text-[13px] font-semibold text-[#212121]">Convert to student&apos;s currency</label>
         <select
-          className="mt-2 rounded-[6px] border border-[#e0e0e0] px-2 py-2"
+          className={cn(SX.select, "mt-2")}
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
         >
@@ -637,22 +880,23 @@ function FeeSection({ lead, highlight }: { lead: Lead; highlight: string | null 
             </option>
           ))}
         </select>
-        <p className="mt-2 font-bold">
+        <p className="mt-2 font-semibold tabular-nums">
           ₹{finalFee.toLocaleString("en-IN")} ≈{" "}
           {currency === "INR"
             ? `₹${finalFee.toLocaleString("en-IN")}`
             : `${converted.toFixed(2)} ${currency}`}
         </p>
-        <p className="text-xs text-[#757575]">Exchange rate is approximate</p>
+        <p className="text-[12px] text-[#757575]">Exchange rate is approximate</p>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <span className="text-sm font-medium">Send Fee Structure</span>
-        <button type="button" className="rounded-[6px] bg-[#25d366] px-3 py-1.5 text-sm text-white">
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#e8e8e8] pt-3">
+        <span className="text-[13px] font-semibold">Send fee structure</span>
+        <button type="button" className="rounded-[2px] bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]">
           WhatsApp
         </button>
-        <button type="button" className="rounded-[6px] bg-[#1565c0] px-3 py-1.5 text-sm text-white">
+        <button type="button" className={SX.btnPrimary}>
           Email
         </button>
+      </div>
       </div>
     </section>
   );
@@ -660,40 +904,37 @@ function FeeSection({ lead, highlight }: { lead: Lead; highlight: string | null 
 
 function EnrollmentSection({
   lead,
-  highlight,
   enrolledOk,
   onSubmit,
 }: {
   lead: Lead;
-  highlight: string | null;
   enrolledOk: boolean;
   onSubmit: () => void;
 }) {
-  const id = "step-4";
-
   return (
-    <section
-      id={id}
-      className={cn(
-        "scroll-mt-24 rounded-[12px] border border-[#e0e0e0] p-6 transition-shadow duration-150",
-        highlight === id && "ring-2 ring-[#1565c0]",
-      )}
-    >
-      <h2 className="border-l-4 border-[#1565c0] pl-3 text-base font-bold">
-        Step 4: Enrollment Form
-      </h2>
+    <section className={SX.section}>
+      <div className={SX.sectionHead}>
+        <div>
+          <h2 className={SX.sectionTitle}>Step 4 · Enrollment form</h2>
+          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
+            Collect details in one pass. Submit when the family confirms.
+          </p>
+        </div>
+      </div>
+      <div className={SX.sectionBody}>
       {enrolledOk && (
-        <div className="mt-3 rounded-[6px] bg-[#e8f5e9] px-4 py-3 text-sm text-[#2e7d32]">
-          ✓ Enrollment Form Submitted Successfully
+        <div className="mb-4 flex items-center gap-2 border border-[#a5d6a7] bg-[#e8f5e9] px-3 py-2 text-[13px] font-medium text-[#1b5e20]">
+          <IconCheck className="h-4 w-4 shrink-0" />
+          Enrollment form submitted successfully
         </div>
       )}
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <Field label="Student Full Name" defaultValue={lead.studentName} />
         <Field label="Parent/Guardian Name" defaultValue={lead.parentName} />
         <Field label="Date of Birth" type="date" />
-        <label className="text-sm">
-          <span className="text-[#757575]">Gender</span>
-          <select className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-2">
+        <label className="text-[13px]">
+          <span className="text-[#616161]">Gender</span>
+          <select className={cn(SX.select, "mt-1 w-full")}>
             <option>Male</option>
             <option>Female</option>
             <option>Other</option>
@@ -704,9 +945,9 @@ function EnrollmentSection({
         <Field label="Phone Number" defaultValue={lead.phone} />
         <Field label="WhatsApp Number" />
         <Field label="Email Address" />
-        <label className="md:col-span-2 text-sm">
-          <span className="text-[#757575]">Address</span>
-          <textarea rows={3} className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-2" />
+        <label className="md:col-span-2 text-[13px]">
+          <span className="text-[#616161]">Address</span>
+          <textarea rows={3} className={cn(SX.textarea, "mt-1")} />
         </label>
         <Field label="City" />
         <Field label="State" />
@@ -714,9 +955,9 @@ function EnrollmentSection({
         <Field label="Emergency Contact Name" />
         <Field label="Emergency Number" />
         <Field label="Previous School / College" />
-        <label className="text-sm">
-          <span className="text-[#757575]">Board</span>
-          <select className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-2">
+        <label className="text-[13px]">
+          <span className="text-[#616161]">Board</span>
+          <select className={cn(SX.select, "mt-1 w-full")}>
             <option>CBSE</option>
             <option>ICSE</option>
             <option>State Board</option>
@@ -728,11 +969,12 @@ function EnrollmentSection({
       </div>
       <button
         type="button"
-        className="mt-6 w-full rounded-[6px] bg-[#2e7d32] py-3 text-sm font-medium text-white"
+        className="mt-6 w-full rounded-[2px] border border-[#2e7d32] bg-[#2e7d32] py-2.5 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-[#27692a]"
         onClick={onSubmit}
       >
-        Submit Enrollment Form
+        Submit enrollment form
       </button>
+      </div>
     </section>
   );
 }
@@ -747,12 +989,12 @@ function Field({
   type?: string;
 }) {
   return (
-    <label className="text-sm">
-      <span className="text-[#757575]">{label}</span>
+    <label className="text-[13px]">
+      <span className="text-[#616161]">{label}</span>
       <input
         type={type}
         defaultValue={defaultValue}
-        className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-2 py-2"
+        className={cn(SX.input, "mt-1")}
       />
     </label>
   );
@@ -761,98 +1003,97 @@ function Field({
 function ScheduleSection({
   view,
   onViewChange,
-  highlight,
 }: {
   view: "table" | "calendar";
   onViewChange: (v: "table" | "calendar") => void;
-  highlight: string | null;
 }) {
-  const id = "step-5";
   const hours = Array.from({ length: 17 }, (_, i) => i + 6);
 
   return (
-    <section
-      id={id}
-      className={cn(
-        "scroll-mt-24 rounded-[12px] border border-[#e0e0e0] p-6 transition-shadow duration-150",
-        highlight === id && "ring-2 ring-[#1565c0]",
-      )}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="border-l-4 border-[#1565c0] pl-3 text-base font-bold">
-          Step 5: Class Schedule
-        </h2>
-        <div className="flex rounded-[6px] border border-[#e0e0e0] p-0.5 text-sm">
+    <section className={SX.section}>
+      <div className={SX.sectionHead}>
+        <div className="min-w-0 flex-1">
+          <h2 className={SX.sectionTitle}>Step 5 · Class schedule</h2>
+          <p className="mt-0.5 max-w-[480px] text-[11px] text-[#757575]">
+            Switch table vs week view. Confirmed classes appear in both.
+          </p>
+        </div>
+        <div className="inline-flex shrink-0 rounded-[2px] border border-[#d0d0d0] bg-white p-px text-[13px]">
           <button
             type="button"
             className={cn(
-              "rounded-[4px] px-3 py-1",
-              view === "table" ? "bg-[#1565c0] text-white" : "text-[#757575]",
+              "rounded-[1px] px-3 py-1 font-medium",
+              view === "table"
+                ? "bg-[#1565c0] text-white"
+                : "text-[#616161] hover:bg-[#f5f5f5]",
             )}
             onClick={() => onViewChange("table")}
           >
-            Table View
+            Table
           </button>
           <button
             type="button"
             className={cn(
-              "rounded-[4px] px-3 py-1",
-              view === "calendar" ? "bg-[#1565c0] text-white" : "text-[#757575]",
+              "rounded-[1px] px-3 py-1 font-medium",
+              view === "calendar"
+                ? "bg-[#1565c0] text-white"
+                : "text-[#616161] hover:bg-[#f5f5f5]",
             )}
             onClick={() => onViewChange("calendar")}
           >
-            Calendar View
+            Calendar
           </button>
         </div>
       </div>
+      <div className={SX.sectionBody}>
       {view === "table" ? (
-        <div className="mt-4 overflow-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+        <div className="overflow-auto">
+          <table className={cn(SX.dataTable, "min-w-[720px]")}>
             <thead>
-              <tr className="bg-[#f8f9fa] text-left text-xs uppercase">
-                <th className="border border-[#e0e0e0] px-2 py-2">Day</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Subject</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Time (IST)</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Local</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Teacher</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Duration</th>
-                <th className="border border-[#e0e0e0] px-2 py-2">Actions</th>
+              <tr>
+                <th className={SX.dataTh}>Day</th>
+                <th className={SX.dataTh}>Subject</th>
+                <th className={SX.dataTh}>Time (IST)</th>
+                <th className={SX.dataTh}>Local</th>
+                <th className={SX.dataTh}>Teacher</th>
+                <th className={SX.dataTh}>Duration</th>
+                <th className={SX.dataTh}>Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td className="border border-[#e0e0e0] px-2 py-2">Monday</td>
-                <td className="border border-[#e0e0e0] px-2 py-2">Biology</td>
-                <td className="border border-[#e0e0e0] px-2 py-2">9:00 AM</td>
-                <td className="border border-[#e0e0e0] px-2 py-2">11:30 AM SGT</td>
-                <td className="border border-[#e0e0e0] px-2 py-2">Dr. Meena Singh</td>
-                <td className="border border-[#e0e0e0] px-2 py-2">90 min</td>
-                <td className="border border-[#e0e0e0] px-2 py-2 text-[#1565c0]">Edit / Delete</td>
+                <td className={SX.dataTd}>Monday</td>
+                <td className={SX.dataTd}>Biology</td>
+                <td className={SX.dataTd}>9:00 AM</td>
+                <td className={SX.dataTdMuted}>11:30 AM SGT</td>
+                <td className={SX.dataTd}>Dr. Meena Singh</td>
+                <td className={SX.dataTd}>90 min</td>
+                <td className={cn(SX.dataTd, "text-[#1565c0]")}>Edit / Delete</td>
               </tr>
             </tbody>
           </table>
-          <button type="button" className="mt-3 text-sm text-[#1565c0] underline">
-            + Add Class
+          <button type="button" className={cn(SX.btnGhost, "mt-3")}>
+            + Add class
           </button>
         </div>
       ) : (
-        <div className="mt-4 overflow-auto">
-          <div className="mb-2 flex justify-between text-sm">
-            <button type="button" className="text-[#1565c0]">
+        <div className="overflow-auto">
+          <div className="mb-2 flex justify-between text-[13px]">
+            <button type="button" className="font-medium text-[#1565c0] hover:underline">
               ← Prev week
             </button>
-            <span className="font-medium">Week of Apr 2026</span>
-            <button type="button" className="text-[#1565c0]">
+            <span className="font-semibold text-[#212121]">Week of Apr 2026</span>
+            <button type="button" className="font-medium text-[#1565c0] hover:underline">
               Next week →
             </button>
           </div>
-          <div className="grid min-w-[800px] grid-cols-[80px_repeat(7,1fr)] gap-px bg-[#e0e0e0] text-xs">
-            <div className="bg-[#f8f9fa] p-1" />
+          <div className="grid min-w-[800px] grid-cols-[80px_repeat(7,1fr)] gap-px border border-[#d0d0d0] bg-[#d0d0d0] text-[11px]">
+            <div className="bg-[#f2f2f2] p-1" />
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => (
               <div
                 key={d}
                 className={cn(
-                  "bg-[#f8f9fa] p-2 text-center font-medium",
+                  "bg-[#f2f2f2] p-2 text-center text-[11px] font-semibold uppercase tracking-wide text-[#424242]",
                   i === 0 && "bg-[#e3f2fd]",
                 )}
               >
@@ -869,12 +1110,12 @@ function ScheduleSection({
                     key={`${h}-${c}`}
                     className={cn(
                       "min-h-[28px] bg-white p-0.5",
-                      c === 0 && "bg-[#f5fbff]",
+                      c === 0 && "bg-[#fafafa]",
                     )}
                   >
                     {h === 9 && c === 0 && (
                       <div
-                        className="rounded bg-[#2e7d32] px-1 py-0.5 text-[10px] text-white"
+                        className="rounded-[2px] bg-[#2e7d32] px-1 py-0.5 text-[10px] font-medium text-white"
                         title="Biology · Dr. Meena · 90 min"
                       >
                         Biology
@@ -887,14 +1128,15 @@ function ScheduleSection({
           </div>
         </div>
       )}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <span className="text-sm font-medium">Send Schedule to Student</span>
-        <button type="button" className="rounded-[6px] bg-[#25d366] px-3 py-1.5 text-sm text-white">
-          via WhatsApp
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#e8e8e8] pt-3">
+        <span className="text-[13px] font-semibold">Send schedule</span>
+        <button type="button" className="rounded-[2px] bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]">
+          WhatsApp
         </button>
-        <button type="button" className="rounded-[6px] bg-[#1565c0] px-3 py-1.5 text-sm text-white">
-          via Email
+        <button type="button" className={SX.btnPrimary}>
+          Email
         </button>
+      </div>
       </div>
     </section>
   );

@@ -4,6 +4,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "1",
     date: "2026-04-03",
+    followUpDate: null,
     studentName: "Rahul Sharma",
     parentName: "Amit Sharma",
     counsellor: "Priya",
@@ -16,6 +17,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "2",
     date: "2026-04-03",
+    followUpDate: null,
     studentName: "Sneha Patel",
     parentName: "Rajesh Patel",
     counsellor: "Arjun",
@@ -28,6 +30,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "3",
     date: "2026-04-02",
+    followUpDate: "2026-04-03",
     studentName: "Aryan Mehta",
     parentName: "Sunita Mehta",
     counsellor: "Priya",
@@ -40,6 +43,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "4",
     date: "2026-04-02",
+    followUpDate: null,
     studentName: "Kavya Nair",
     parentName: "Suresh Nair",
     counsellor: "Ravi",
@@ -52,6 +56,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "5",
     date: "2026-04-01",
+    followUpDate: null,
     studentName: "Rohan Gupta",
     parentName: "Deepak Gupta",
     counsellor: "Arjun",
@@ -64,6 +69,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "6",
     date: "2026-04-01",
+    followUpDate: null,
     studentName: "Ananya Singh",
     parentName: "Rekha Singh",
     counsellor: "Priya",
@@ -76,6 +82,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "7",
     date: "2026-03-31",
+    followUpDate: null,
     studentName: "Vikram Joshi",
     parentName: "Mahesh Joshi",
     counsellor: "Ravi",
@@ -88,6 +95,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "8",
     date: "2026-03-31",
+    followUpDate: null,
     studentName: "Pooja Reddy",
     parentName: "Latha Reddy",
     counsellor: "Arjun",
@@ -100,6 +108,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "9",
     date: "2026-03-30",
+    followUpDate: null,
     studentName: "Amit Kumar",
     parentName: "Sunil Kumar",
     counsellor: "Priya",
@@ -112,6 +121,7 @@ export const INITIAL_LEADS: Lead[] = [
   {
     id: "10",
     date: "2026-03-30",
+    followUpDate: null,
     studentName: "Riya Sharma",
     parentName: "Geeta Sharma",
     counsellor: "Ravi",

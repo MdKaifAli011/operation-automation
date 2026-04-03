@@ -9,7 +9,9 @@ export type RowTone =
 
 export type Lead = {
   id: string;
-  date: string; // ISO date
+  date: string; // ISO date — lead created / intake date
+  /** When sheet is follow-up: date counsellor should call or student returns (ISO yyyy-MM-dd). */
+  followUpDate: string | null;
   studentName: string;
   parentName: string;
   counsellor: string;

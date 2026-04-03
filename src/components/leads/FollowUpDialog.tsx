@@ -1,5 +1,6 @@
 "use client";
 
+import { addDays, format } from "date-fns";
 import { useEffect, useRef } from "react";
 
 type Props = {
@@ -15,6 +16,8 @@ type Props = {
 
 export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const defaultFollowUpStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
 
   useEffect(() => {
     const d = ref.current;
@@ -62,6 +65,8 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
           <input
             name="fdate"
             type="date"
+            min={todayStr}
+            defaultValue={defaultFollowUpStr}
             className="rounded-[6px] border border-[#e0e0e0] px-3 py-2 text-sm focus:outline focus:outline-2 focus:outline-[#1565c0]"
           />
         </label>

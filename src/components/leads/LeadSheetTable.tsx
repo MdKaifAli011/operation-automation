@@ -1,6 +1,6 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import Link from "next/link";
 import {
   useCallback,
@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import type { Lead } from "@/lib/types";
 import { COURSE_OPTIONS } from "@/lib/mock-data";
 import { cn } from "@/lib/cn";
@@ -26,6 +27,10 @@ const COL_KEYS = [
 ] as const;
 type ColKey = (typeof COL_KEYS)[number];
 
+const ACTION_MENU_W = 180;
+
+type ActionMenuState = { leadId: string; top: number; left: number } | null;
+
 const DEFAULT_WIDTHS: Record<string, number> = {
   idx: 52,
   date: 118,
@@ -35,6 +40,7 @@ const DEFAULT_WIDTHS: Record<string, number> = {
   course: 108,
   phone: 132,
   status: 128,
+  followUp: 112,
   action: 56,
 };
 
@@ -47,6 +53,8 @@ type Props = {
   onToggleRow: (id: string, checked: boolean) => void;
   onSelectAll: (checked: boolean, visibleIds: string[]) => void;
   visibleIds: string[];
+  /** Flush to parent sheet: no outer radius, optional top border off when stacked. */
+  className?: string;
 };
 
 export function LeadSheetTable({
@@ -56,6 +64,7 @@ export function LeadSheetTable({
   onToggleRow,
   onSelectAll,
   visibleIds,
+  className,
 }: Props) {
   const baseId = useId();
   const [widths, setWidths] = useState(DEFAULT_WIDTHS);
@@ -69,19 +78,41 @@ export function LeadSheetTable({
     field: ColKey;
   } | null>(null);
   const [editing, setEditing] = useState<EditTarget>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [actionMenu, setActionMenu] = useState<ActionMenuState>(null);
   const tableRef = useRef<HTMLTableElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!openMenuId) return;
+    if (!actionMenu) return;
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
       if (tableRef.current?.contains(t)) return;
-      setOpenMenuId(null);
+      if (actionMenuRef.current?.contains(t)) return;
+      setActionMenu(null);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [openMenuId]);
+  }, [actionMenu]);
+
+  useEffect(() => {
+    if (!actionMenu) return;
+    const close = () => setActionMenu(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [actionMenu]);
+
+  useEffect(() => {
+    if (!actionMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActionMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [actionMenu]);
 
   const allSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
@@ -175,27 +206,49 @@ export function LeadSheetTable({
 
   const applyStatus = (lead: Lead, kind: "interested" | "not_interested" | "followup") => {
     if (kind === "interested") {
-      onUpdateLead(lead.id, { rowTone: "interested", sheetTab: "ongoing" });
+      onUpdateLead(lead.id, {
+        rowTone: "interested",
+        sheetTab: "ongoing",
+        followUpDate: null,
+      });
     } else if (kind === "not_interested") {
-      onUpdateLead(lead.id, { rowTone: "not_interested", sheetTab: "not_interested" });
+      onUpdateLead(lead.id, {
+        rowTone: "not_interested",
+        sheetTab: "not_interested",
+        followUpDate: null,
+      });
     } else {
-      onUpdateLead(lead.id, { rowTone: "followup_later", sheetTab: "followup" });
+      onUpdateLead(lead.id, {
+        rowTone: "followup_later",
+        sheetTab: "followup",
+        followUpDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
+      });
     }
-    setOpenMenuId(null);
+    setActionMenu(null);
   };
 
+  const menuLead = useMemo(
+    () => (actionMenu ? leads.find((l) => l.id === actionMenu.leadId) : undefined),
+    [actionMenu, leads],
+  );
+
   return (
-    <div className="relative overflow-auto rounded-[6px] border border-[#e0e0e0]">
+    <div
+      className={cn(
+        "relative overflow-auto rounded-[2px] border border-[#d0d0d0] bg-white",
+        className,
+      )}
+    >
       <table
         ref={tableRef}
         className="w-max min-w-full border-collapse text-[13px]"
         style={{ tableLayout: "fixed" }}
       >
-        <thead className="sticky top-0 z-20 bg-[#f8f9fa] text-[11px] font-medium uppercase tracking-wide text-[#212121]">
+        <thead className="sticky top-0 z-20 bg-[#f2f2f2] text-[11px] font-semibold uppercase tracking-[0.04em] text-[#424242]">
           <tr>
             <th
               style={{ width: widths.idx, minWidth: widths.idx }}
-              className="sticky left-0 z-30 border border-[#e0e0e0] bg-[#f8f9fa] px-1 py-2 text-center"
+              className="sticky left-0 z-30 border border-[#d0d0d0] bg-[#f2f2f2] px-1 py-2 text-center"
             >
               <input
                 type="checkbox"
@@ -216,7 +269,7 @@ export function LeadSheetTable({
                 minWidth: widths.studentName,
                 left: stickyLeft.studentName,
               }}
-              className="sticky z-[21] border border-[#e0e0e0] bg-[#f8f9fa] px-2 py-2 text-left"
+              className="sticky z-[21] border border-[#d0d0d0] bg-[#f2f2f2] px-2 py-2 text-left"
             >
               <div className="flex items-center justify-between gap-1">
                 <span>Student Name</span>
@@ -250,7 +303,7 @@ export function LeadSheetTable({
                 minWidth: widths.phone,
                 left: stickyLeft.phone,
               }}
-              className="sticky z-[21] border border-[#e0e0e0] bg-[#f8f9fa] px-2 py-2 text-left"
+              className="sticky z-[21] border border-[#d0d0d0] bg-[#f2f2f2] px-2 py-2 text-left"
             >
               <div className="flex items-center justify-between">
                 <span>Phone</span>
@@ -266,9 +319,15 @@ export function LeadSheetTable({
             >
               Status
             </ResizableTh>
+            <ResizableTh
+              w={widths.followUp}
+              onResizeStart={(ev) => beginResize("followUp", ev)}
+            >
+              Follow-up
+            </ResizableTh>
             <th
               style={{ width: widths.action, minWidth: widths.action }}
-              className="border border-[#e0e0e0] bg-[#f8f9fa] px-1 py-2 text-center"
+              className="border border-[#d0d0d0] bg-[#f2f2f2] px-1 py-2 text-center"
             >
               Action
             </th>
@@ -281,13 +340,13 @@ export function LeadSheetTable({
               <tr
                 key={lead.id}
                 className={cn(
-                  "min-h-[40px] border-b border-[#e0e0e0] transition-colors duration-150 hover:bg-[#f5f5f5]",
+                  "min-h-[40px] border-b border-[#d0d0d0] transition-colors duration-150 hover:bg-[#f5f5f5]",
                   tone,
                 )}
               >
                 <td
                   style={{ width: widths.idx }}
-                  className="sticky left-0 z-10 border border-[#e0e0e0] bg-[#f8f9fa] px-1 py-1 text-center text-xs text-[#757575]"
+                  className="sticky left-0 z-10 border border-[#d0d0d0] bg-[#f2f2f2] px-1 py-1 text-center text-xs text-[#757575]"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <input
@@ -348,7 +407,7 @@ export function LeadSheetTable({
                     left: stickyLeft.studentName,
                   }}
                   className={cn(
-                    "sticky z-10 border border-[#e0e0e0] px-2 py-1",
+                    "sticky z-10 border border-[#d0d0d0] px-2 py-1",
                     tone,
                   )}
                   onClick={() =>
@@ -429,7 +488,7 @@ export function LeadSheetTable({
                 <td
                   style={{ width: widths.course }}
                   className={cn(
-                    "border border-[#e0e0e0] px-1 py-1",
+                    "border border-[#d0d0d0] px-1 py-1",
                     selectedCell?.leadId === lead.id &&
                       selectedCell.field === "course" &&
                       "grid-cell-focus",
@@ -462,7 +521,7 @@ export function LeadSheetTable({
                     left: stickyLeft.phone,
                   }}
                   className={cn(
-                    "sticky z-10 border border-[#e0e0e0] px-2 py-1",
+                    "sticky z-10 border border-[#d0d0d0] px-2 py-1",
                     tone,
                   )}
                   onClick={() =>
@@ -497,67 +556,117 @@ export function LeadSheetTable({
                 </td>
                 <td
                   style={{ width: widths.status }}
-                  className={cn("border border-[#e0e0e0] px-2 py-1", tone)}
+                  className={cn("border border-[#d0d0d0] px-2 py-1", tone)}
                 >
                   <PipelineDots completed={lead.pipelineSteps} />
                 </td>
                 <td
+                  style={{ width: widths.followUp }}
+                  className={cn("border border-[#d0d0d0] px-2 py-1 text-[12px]", tone)}
+                >
+                  {lead.followUpDate ? (
+                    <span
+                      className={cn(
+                        lead.sheetTab === "followup" &&
+                          "font-medium text-[#e65100]",
+                      )}
+                      title="Next follow-up date"
+                    >
+                      {format(parseISO(lead.followUpDate), "dd/MM/yyyy")}
+                    </span>
+                  ) : (
+                    <span className="text-[#bdbdbd]">—</span>
+                  )}
+                </td>
+                <td
                   style={{ width: widths.action }}
-                  className={cn("relative border border-[#e0e0e0] px-0 py-1 text-center", tone)}
+                  className={cn("border border-[#d0d0d0] px-0 py-1 text-center", tone)}
                 >
                   <button
                     type="button"
                     className="rounded-[4px] px-2 py-1 text-lg leading-none text-[#212121] hover:bg-[#eeeeee]"
-                    aria-expanded={openMenuId === lead.id}
+                    aria-expanded={actionMenu?.leadId === lead.id}
+                    aria-haspopup="menu"
                     aria-controls={`${baseId}-menu-${lead.id}`}
-                    onClick={() =>
-                      setOpenMenuId(openMenuId === lead.id ? null : lead.id)
-                    }
+                    onClick={(e) => {
+                      const btn = e.currentTarget;
+                      const rect = btn.getBoundingClientRect();
+                      if (actionMenu?.leadId === lead.id) {
+                        setActionMenu(null);
+                        return;
+                      }
+                      const vw =
+                        typeof window !== "undefined"
+                          ? window.innerWidth
+                          : rect.right;
+                      const left = Math.min(
+                        Math.max(8, rect.right - ACTION_MENU_W),
+                        vw - ACTION_MENU_W - 8,
+                      );
+                      setActionMenu({
+                        leadId: lead.id,
+                        top: rect.bottom + 4,
+                        left,
+                      });
+                    }}
                   >
                     ⋮
                   </button>
-                  {openMenuId === lead.id && (
-                    <div
-                      id={`${baseId}-menu-${lead.id}`}
-                      className="absolute right-0 top-full z-40 min-w-[180px] rounded-[6px] border border-[#e0e0e0] bg-white py-1 text-left text-sm shadow-none"
-                      role="menu"
-                    >
-                      <button
-                        type="button"
-                        className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
-                        onClick={() => applyStatus(lead, "interested")}
-                      >
-                        Interested
-                      </button>
-                      <button
-                        type="button"
-                        className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
-                        onClick={() => applyStatus(lead, "not_interested")}
-                      >
-                        Not Interested
-                      </button>
-                      <button
-                        type="button"
-                        className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
-                        onClick={() => {
-                          setOpenMenuId(null);
-                          window.dispatchEvent(
-                            new CustomEvent("lead-followup", {
-                              detail: { id: lead.id },
-                            }),
-                          );
-                        }}
-                      >
-                        Follow-up
-                      </button>
-                    </div>
-                  )}
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {typeof document !== "undefined" &&
+        actionMenu &&
+        menuLead &&
+        createPortal(
+          <div
+            ref={actionMenuRef}
+            id={`${baseId}-menu-${actionMenu.leadId}`}
+            role="menu"
+            className="fixed z-[200] min-w-[180px] rounded-[6px] border border-[#d0d0d0] bg-white py-1 text-left text-sm shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+            style={{
+              top: actionMenu.top,
+              left: actionMenu.left,
+              width: ACTION_MENU_W,
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
+              onClick={() => applyStatus(menuLead, "interested")}
+            >
+              Interested
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
+              onClick={() => applyStatus(menuLead, "not_interested")}
+            >
+              Not Interested
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="block w-full px-3 py-2 text-left hover:bg-[#f5f5f5]"
+              onClick={() => {
+                setActionMenu(null);
+                window.dispatchEvent(
+                  new CustomEvent("lead-followup", {
+                    detail: { id: menuLead.id },
+                  }),
+                );
+              }}
+            >
+              Follow-up
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -574,7 +683,7 @@ function ResizableTh({
   return (
     <th
       style={{ width: w, minWidth: w }}
-      className="relative border border-[#e0e0e0] bg-[#f8f9fa] px-2 py-2 text-left"
+      className="relative border border-[#d0d0d0] bg-[#f2f2f2] px-2 py-2 text-left"
     >
       <div className="flex items-center justify-between gap-1 pr-1">
         <span>{children}</span>
@@ -606,7 +715,7 @@ function DataCell({
     <td
       style={{ width, minWidth: width }}
       className={cn(
-        "border border-[#e0e0e0] px-1 py-1",
+        "border border-[#d0d0d0] px-1 py-1",
         selected && !editing && "grid-cell-focus",
       )}
       onClick={onSelect}
@@ -645,7 +754,7 @@ function TextCell({
     <td
       style={{ width, minWidth: width }}
       className={cn(
-        "border border-[#e0e0e0] px-2 py-1",
+        "border border-[#d0d0d0] px-2 py-1",
         selected && !editing && "grid-cell-focus",
         tone,
       )}
