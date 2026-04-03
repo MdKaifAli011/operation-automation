@@ -645,8 +645,12 @@ function DemoForm({
         ? "Mr. Ravi Kumar"
         : FACULTY_SEED[0].name;
   const [teacher, setTeacher] = useState(defaultTeacher);
-  const [demoDate, setDemoDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const [demoDate, setDemoDate] = useState(todayStr);
   const [demoTime, setDemoTime] = useState("10:00");
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  /** If the tab crosses midnight, raw `demoDate` can lag; never schedule or show a past calendar day. */
+  const effectiveDemoDate = demoDate < todayStr ? todayStr : demoDate;
 
   const pickSubject = (s: string) => {
     setSubj(s);
@@ -755,13 +759,19 @@ function DemoForm({
         <label className="block text-[13px]">
           <span className="font-medium text-slate-700">Demo date</span>
           <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
-            When the student will join
+            Today or a future date — demos can&apos;t be scheduled in the past
           </span>
           <input
             type="date"
-            value={demoDate}
-            onChange={(e) => setDemoDate(e.target.value)}
+            min={todayStr}
+            value={effectiveDemoDate}
+            onChange={(e) => {
+              setScheduleError(null);
+              const v = e.target.value;
+              if (v >= todayStr) setDemoDate(v);
+            }}
             className={cn(SX.input, "mt-1 w-full")}
+            aria-invalid={!!scheduleError}
           />
         </label>
         <label className="block text-[13px]">
@@ -772,11 +782,28 @@ function DemoForm({
           <input
             type="time"
             value={demoTime}
-            onChange={(e) => setDemoTime(e.target.value)}
+            onChange={(e) => {
+              setScheduleError(null);
+              setDemoTime(e.target.value);
+            }}
             className={cn(SX.input, "mt-1 w-full")}
           />
+          {effectiveDemoDate === todayStr && (
+            <span className="mt-1 block text-[11px] text-amber-800/90">
+              If today is selected, pick a time that hasn&apos;t passed yet (IST workflow).
+            </span>
+          )}
         </label>
       </div>
+
+      {scheduleError && (
+        <p
+          className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800"
+          role="alert"
+        >
+          {scheduleError}
+        </p>
+      )}
 
       <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50/80 px-3 py-2.5 text-[12px] leading-snug text-slate-700">
         <span className="font-semibold text-sky-900">Timezone tip · </span>
@@ -793,17 +820,26 @@ function DemoForm({
           className={cn(
             "inline-flex items-center rounded-lg border border-success bg-success px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#27692a]",
           )}
-          onClick={() =>
+          onClick={() => {
+            setScheduleError(null);
+            const slot = new Date(`${effectiveDemoDate}T${demoTime}:00`);
+            const now = new Date();
+            if (slot.getTime() < now.getTime()) {
+              setScheduleError(
+                "That slot is already in the past. Pick a later time or a future date.",
+              );
+              return;
+            }
             onSchedule({
               subject: subj,
               teacher,
-              date: format(parseISO(demoDate), "dd/MM/yyyy"),
+              date: format(parseISO(effectiveDemoDate), "dd/MM/yyyy"),
               time: demoTime.includes(":")
                 ? `${demoTime} IST`
                 : demoTime,
               status: "Scheduled",
-            })
-          }
+            });
+          }}
         >
           Schedule demo
         </button>
