@@ -3,48 +3,10 @@
 import { format } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SheetTabId } from "@/lib/types";
-import { COURSE_OPTIONS } from "@/lib/mock-data";
+import { leadsToExportCsv } from "@/lib/lead-csv";
+import { TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
-
-function csvEscape(value: string) {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-function leadsToCsv(leads: Lead[]) {
-  const headers = [
-    "Date",
-    "Student",
-    "Parent",
-    "Counsellor",
-    "Course",
-    "Country",
-    "Phone",
-    "Pipeline steps",
-    "Status",
-    "Sheet",
-    "Follow-up date",
-  ];
-  const lines = leads.map((l) =>
-    [
-      l.date,
-      l.studentName,
-      l.parentName,
-      l.counsellor,
-      l.course,
-      l.country,
-      l.phone,
-      String(l.pipelineSteps),
-      l.rowTone,
-      l.sheetTab,
-      l.followUpDate ?? "",
-    ].map((c) => csvEscape(String(c))),
-  );
-  return [headers.join(","), ...lines.map((row) => row.join(","))].join("\r\n");
-}
 
 const SHEET_EXPORT_OPTIONS: {
   value: SheetTabId | "converted_full";
@@ -83,7 +45,7 @@ function filterLeadsForExport(
     }
     if (opts.dateFrom && l.date < opts.dateFrom) return false;
     if (opts.dateTo && l.date > opts.dateTo) return false;
-    if (opts.course && l.course !== opts.course) return false;
+    if (opts.course && !l.targetExams.includes(opts.course)) return false;
     if (opts.country) {
       if (l.country.trim().toLowerCase() !== opts.country.trim().toLowerCase()) {
         return false;
@@ -170,7 +132,7 @@ export function ExportLeadsButton({ leads }: Props) {
   const runExport = () => {
     if (rangeError) return;
     const rows = matchingLeads;
-    const csv = leadsToCsv(rows);
+    const csv = leadsToExportCsv(rows);
     const blob = new Blob(["\ufeff", csv], {
       type: "text/csv;charset=utf-8;",
     });
@@ -236,8 +198,13 @@ export function ExportLeadsButton({ leads }: Props) {
             Export leads to CSV
           </h2>
           <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
-            Optionally limit to one lead list, then narrow by date, course, and
-            country. Empty fields mean &quot;all&quot; for that filter.
+            Optionally limit to one lead list, then narrow by date, target exam,
+            and country. Empty fields mean &quot;all&quot; for that filter.
+            The file uses lowercase headers (
+            <code className="rounded bg-slate-100 px-1 text-[11px]">
+              date, student name, …
+            </code>
+            ) so you can re-import with the same column names in any casing.
           </p>
         </div>
 
@@ -321,14 +288,14 @@ export function ExportLeadsButton({ leads }: Props) {
           )}
 
           <label className={cn(label, "mt-4 block")}>
-            Course
+            Target exam
             <select
               className={field}
               value={course}
               onChange={(e) => setCourse(e.target.value)}
             >
-              <option value="">All courses</option>
-              {COURSE_OPTIONS.map((c) => (
+              <option value="">All targets</option>
+              {TARGET_EXAM_OPTIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

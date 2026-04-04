@@ -10,12 +10,16 @@ export type RowTone =
 export type Lead = {
   id: string;
   date: string; // ISO date — lead created / intake date
-  /** When sheet is follow-up: date counsellor should call or student returns (ISO yyyy-MM-dd). */
+  /** When sheet is follow-up: date to call or student returns (ISO yyyy-MM-dd). */
   followUpDate: string | null;
   studentName: string;
   parentName: string;
-  counsellor: string;
-  course: string;
+  /** Lead source / channel (CRM data type). */
+  dataType: string;
+  /** Student class / year. */
+  grade: string;
+  /** Target exams (NEET, JEE, …) — multi-select in UI. */
+  targetExams: string[];
   country: string;
   phone: string;
   pipelineSteps: number; // 0–4 completed (Demo → Brochure → Fees → Schedule)
@@ -26,7 +30,7 @@ export type Lead = {
 export type SortKey =
   | "date"
   | "studentName"
-  | "course"
+  | "targetExams"
   | "country"
   | "rowTone";
 export type SortDir = "asc" | "desc";

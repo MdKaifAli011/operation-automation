@@ -1,5 +1,37 @@
 import type { Lead } from "./types";
 
+/** Target exams shown in leads grid (multi-select). */
+export const TARGET_EXAM_OPTIONS = [
+  "NEET",
+  "JEE",
+  "CUET",
+  "SAT",
+  "Other",
+] as const;
+
+/** @deprecated Use TARGET_EXAM_OPTIONS — kept for older screens. */
+export const COURSE_OPTIONS = TARGET_EXAM_OPTIONS;
+
+export const DATA_TYPE_OPTIONS = [
+  "Organic",
+  "Paid",
+  "Referral",
+  "Walk-in",
+  "Partner",
+] as const;
+
+export const GRADE_OPTIONS = [
+  "6th",
+  "7th",
+  "8th",
+  "9th",
+  "10th",
+  "11th",
+  "12th",
+  "Dropper",
+  "Graduate",
+] as const;
+
 export const INITIAL_LEADS: Lead[] = [
   {
     id: "1",
@@ -7,8 +39,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Rahul Sharma",
     parentName: "Amit Sharma",
-    counsellor: "Priya",
-    course: "NEET",
+    dataType: "Organic",
+    grade: "12th",
+    targetExams: ["NEET", "JEE"],
     country: "India",
     phone: "9876543210",
     pipelineSteps: 3,
@@ -21,8 +54,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Sneha Patel",
     parentName: "Rajesh Patel",
-    counsellor: "Arjun",
-    course: "JEE",
+    dataType: "Paid",
+    grade: "12th",
+    targetExams: ["JEE"],
     country: "India",
     phone: "9845123456",
     pipelineSteps: 1,
@@ -35,8 +69,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: "2026-04-03",
     studentName: "Aryan Mehta",
     parentName: "Sunita Mehta",
-    counsellor: "Priya",
-    course: "CUET",
+    dataType: "Referral",
+    grade: "12th",
+    targetExams: ["CUET"],
     country: "India",
     phone: "9934521678",
     pipelineSteps: 2,
@@ -49,8 +84,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Kavya Nair",
     parentName: "Suresh Nair",
-    counsellor: "Ravi",
-    course: "NEET",
+    dataType: "Walk-in",
+    grade: "11th",
+    targetExams: ["NEET"],
     country: "India",
     phone: "9812345670",
     pipelineSteps: 4,
@@ -63,8 +99,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Rohan Gupta",
     parentName: "Deepak Gupta",
-    counsellor: "Arjun",
-    course: "JEE",
+    dataType: "Partner",
+    grade: "12th",
+    targetExams: ["JEE", "SAT"],
     country: "UAE",
     phone: "9867453210",
     pipelineSteps: 1,
@@ -77,8 +114,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Ananya Singh",
     parentName: "Rekha Singh",
-    counsellor: "Priya",
-    course: "NEET",
+    dataType: "Organic",
+    grade: "Dropper",
+    targetExams: ["NEET", "CUET"],
     country: "India",
     phone: "9856341290",
     pipelineSteps: 3,
@@ -91,8 +129,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Vikram Joshi",
     parentName: "Mahesh Joshi",
-    counsellor: "Ravi",
-    course: "JEE",
+    dataType: "Paid",
+    grade: "12th",
+    targetExams: ["JEE"],
     country: "Singapore",
     phone: "9823456712",
     pipelineSteps: 4,
@@ -105,8 +144,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Pooja Reddy",
     parentName: "Latha Reddy",
-    counsellor: "Arjun",
-    course: "CUET",
+    dataType: "Organic",
+    grade: "12th",
+    targetExams: ["CUET"],
     country: "India",
     phone: "9898765432",
     pipelineSteps: 2,
@@ -119,8 +159,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Amit Kumar",
     parentName: "Sunil Kumar",
-    counsellor: "Priya",
-    course: "NEET",
+    dataType: "Referral",
+    grade: "12th",
+    targetExams: ["NEET"],
     country: "Nepal",
     phone: "9871234560",
     pipelineSteps: 3,
@@ -133,8 +174,9 @@ export const INITIAL_LEADS: Lead[] = [
     followUpDate: null,
     studentName: "Riya Sharma",
     parentName: "Geeta Sharma",
-    counsellor: "Ravi",
-    course: "JEE",
+    dataType: "Walk-in",
+    grade: "11th",
+    targetExams: ["JEE", "NEET", "SAT"],
     country: "India",
     phone: "9843219870",
     pipelineSteps: 1,
@@ -142,8 +184,6 @@ export const INITIAL_LEADS: Lead[] = [
     sheetTab: "ongoing",
   },
 ];
-
-export const COURSE_OPTIONS = ["NEET", "JEE", "CUET", "Other"] as const;
 
 export const FACULTY_SEED = [
   {

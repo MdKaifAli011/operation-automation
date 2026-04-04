@@ -2,32 +2,34 @@
 
 import { addDays, format, parseISO } from "date-fns";
 import Link from "next/link";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Lead } from "@/lib/types";
-import { COURSE_OPTIONS } from "@/lib/mock-data";
+import { TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
+import { formatTargetExams } from "@/lib/lead-display";
 import { cn } from "@/lib/cn";
 import { formatLeadPhone } from "@/lib/phone-display";
 import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 
-const COL_KEYS = [
-  "date",
-  "studentName",
-  "parentName",
-  "counsellor",
-  "course",
-  "country",
-  "phone",
-] as const;
-type ColKey = (typeof COL_KEYS)[number];
+type ColKey =
+  | "idx"
+  | "date"
+  | "studentName"
+  | "parentName"
+  | "dataType"
+  | "grade"
+  | "targetExams"
+  | "country"
+  | "phone"
+  | "pipeline"
+  | "followUp";
+
+type TextColKey =
+  | "parentName"
+  | "dataType"
+  | "grade"
+  | "country";
 
 const ACTION_MENU_W = 180;
 
@@ -35,40 +37,44 @@ type ActionMenuState = { leadId: string; top: number; left: number } | null;
 
 const EMPTY_SELECTED = new Set<string>();
 
-const DEFAULT_WIDTHS: Record<string, number> = {
+/** Fixed column widths — horizontal scroll instead of drag-resize. */
+const COL_WIDTHS: Record<string, number> = {
   idx: 52,
-  date: 118,
-  studentName: 176,
-  parentName: 140,
-  counsellor: 110,
-  course: 108,
-  country: 108,
-  phone: 132,
-  status: 128,
-  followUp: 112,
-  action: 56,
+  date: 112,
+  studentName: 168,
+  parentName: 132,
+  dataType: 92,
+  grade: 72,
+  targetExams: 140,
+  country: 96,
+  phone: 124,
+  status: 112,
+  followUp: 104,
+  action: 52,
 };
 
-type EditTarget = { leadId: string; field: ColKey | "pipeline" } | null;
+type EditTarget = { leadId: string; field: ColKey } | null;
 
 type Props = {
   leads: Lead[];
   onUpdateLead: (id: string, patch: Partial<Lead>) => void;
+  /** When true, cell edits are staged until parent saves. */
+  sheetEditMode: boolean;
+  onDraftPatch: (id: string, patch: Partial<Lead>) => void;
   visibleIds: string[];
   selectedIds?: Set<string>;
   onToggleRow?: (id: string, checked: boolean) => void;
   onSelectAll?: (checked: boolean, visibleIds: string[]) => void;
-  /** Row checkboxes + select-all (e.g. bulk actions). Default off for a cleaner grid. */
   showRowSelect?: boolean;
-  /** Flush to parent sheet: no outer radius, optional top border off when stacked. */
   className?: string;
-  /** `daily` = today’s digest: no A–J row, warmer chrome. `standard` = full worksheet grid. */
   variant?: "standard" | "daily";
 };
 
 export function LeadSheetTable({
   leads,
   onUpdateLead,
+  sheetEditMode,
+  onDraftPatch,
   selectedIds = EMPTY_SELECTED,
   onToggleRow = () => {},
   onSelectAll = () => {},
@@ -78,17 +84,12 @@ export function LeadSheetTable({
   variant = "standard",
 }: Props) {
   const baseId = useId();
-  const [widths, setWidths] = useState(DEFAULT_WIDTHS);
-  const [resize, setResize] = useState<{
-    key: string;
-    startX: number;
-    startW: number;
-  } | null>(null);
   const [selectedCell, setSelectedCell] = useState<{
     leadId: string;
     field: ColKey;
   } | null>(null);
   const [editing, setEditing] = useState<EditTarget>(null);
+  const activeEdit = sheetEditMode ? editing : null;
   const [actionMenu, setActionMenu] = useState<ActionMenuState>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
@@ -130,95 +131,10 @@ export function LeadSheetTable({
     visibleIds.length > 0 &&
     visibleIds.every((id) => selectedIds.has(id));
 
-  const stickyLeft = useMemo(() => {
-    const w = widths;
-    return {
-      idx: 0,
-      date: w.idx,
-      studentName: w.idx + w.date,
-      phone:
-        w.idx +
-        w.date +
-        w.studentName +
-        w.parentName +
-        w.counsellor +
-        w.course +
-        w.country,
-    };
-  }, [widths]);
-
-  useEffect(() => {
-    if (!resize) return;
-    const onMove = (e: MouseEvent) => {
-      const delta = e.clientX - resize.startX;
-      const next = Math.max(48, resize.startW + delta);
-      setWidths((prev) => ({ ...prev, [resize.key]: next }));
-    };
-    const onUp = () => setResize(null);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [resize]);
-
-  const moveEdit = useCallback(
-    (dir: "up" | "down" | "left" | "right") => {
-      if (!editing || !editing.field || editing.field === "pipeline") return;
-      const idx = leads.findIndex((l) => l.id === editing.leadId);
-      const colIdx = COL_KEYS.indexOf(editing.field as ColKey);
-      if (idx < 0) return;
-      if (dir === "down") {
-        const n = leads[idx + 1];
-        if (n) setEditing({ leadId: n.id, field: editing.field as ColKey });
-        return;
-      }
-      if (dir === "up") {
-        const p = leads[idx - 1];
-        if (p) setEditing({ leadId: p.id, field: editing.field as ColKey });
-        return;
-      }
-      if (dir === "right") {
-        const nc = Math.min(COL_KEYS.length - 1, colIdx + 1);
-        setEditing({ leadId: editing.leadId, field: COL_KEYS[nc] });
-        return;
-      }
-      if (dir === "left") {
-        const nc = Math.max(0, colIdx - 1);
-        setEditing({ leadId: editing.leadId, field: COL_KEYS[nc] });
-      }
-    },
-    [editing, leads],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!editing) return;
-      if (e.key === "Escape") {
-        setEditing(null);
-        return;
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        moveEdit("down");
-        return;
-      }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        moveEdit(e.shiftKey ? "left" : "right");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [editing, moveEdit]);
-
-  const beginResize = (key: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    setResize({ key, startX: e.clientX, startW: widths[key] ?? 80 });
-  };
-
-  const applyStatus = (lead: Lead, kind: "interested" | "not_interested" | "followup") => {
+  const applyStatus = (
+    lead: Lead,
+    kind: "interested" | "not_interested" | "followup",
+  ) => {
     if (kind === "interested") {
       onUpdateLead(lead.id, {
         rowTone: "interested",
@@ -248,105 +164,30 @@ export function LeadSheetTable({
 
   const isDaily = variant === "daily";
 
+  const startEdit = (leadId: string, field: ColKey) => {
+    if (!sheetEditMode) return;
+    setEditing({ leadId, field });
+  };
+
   return (
     <div
       className={cn(
-        "relative overflow-auto rounded-none shadow-sm",
+        "relative max-h-[min(68vh,640px)] overflow-auto overscroll-contain rounded-lg shadow-sm [scrollbar-gutter:stable]",
+        "[scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.5)_transparent]",
         isDaily
-          ? "border border-amber-200/60 bg-gradient-to-b from-amber-50/50 via-white to-white"
+          ? "border border-amber-200/70 bg-gradient-to-b from-amber-50/40 via-white to-white"
           : "border border-slate-200/90 bg-white",
         className,
       )}
     >
       <table
         ref={tableRef}
-        className="w-max min-w-full border-collapse text-[13px]"
+        className="w-max min-w-full border-collapse text-[13px] antialiased"
         style={{ tableLayout: "fixed" }}
       >
-        <thead className="sticky top-0 z-20 bg-slate-50/95 text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-600 backdrop-blur-sm">
-          {!isDaily && (
-          <tr className="bg-slate-100/90 text-[10px] font-bold tracking-widest text-slate-400">
-            <th
-              style={{ width: widths.idx, minWidth: widths.idx }}
-              className="sticky left-0 z-30 border border-slate-200 px-1 py-1 text-center"
-            >
-              #
-            </th>
-            <th
-              style={{ width: widths.date, minWidth: widths.date }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              A
-            </th>
-            <th
-              style={{
-                width: widths.studentName,
-                minWidth: widths.studentName,
-                left: stickyLeft.studentName,
-              }}
-              className="sticky z-[21] border border-slate-200 px-1 py-1 text-center"
-            >
-              B
-            </th>
-            <th
-              style={{ width: widths.parentName, minWidth: widths.parentName }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              C
-            </th>
-            <th
-              style={{ width: widths.counsellor, minWidth: widths.counsellor }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              D
-            </th>
-            <th
-              style={{ width: widths.course, minWidth: widths.course }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              E
-            </th>
-            <th
-              style={{ width: widths.country, minWidth: widths.country }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              F
-            </th>
-            <th
-              style={{
-                width: widths.phone,
-                minWidth: widths.phone,
-                left: stickyLeft.phone,
-              }}
-              className="sticky z-[21] border border-slate-200 px-1 py-1 text-center"
-            >
-              G
-            </th>
-            <th
-              style={{ width: widths.status, minWidth: widths.status }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              H
-            </th>
-            <th
-              style={{ width: widths.followUp, minWidth: widths.followUp }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              I
-            </th>
-            <th
-              style={{ width: widths.action, minWidth: widths.action }}
-              className="border border-slate-200 px-1 py-1 text-center"
-            >
-              J
-            </th>
-          </tr>
-          )}
+        <thead className="text-[11px] font-semibold text-slate-600">
           <tr>
-            <th
-              style={{ width: widths.idx, minWidth: widths.idx }}
-              className="sticky left-0 z-30 border border-slate-200 bg-slate-50/95 px-1 py-2 text-center"
-            >
+            <SheetTh w={COL_WIDTHS.idx} className="px-1 text-center">
               {showRowSelect ? (
                 <input
                   type="checkbox"
@@ -355,89 +196,22 @@ export function LeadSheetTable({
                   aria-label="Select all"
                 />
               ) : (
-                <span className="text-slate-500">#</span>
+                <span className="font-normal text-slate-500">#</span>
               )}
-            </th>
-            <ResizableTh
-              w={widths.date}
-              onResizeStart={(ev) => beginResize("date", ev)}
-            >
-              Date
-            </ResizableTh>
-            <th
-              style={{
-                width: widths.studentName,
-                minWidth: widths.studentName,
-                left: stickyLeft.studentName,
-              }}
-              className="sticky z-[21] border border-slate-200 bg-slate-50/95 px-2 py-2 text-left"
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span>Student Name</span>
-                <span
-                  className="w-1 cursor-col-resize select-none"
-                  onMouseDown={(e) => beginResize("studentName", e)}
-                />
-              </div>
-            </th>
-            <ResizableTh
-              w={widths.parentName}
-              onResizeStart={(ev) => beginResize("parentName", ev)}
-            >
-              Parent Name
-            </ResizableTh>
-            <ResizableTh
-              w={widths.counsellor}
-              onResizeStart={(ev) => beginResize("counsellor", ev)}
-            >
-              Counsellor
-            </ResizableTh>
-            <ResizableTh
-              w={widths.course}
-              onResizeStart={(ev) => beginResize("course", ev)}
-            >
-              Course
-            </ResizableTh>
-            <ResizableTh
-              w={widths.country}
-              onResizeStart={(ev) => beginResize("country", ev)}
-            >
-              Country
-            </ResizableTh>
-            <th
-              style={{
-                width: widths.phone,
-                minWidth: widths.phone,
-                left: stickyLeft.phone,
-              }}
-              className="sticky z-[21] border border-slate-200 bg-slate-50/95 px-2 py-2 text-left"
-            >
-              <div className="flex items-center justify-between">
-                <span>Phone</span>
-                <span
-                  className="w-1 cursor-col-resize select-none"
-                  onMouseDown={(e) => beginResize("phone", e)}
-                />
-              </div>
-            </th>
-            <ResizableTh
-              w={widths.status}
-              onResizeStart={(ev) => beginResize("status", ev)}
-            >
-              Status
-            </ResizableTh>
-            <ResizableTh
-              w={widths.followUp}
-              onResizeStart={(ev) => beginResize("followUp", ev)}
-            >
-              Follow-up
-            </ResizableTh>
-            <th
-              style={{ width: widths.action, minWidth: widths.action }}
-              className="border border-slate-200 bg-slate-50/95 px-1 py-2 text-center"
-            >
+            </SheetTh>
+            <SheetTh w={COL_WIDTHS.date}>Date</SheetTh>
+            <SheetTh w={COL_WIDTHS.studentName}>Student name</SheetTh>
+            <SheetTh w={COL_WIDTHS.parentName}>Parent name</SheetTh>
+            <SheetTh w={COL_WIDTHS.dataType}>Data type</SheetTh>
+            <SheetTh w={COL_WIDTHS.grade}>Grade</SheetTh>
+            <SheetTh w={COL_WIDTHS.targetExams}>Target (exams)</SheetTh>
+            <SheetTh w={COL_WIDTHS.country}>Country</SheetTh>
+            <SheetTh w={COL_WIDTHS.phone}>Phone</SheetTh>
+            <SheetTh w={COL_WIDTHS.status}>Status</SheetTh>
+            <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
+            <SheetTh w={COL_WIDTHS.action} className="px-1 text-center">
               Action
-            </th>
+            </SheetTh>
           </tr>
         </thead>
         <tbody>
@@ -447,13 +221,16 @@ export function LeadSheetTable({
               <tr
                 key={lead.id}
                 className={cn(
-                  "min-h-[40px] border-b border-slate-200 transition-colors duration-150 hover:bg-slate-50/90",
+                  "min-h-[42px] border-b border-slate-200/80 hover:brightness-[0.99]",
                   tone,
                 )}
               >
                 <td
-                  style={{ width: widths.idx }}
-                  className="sticky left-0 z-10 border border-slate-200 bg-slate-50/95 px-1 py-1 text-center text-xs text-[#757575]"
+                  style={{ width: COL_WIDTHS.idx }}
+                  className={cn(
+                    "border border-slate-200/80 px-1 py-1.5 text-center text-xs tabular-nums text-slate-600",
+                    tone,
+                  )}
                 >
                   {showRowSelect ? (
                     <div className="flex items-center justify-center gap-1">
@@ -470,7 +247,7 @@ export function LeadSheetTable({
                   )}
                 </td>
                 <DataCell
-                  width={widths.date}
+                  width={COL_WIDTHS.date}
                   selected={
                     selectedCell?.leadId === lead.id &&
                     selectedCell.field === "date"
@@ -479,19 +256,26 @@ export function LeadSheetTable({
                     setSelectedCell({ leadId: lead.id, field: "date" })
                   }
                   editing={
-                    editing?.leadId === lead.id && editing.field === "date"
+                    activeEdit?.leadId === lead.id &&
+                    activeEdit.field === "date"
                   }
-                  onEditStart={() =>
-                    setEditing({ leadId: lead.id, field: "date" })
-                  }
+                  onEditStart={() => startEdit(lead.id, "date")}
+                  sheetEditMode={sheetEditMode}
                 >
-                  {editing?.leadId === lead.id && editing.field === "date" ? (
+                  {activeEdit?.leadId === lead.id &&
+                  activeEdit.field === "date" ? (
                     <input
                       type="date"
-                      className="w-full rounded-none border border-primary bg-white px-1 py-1 text-[13px]"
+                      className="w-full rounded-md border border-primary bg-white px-1 py-1 text-[13px]"
                       defaultValue={lead.date}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditing(null);
+                        }
+                      }}
                       onBlur={(e) => {
-                        onUpdateLead(lead.id, { date: e.target.value });
+                        onDraftPatch(lead.id, { date: e.target.value });
                         setEditing(null);
                       }}
                       autoFocus
@@ -503,9 +287,7 @@ export function LeadSheetTable({
                       onClick={() =>
                         setSelectedCell({ leadId: lead.id, field: "date" })
                       }
-                      onDoubleClick={() =>
-                        setEditing({ leadId: lead.id, field: "date" })
-                      }
+                      onDoubleClick={() => startEdit(lead.id, "date")}
                     >
                       {format(parseISO(lead.date), "dd/MM/yyyy")}
                     </button>
@@ -513,12 +295,18 @@ export function LeadSheetTable({
                 </DataCell>
                 <td
                   style={{
-                    width: widths.studentName,
-                    minWidth: widths.studentName,
-                    left: stickyLeft.studentName,
+                    width: COL_WIDTHS.studentName,
+                    minWidth: COL_WIDTHS.studentName,
                   }}
                   className={cn(
-                    "sticky z-10 border border-slate-200 px-2 py-1",
+                    "border border-slate-200/80 px-2 py-1.5",
+                    selectedCell?.leadId === lead.id &&
+                      selectedCell.field === "studentName" &&
+                      !(
+                        activeEdit?.leadId === lead.id &&
+                        activeEdit.field === "studentName"
+                      ) &&
+                      "grid-cell-focus",
                     tone,
                   )}
                   onClick={() =>
@@ -526,16 +314,22 @@ export function LeadSheetTable({
                   }
                   onDoubleClick={(e) => {
                     e.preventDefault();
-                    setEditing({ leadId: lead.id, field: "studentName" });
+                    startEdit(lead.id, "studentName");
                   }}
                 >
-                  {editing?.leadId === lead.id &&
-                  editing.field === "studentName" ? (
+                  {activeEdit?.leadId === lead.id &&
+                  activeEdit.field === "studentName" ? (
                     <input
-                      className="w-full rounded-none border border-primary bg-white px-1 py-1 font-semibold"
+                      className="w-full rounded-md border border-primary bg-white px-1 py-1 font-semibold"
                       defaultValue={lead.studentName}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditing(null);
+                        }
+                      }}
                       onBlur={(e) => {
-                        onUpdateLead(lead.id, {
+                        onDraftPatch(lead.id, {
                           studentName: e.target.value,
                         });
                         setEditing(null);
@@ -558,7 +352,7 @@ export function LeadSheetTable({
                 <TextCell
                   lead={lead}
                   field="parentName"
-                  width={widths.parentName}
+                  width={COL_WIDTHS.parentName}
                   selected={
                     selectedCell?.leadId === lead.id &&
                     selectedCell.field === "parentName"
@@ -567,77 +361,102 @@ export function LeadSheetTable({
                     setSelectedCell({ leadId: lead.id, field: "parentName" })
                   }
                   editing={
-                    editing?.leadId === lead.id &&
-                    editing.field === "parentName"
+                    activeEdit?.leadId === lead.id &&
+                    activeEdit.field === "parentName"
                   }
-                  onEdit={() =>
-                    setEditing({ leadId: lead.id, field: "parentName" })
-                  }
-                  onCommit={(v) => onUpdateLead(lead.id, { parentName: v })}
+                  onEdit={() => startEdit(lead.id, "parentName")}
+                  onDraftPatch={onDraftPatch}
                   onCancelEdit={() => setEditing(null)}
                   tone={tone}
+                  sheetEditMode={sheetEditMode}
                 />
                 <TextCell
                   lead={lead}
-                  field="counsellor"
-                  width={widths.counsellor}
+                  field="dataType"
+                  width={COL_WIDTHS.dataType}
                   selected={
                     selectedCell?.leadId === lead.id &&
-                    selectedCell.field === "counsellor"
+                    selectedCell.field === "dataType"
                   }
                   onSelect={() =>
-                    setSelectedCell({ leadId: lead.id, field: "counsellor" })
+                    setSelectedCell({ leadId: lead.id, field: "dataType" })
                   }
                   editing={
-                    editing?.leadId === lead.id &&
-                    editing.field === "counsellor"
+                    activeEdit?.leadId === lead.id &&
+                    activeEdit.field === "dataType"
                   }
-                  onEdit={() =>
-                    setEditing({ leadId: lead.id, field: "counsellor" })
-                  }
-                  onCommit={(v) => onUpdateLead(lead.id, { counsellor: v })}
+                  onEdit={() => startEdit(lead.id, "dataType")}
+                  onDraftPatch={onDraftPatch}
                   onCancelEdit={() => setEditing(null)}
                   tone={tone}
+                  sheetEditMode={sheetEditMode}
+                />
+                <TextCell
+                  lead={lead}
+                  field="grade"
+                  width={COL_WIDTHS.grade}
+                  selected={
+                    selectedCell?.leadId === lead.id &&
+                    selectedCell.field === "grade"
+                  }
+                  onSelect={() =>
+                    setSelectedCell({ leadId: lead.id, field: "grade" })
+                  }
+                  editing={
+                    activeEdit?.leadId === lead.id &&
+                    activeEdit.field === "grade"
+                  }
+                  onEdit={() => startEdit(lead.id, "grade")}
+                  onDraftPatch={onDraftPatch}
+                  onCancelEdit={() => setEditing(null)}
+                  tone={tone}
+                  sheetEditMode={sheetEditMode}
                 />
                 <td
-                  style={{ width: widths.course }}
+                  style={{ width: COL_WIDTHS.targetExams }}
                   className={cn(
-                    "border border-slate-200 px-1 py-1",
+                    "border border-slate-200/80 px-1 py-1.5",
                     selectedCell?.leadId === lead.id &&
-                      selectedCell.field === "course" &&
+                      selectedCell.field === "targetExams" &&
                       "grid-cell-focus",
                     tone,
                   )}
                   onClick={() =>
-                    setSelectedCell({ leadId: lead.id, field: "course" })
+                    setSelectedCell({ leadId: lead.id, field: "targetExams" })
                   }
-                  onDoubleClick={() =>
-                    setEditing({ leadId: lead.id, field: "course" })
-                  }
+                  onDoubleClick={() => startEdit(lead.id, "targetExams")}
                 >
-                  {editing?.leadId === lead.id && editing.field === "course" ? (
-                    <CourseEditor
-                      value={lead.course}
-                      onCommit={(v) => {
-                        onUpdateLead(lead.id, { course: v });
+                  {activeEdit?.leadId === lead.id &&
+                  activeEdit.field === "targetExams" ? (
+                    <TargetExamsEditor
+                      value={lead.targetExams}
+                      onCommit={(exams) => {
+                        onDraftPatch(lead.id, { targetExams: exams });
                         setEditing(null);
                       }}
                       onCancel={() => setEditing(null)}
                     />
                   ) : (
-                    <span className="inline-flex w-full items-center justify-between gap-1">
-                      <span>{lead.course}</span>
-                      <ChevronDownGlyph
-                        className="h-3.5 w-3.5 shrink-0 text-slate-400"
-                        aria-hidden
-                      />
+                    <span
+                      className="inline-flex w-full items-center justify-between gap-1 text-[12px] leading-snug"
+                      title={formatTargetExams(lead.targetExams)}
+                    >
+                      <span className="min-w-0 break-words">
+                        {formatTargetExams(lead.targetExams)}
+                      </span>
+                      {sheetEditMode && (
+                        <ChevronDownGlyph
+                          className="h-3.5 w-3.5 shrink-0 text-slate-400"
+                          aria-hidden
+                        />
+                      )}
                     </span>
                   )}
                 </td>
                 <TextCell
                   lead={lead}
                   field="country"
-                  width={widths.country}
+                  width={COL_WIDTHS.country}
                   selected={
                     selectedCell?.leadId === lead.id &&
                     selectedCell.field === "country"
@@ -646,23 +465,29 @@ export function LeadSheetTable({
                     setSelectedCell({ leadId: lead.id, field: "country" })
                   }
                   editing={
-                    editing?.leadId === lead.id && editing.field === "country"
+                    activeEdit?.leadId === lead.id &&
+                    activeEdit.field === "country"
                   }
-                  onEdit={() =>
-                    setEditing({ leadId: lead.id, field: "country" })
-                  }
-                  onCommit={(v) => onUpdateLead(lead.id, { country: v })}
+                  onEdit={() => startEdit(lead.id, "country")}
+                  onDraftPatch={onDraftPatch}
                   onCancelEdit={() => setEditing(null)}
                   tone={tone}
+                  sheetEditMode={sheetEditMode}
                 />
                 <td
                   style={{
-                    width: widths.phone,
-                    minWidth: widths.phone,
-                    left: stickyLeft.phone,
+                    width: COL_WIDTHS.phone,
+                    minWidth: COL_WIDTHS.phone,
                   }}
                   className={cn(
-                    "sticky z-10 border border-slate-200 px-2 py-1",
+                    "border border-slate-200/80 px-2 py-1.5",
+                    selectedCell?.leadId === lead.id &&
+                      selectedCell.field === "phone" &&
+                      !(
+                        activeEdit?.leadId === lead.id &&
+                        activeEdit.field === "phone"
+                      ) &&
+                      "grid-cell-focus",
                     tone,
                   )}
                   onClick={() =>
@@ -670,15 +495,22 @@ export function LeadSheetTable({
                   }
                   onDoubleClick={(e) => {
                     e.preventDefault();
-                    setEditing({ leadId: lead.id, field: "phone" });
+                    startEdit(lead.id, "phone");
                   }}
                 >
-                  {editing?.leadId === lead.id && editing.field === "phone" ? (
+                  {activeEdit?.leadId === lead.id &&
+                  activeEdit.field === "phone" ? (
                     <input
-                      className="w-full rounded-none border border-primary bg-white px-1 py-1"
+                      className="w-full rounded-md border border-primary bg-white px-1 py-1 tabular-nums"
                       defaultValue={lead.phone}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditing(null);
+                        }
+                      }}
                       onBlur={(e) => {
-                        onUpdateLead(lead.id, { phone: e.target.value });
+                        onDraftPatch(lead.id, { phone: e.target.value });
                         setEditing(null);
                       }}
                       autoFocus
@@ -687,7 +519,7 @@ export function LeadSheetTable({
                     <a
                       href={`tel:${lead.phone}`}
                       title="Click to call"
-                      className="font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary"
+                      className="font-medium text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <span className="tabular-nums">
@@ -697,14 +529,14 @@ export function LeadSheetTable({
                   )}
                 </td>
                 <td
-                  style={{ width: widths.status }}
-                  className={cn("border border-slate-200 px-2 py-1", tone)}
+                  style={{ width: COL_WIDTHS.status }}
+                  className={cn("border border-slate-200/80 px-2 py-1.5", tone)}
                 >
                   <PipelineDots completed={lead.pipelineSteps} />
                 </td>
                 <td
-                  style={{ width: widths.followUp }}
-                  className={cn("border border-slate-200 px-2 py-1 text-[12px]", tone)}
+                  style={{ width: COL_WIDTHS.followUp }}
+                  className={cn("border border-slate-200/80 px-2 py-1.5 text-[12px]", tone)}
                 >
                   {lead.followUpDate ? (
                     <span
@@ -721,12 +553,12 @@ export function LeadSheetTable({
                   )}
                 </td>
                 <td
-                  style={{ width: widths.action }}
-                  className={cn("border border-slate-200 px-0 py-1 text-center", tone)}
+                  style={{ width: COL_WIDTHS.action }}
+                  className={cn("border border-slate-200/80 px-0 py-1.5 text-center", tone)}
                 >
                   <button
                     type="button"
-                    className="rounded-none px-2 py-1 text-lg leading-none text-slate-700 transition-colors hover:bg-slate-100"
+                    className="rounded-md px-2 py-1 text-lg leading-none text-slate-700 hover:bg-slate-100/90"
                     aria-expanded={actionMenu?.leadId === lead.id}
                     aria-haspopup="menu"
                     aria-controls={`${baseId}-menu-${lead.id}`}
@@ -813,27 +645,24 @@ export function LeadSheetTable({
   );
 }
 
-function ResizableTh({
+function SheetTh({
   children,
   w,
-  onResizeStart,
+  className,
 }: {
   children: React.ReactNode;
   w: number;
-  onResizeStart: (e: React.MouseEvent) => void;
+  className?: string;
 }) {
   return (
     <th
       style={{ width: w, minWidth: w }}
-      className="relative border border-slate-200 bg-slate-50/95 px-2 py-2 text-left"
+      className={cn(
+        "sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm",
+        className,
+      )}
     >
-      <div className="flex items-center justify-between gap-1 pr-1">
-        <span>{children}</span>
-        <span
-          className="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none hover:bg-[#e3f2fd]"
-          onMouseDown={onResizeStart}
-        />
-      </div>
+      {children}
     </th>
   );
 }
@@ -845,6 +674,7 @@ function DataCell({
   onSelect,
   editing,
   onEditStart,
+  sheetEditMode,
 }: {
   children: React.ReactNode;
   width: number;
@@ -852,16 +682,17 @@ function DataCell({
   onSelect: () => void;
   editing: boolean;
   onEditStart: () => void;
+  sheetEditMode: boolean;
 }) {
   return (
     <td
       style={{ width, minWidth: width }}
       className={cn(
-        "border border-slate-200 px-1 py-1",
+        "border border-slate-200/80 px-1 py-1.5",
         selected && !editing && "grid-cell-focus",
       )}
       onClick={onSelect}
-      onDoubleClick={onEditStart}
+      onDoubleClick={() => sheetEditMode && onEditStart()}
     >
       {children}
     </td>
@@ -876,39 +707,47 @@ function TextCell({
   onSelect,
   editing,
   onEdit,
-  onCommit,
+  onDraftPatch,
   onCancelEdit,
   tone,
+  sheetEditMode,
 }: {
   lead: Lead;
-  field: ColKey;
+  field: TextColKey;
   width: number;
   selected: boolean;
   onSelect: () => void;
   editing: boolean;
   onEdit: () => void;
-  onCommit: (v: string) => void;
+  onDraftPatch: (id: string, patch: Partial<Lead>) => void;
   onCancelEdit: () => void;
   tone: string;
+  sheetEditMode: boolean;
 }) {
   const val = lead[field];
   return (
     <td
       style={{ width, minWidth: width }}
       className={cn(
-        "border border-slate-200 px-2 py-1",
+        "border border-slate-200/80 px-2 py-1.5",
         selected && !editing && "grid-cell-focus",
         tone,
       )}
       onClick={onSelect}
-      onDoubleClick={onEdit}
+      onDoubleClick={() => sheetEditMode && onEdit()}
     >
       {editing ? (
         <input
-          className="w-full rounded-none border border-primary bg-white px-1 py-1"
+          className="w-full rounded-md border border-primary bg-white px-1 py-1"
           defaultValue={val}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              onCancelEdit();
+            }
+          }}
           onBlur={(e) => {
-            onCommit(e.target.value);
+            onDraftPatch(lead.id, { [field]: e.target.value });
             onCancelEdit();
           }}
           autoFocus
@@ -935,43 +774,50 @@ function ChevronDownGlyph({ className }: { className?: string }) {
   );
 }
 
-function CourseEditor({
+function TargetExamsEditor({
   value,
   onCommit,
   onCancel,
 }: {
-  value: string;
-  onCommit: (v: string) => void;
+  value: string[];
+  onCommit: (exams: string[]) => void;
   onCancel: () => void;
 }) {
-  const [v, setV] = useState(value);
+  const [sel, setSel] = useState<Set<string>>(() => new Set(value));
+  const toggle = (c: string) => {
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(c)) n.delete(c);
+      else n.add(c);
+      return n;
+    });
+  };
   return (
-    <div className="flex flex-col gap-1">
-      <select
-        className="w-full rounded-none border border-primary bg-white px-1 py-1 text-[13px]"
-        value={COURSE_OPTIONS.includes(v as (typeof COURSE_OPTIONS)[number]) ? v : "Other"}
-        onChange={(e) => {
-          const nv = e.target.value;
-          if (nv === "__add") {
-            const created = window.prompt("New course name");
-            if (created) setV(created);
-            return;
-          }
-          setV(nv);
-        }}
-      >
-        {COURSE_OPTIONS.map((c) => (
-          <option key={c} value={c}>
+    <div className="flex flex-col gap-2 border border-primary bg-white p-2 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        Select one or more
+      </p>
+      <div className="flex max-h-[140px] flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
+        {TARGET_EXAM_OPTIONS.map((c) => (
+          <label
+            key={c}
+            className="flex cursor-pointer items-center gap-1.5 text-[12px] text-slate-800"
+          >
+            <input
+              type="checkbox"
+              className="rounded-none border-slate-300 text-primary"
+              checked={sel.has(c)}
+              onChange={() => toggle(c)}
+            />
             {c}
-          </option>
+          </label>
         ))}
-        <option value="__add">+ Add New Course</option>
-      </select>
-      <div className="flex gap-1">
+      </div>
+      <div className="flex flex-wrap gap-1 border-t border-slate-100 pt-2">
         <button
           type="button"
           className="rounded-none bg-success px-2 py-0.5 text-xs text-white"
-          onClick={() => onCommit(v)}
+          onClick={() => onCommit([...sel])}
         >
           OK
         </button>

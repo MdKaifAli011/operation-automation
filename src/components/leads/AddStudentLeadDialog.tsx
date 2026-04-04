@@ -3,11 +3,13 @@
 import { format } from "date-fns";
 import { useEffect, useId, useRef, useState } from "react";
 import type { Lead } from "@/lib/types";
-import { COURSE_OPTIONS } from "@/lib/mock-data";
+import {
+  DATA_TYPE_OPTIONS,
+  GRADE_OPTIONS,
+  TARGET_EXAM_OPTIONS,
+} from "@/lib/mock-data";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
-
-const COUNSELLOR_PRESETS = ["Priya", "Arjun", "Ravi"] as const;
 
 type Props = {
   open: boolean;
@@ -46,10 +48,23 @@ export function AddStudentLeadDialog({
   const [studentName, setStudentName] = useState("");
   const [phone, setPhone] = useState("");
   const [parentName, setParentName] = useState("");
-  const [course, setCourse] = useState<string>(COURSE_OPTIONS[0]);
+  const [dataType, setDataType] = useState<string>(DATA_TYPE_OPTIONS[0]);
+  const [grade, setGrade] = useState<string>(GRADE_OPTIONS[0]);
+  const [targetExams, setTargetExams] = useState<string[]>([
+    TARGET_EXAM_OPTIONS[0],
+  ]);
   const [country, setCountry] = useState("India");
-  const [counsellor, setCounsellor] = useState<string>(COUNSELLOR_PRESETS[0]);
   const [error, setError] = useState<string | null>(null);
+
+  const toggleTarget = (exam: string) => {
+    setTargetExams((prev) => {
+      if (prev.includes(exam)) {
+        const next = prev.filter((x) => x !== exam);
+        return next.length ? next : prev;
+      }
+      return [...prev, exam];
+    });
+  };
 
   const close = () => {
     ref.current?.close();
@@ -65,6 +80,10 @@ export function AddStudentLeadDialog({
       setError("Phone is required.");
       return;
     }
+    if (targetExams.length === 0) {
+      setError("Select at least one target exam.");
+      return;
+    }
     const id = String(nextNumericId);
     const lead: Lead = {
       id,
@@ -72,8 +91,9 @@ export function AddStudentLeadDialog({
       followUpDate: null,
       studentName: name,
       parentName: parentName.trim() || "—",
-      counsellor,
-      course,
+      dataType,
+      grade,
+      targetExams: [...targetExams],
       country: country.trim() || "India",
       phone: phone.replace(/\s+/g, ""),
       pipelineSteps: 0,
@@ -84,9 +104,10 @@ export function AddStudentLeadDialog({
     setStudentName("");
     setPhone("");
     setParentName("");
-    setCourse(COURSE_OPTIONS[0]);
+    setDataType(DATA_TYPE_OPTIONS[0]);
+    setGrade(GRADE_OPTIONS[0]);
+    setTargetExams([TARGET_EXAM_OPTIONS[0]]);
     setCountry("India");
-    setCounsellor(COUNSELLOR_PRESETS[0]);
     setError(null);
     close();
   };
@@ -156,19 +177,57 @@ export function AddStudentLeadDialog({
             />
           </label>
           <label className="block text-[12px] font-medium text-slate-700">
-            Course
+            Data type
             <select
               className={field}
-              value={course}
-              onChange={(e) => setCourse(e.target.value)}
+              value={dataType}
+              onChange={(e) => setDataType(e.target.value)}
             >
-              {COURSE_OPTIONS.map((c) => (
+              {DATA_TYPE_OPTIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </select>
           </label>
+          <label className="block text-[12px] font-medium text-slate-700">
+            Grade
+            <select
+              className={field}
+              value={grade}
+              onChange={(e) => setGrade(e.target.value)}
+            >
+              {GRADE_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="border border-slate-200 p-3">
+            <legend className="px-1 text-[12px] font-medium text-slate-700">
+              Target exams
+            </legend>
+            <p className="mb-2 text-[11px] text-slate-500">
+              Select one or more (e.g. JEE, NEET).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TARGET_EXAM_OPTIONS.map((exam) => (
+                <label
+                  key={exam}
+                  className="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-slate-800"
+                >
+                  <input
+                    type="checkbox"
+                    checked={targetExams.includes(exam)}
+                    onChange={() => toggleTarget(exam)}
+                    className="rounded border-slate-300"
+                  />
+                  {exam}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label className="block text-[12px] font-medium text-slate-700">
             Country
             <input
@@ -177,20 +236,6 @@ export function AddStudentLeadDialog({
               onChange={(e) => setCountry(e.target.value)}
               placeholder="India"
             />
-          </label>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Counsellor
-            <select
-              className={field}
-              value={counsellor}
-              onChange={(e) => setCounsellor(e.target.value)}
-            >
-              {COUNSELLOR_PRESETS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
           </label>
         </form>
         {error && (

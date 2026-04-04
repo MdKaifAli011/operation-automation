@@ -3,7 +3,7 @@
 import { addDays, format, isSameDay, parseISO } from "date-fns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SortDir, SortKey } from "@/lib/types";
-import { INITIAL_LEADS } from "@/lib/mock-data";
+import { INITIAL_LEADS, TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
 import { AddStudentLeadDialog } from "./AddStudentLeadDialog";
 import { ExportLeadsButton } from "./ExportLeadsButton";
 import { FollowUpDialog } from "./FollowUpDialog";
@@ -26,8 +26,11 @@ function sortLeads(
       cmp = a.date.localeCompare(b.date);
     } else if (key === "studentName") {
       cmp = a.studentName.localeCompare(b.studentName);
-    } else if (key === "course") {
-      cmp = a.course.localeCompare(b.course);
+    } else if (key === "targetExams") {
+      cmp = [...a.targetExams]
+        .sort()
+        .join(",")
+        .localeCompare([...b.targetExams].sort().join(","));
     } else if (key === "country") {
       cmp = a.country.localeCompare(b.country);
     } else if (key === "rowTone") {
@@ -49,9 +52,12 @@ export function LeadManagementPage() {
   const [dateTo, setDateTo] = useState("");
   const [filterCourse, setFilterCourse] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterCounsellor, setFilterCounsellor] = useState("");
   const [followUpId, setFollowUpId] = useState<string | null>(null);
   const [addStudentOpen, setAddStudentOpen] = useState(false);
+  const [sheetEditMode, setSheetEditMode] = useState(false);
+  const [leadDraft, setLeadDraft] = useState<Record<string, Partial<Lead>>>(
+    {},
+  );
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const nextLeadNumericId = useMemo(() => {
@@ -97,13 +103,17 @@ export function LeadManagementPage() {
     let list = leads;
     const q = search.trim().toLowerCase();
     if (q) {
-      list = list.filter(
-        (l) =>
+      list = list.filter((l) => {
+        const exams = l.targetExams.join(" ").toLowerCase();
+        return (
           l.studentName.toLowerCase().includes(q) ||
           l.phone.includes(q) ||
-          l.course.toLowerCase().includes(q) ||
-          l.country.toLowerCase().includes(q),
-      );
+          exams.includes(q) ||
+          l.country.toLowerCase().includes(q) ||
+          l.dataType.toLowerCase().includes(q) ||
+          l.grade.toLowerCase().includes(q)
+        );
+      });
     }
     if (dateFrom) {
       list = list.filter((l) => l.date >= dateFrom);
@@ -112,15 +122,10 @@ export function LeadManagementPage() {
       list = list.filter((l) => l.date <= dateTo);
     }
     if (filterCourse) {
-      list = list.filter((l) => l.course === filterCourse);
+      list = list.filter((l) => l.targetExams.includes(filterCourse));
     }
     if (filterStatus) {
       list = list.filter((l) => l.rowTone === filterStatus);
-    }
-    if (filterCounsellor) {
-      list = list.filter((l) =>
-        l.counsellor.toLowerCase().includes(filterCounsellor.toLowerCase()),
-      );
     }
     return sortLeads(list, sortKey, sortDir);
   }, [
@@ -130,7 +135,6 @@ export function LeadManagementPage() {
     dateTo,
     filterCourse,
     filterStatus,
-    filterCounsellor,
     sortKey,
     sortDir,
   ]);
@@ -196,6 +200,40 @@ export function LeadManagementPage() {
       prev.map((l) => (l.id === id ? { ...l, ...patch } : l)),
     );
   }, []);
+
+  const onDraftPatch = useCallback((id: string, patch: Partial<Lead>) => {
+    setLeadDraft((d) => ({
+      ...d,
+      [id]: { ...d[id], ...patch },
+    }));
+  }, []);
+
+  const applyDraftToList = useCallback(
+    (list: Lead[]) =>
+      list.map((l) => ({ ...l, ...(leadDraft[l.id] ?? {}) })),
+    [leadDraft],
+  );
+
+  const hasSheetDraft = useMemo(
+    () =>
+      Object.values(leadDraft).some((p) => p && Object.keys(p).length > 0),
+    [leadDraft],
+  );
+
+  const saveSheetDraft = () => {
+    for (const [id, patch] of Object.entries(leadDraft)) {
+      if (patch && Object.keys(patch).length > 0) {
+        onUpdateLead(id, patch);
+      }
+    }
+    setLeadDraft({});
+    setSheetEditMode(false);
+  };
+
+  const cancelSheetDraft = () => {
+    setLeadDraft({});
+    setSheetEditMode(false);
+  };
 
   const ongoingTabTotal =
     todaysOngoingLeads.length + ongoingLeadsRest.length;
@@ -292,7 +330,12 @@ export function LeadManagementPage() {
             Add student
           </button>
           <ExportLeadsButton leads={leads} />
-          <ImportExcelControl />
+          <ImportExcelControl
+            nextStartId={nextLeadNumericId}
+            onImport={(incoming) =>
+              setLeads((prev) => [...incoming, ...prev])
+            }
+          />
         </div>
       </header>
 
@@ -366,16 +409,18 @@ export function LeadManagementPage() {
                   </label>
                 </div>
                 <label className="mb-2 block text-[12px]">
-                  <span className="text-[#757575]">Course</span>
+                  <span className="text-[#757575]">Target exam</span>
                   <select
                     className={filterInput}
                     value={filterCourse}
                     onChange={(e) => setFilterCourse(e.target.value)}
                   >
                     <option value="">All</option>
-                    <option value="NEET">NEET</option>
-                    <option value="JEE">JEE</option>
-                    <option value="CUET">CUET</option>
+                    {TARGET_EXAM_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="mb-2 block text-[12px]">
@@ -393,15 +438,6 @@ export function LeadManagementPage() {
                     <option value="called_no_response">Called / No Response</option>
                   </select>
                 </label>
-                <label className="mb-2 block text-[12px]">
-                  <span className="text-[#757575]">Counsellor</span>
-                  <input
-                    className={filterInput}
-                    value={filterCounsellor}
-                    onChange={(e) => setFilterCounsellor(e.target.value)}
-                    placeholder="Name"
-                  />
-                </label>
                 <button
                   type="button"
                   className="mt-1 text-[13px] font-medium text-[#1565c0] underline-offset-2 hover:underline"
@@ -410,7 +446,6 @@ export function LeadManagementPage() {
                     setDateTo("");
                     setFilterCourse("");
                     setFilterStatus("");
-                    setFilterCounsellor("");
                   }}
                 >
                   Clear filters
@@ -439,7 +474,7 @@ export function LeadManagementPage() {
                     ["date", "Date"],
                     ["studentName", "Name"],
                     ["rowTone", "Status"],
-                    ["course", "Course"],
+                    ["targetExams", "Target (exams)"],
                     ["country", "Country"],
                   ] as const
                 ).map(([k, label]) => (
@@ -464,11 +499,44 @@ export function LeadManagementPage() {
 
           <input
             type="search"
-            placeholder="Search student, phone, course…"
+            placeholder="Search name, phone, targets, country…"
             className={cn(SX.leadSearch, "ml-auto sm:max-w-[min(100%,360px)]")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+
+          <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
+            {sheetEditMode ? (
+              <>
+                <span className="text-[11px] text-slate-500">
+                  {hasSheetDraft ? "Unsaved changes" : "Editing"}
+                </span>
+                <button
+                  type="button"
+                  className={cn(SX.btnSecondary, "h-9 px-3 text-[13px]")}
+                  onClick={cancelSheetDraft}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={cn(SX.btnPrimary, "h-9 px-3 text-[13px]")}
+                  disabled={!hasSheetDraft}
+                  onClick={saveSheetDraft}
+                >
+                  Save changes
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className={cn(SX.leadBtnOutline, "h-9 px-3 text-[13px] font-semibold")}
+                onClick={() => setSheetEditMode(true)}
+              >
+                Edit sheet
+              </button>
+            )}
+          </div>
         </div>
 
         <div className={SX.leadTabBar}>
@@ -522,7 +590,9 @@ export function LeadManagementPage() {
                     <LeadSheetTable
                       variant="daily"
                       className={cn(SX.leadGridFlush, "border-x-0")}
-                      leads={todaysOngoingLeads}
+                      leads={applyDraftToList(todaysOngoingLeads)}
+                      sheetEditMode={sheetEditMode}
+                      onDraftPatch={onDraftPatch}
                       onUpdateLead={onUpdateLead}
                       visibleIds={todaysOngoingLeads.map((l) => l.id)}
                     />
@@ -555,7 +625,9 @@ export function LeadManagementPage() {
                 <LeadSheetTable
                   variant="standard"
                   className={cn(SX.leadGridFlush, "border-x-0")}
-                  leads={ongoingLeadsRest}
+                  leads={applyDraftToList(ongoingLeadsRest)}
+                  sheetEditMode={sheetEditMode}
+                  onDraftPatch={onDraftPatch}
                   onUpdateLead={onUpdateLead}
                   visibleIds={ongoingLeadsRest.map((l) => l.id)}
                 />
@@ -575,7 +647,9 @@ export function LeadManagementPage() {
               </div>
               <LeadSheetTable
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                leads={followUpLeads}
+                leads={applyDraftToList(followUpLeads)}
+                sheetEditMode={sheetEditMode}
+                onDraftPatch={onDraftPatch}
                 onUpdateLead={onUpdateLead}
                 visibleIds={followUpLeads.map((l) => l.id)}
               />
@@ -597,7 +671,9 @@ export function LeadManagementPage() {
               </div>
               <LeadSheetTable
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                leads={notInterestedLeads}
+                leads={applyDraftToList(notInterestedLeads)}
+                sheetEditMode={sheetEditMode}
+                onDraftPatch={onDraftPatch}
                 onUpdateLead={onUpdateLead}
                 visibleIds={notInterestedLeads.map((l) => l.id)}
               />
@@ -619,7 +695,9 @@ export function LeadManagementPage() {
               </div>
               <LeadSheetTable
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                leads={convertedLeadsFullPipeline}
+                leads={applyDraftToList(convertedLeadsFullPipeline)}
+                sheetEditMode={sheetEditMode}
+                onDraftPatch={onDraftPatch}
                 onUpdateLead={onUpdateLead}
                 visibleIds={convertedLeadsFullPipeline.map((l) => l.id)}
               />

@@ -4,7 +4,8 @@ import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
 import type { Lead } from "@/lib/types";
-import { COURSE_OPTIONS, FACULTY_SEED } from "@/lib/mock-data";
+import { FACULTY_SEED, TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
+import { formatTargetExams } from "@/lib/lead-display";
 import { formatLeadPhone } from "@/lib/phone-display";
 import { extrasForLead } from "@/lib/student-detail";
 import { SX } from "@/components/student/student-excel-ui";
@@ -123,7 +124,9 @@ export function StudentDetailPage({ lead }: Props) {
                   className={cn(SX.studentHeroIcon, "text-[#1565c0]")}
                   aria-hidden
                 />
-                <span className={SX.studentHeroCourseBadge}>{lead.course}</span>
+                <span className={SX.studentHeroCourseBadge}>
+                  {formatTargetExams(lead.targetExams)}
+                </span>
               </span>
               <span className={SX.studentHeroIconItem}>
                 <IconGlobe
@@ -150,11 +153,6 @@ export function StudentDetailPage({ lead }: Props) {
               <span className={SX.studentHeroSubVal}>
                 {lead.parentName || "—"}
               </span>
-              <span className="mx-2 text-[#dadce0]" aria-hidden>
-                ·
-              </span>
-              <span className={SX.studentHeroSubLabel}>Counsellor</span>{" "}
-              <span className={SX.studentHeroSubVal}>{lead.counsellor}</span>
               <span className="mx-2 text-[#dadce0]" aria-hidden>
                 ·
               </span>
@@ -661,7 +659,11 @@ function DemoForm({
     status: string;
   }) => void;
 }) {
-  const [course, setCourse] = useState(lead.course);
+  const demoTargetOptions =
+    lead.targetExams.length > 0 ? lead.targetExams : [...TARGET_EXAM_OPTIONS];
+  const [course, setCourse] = useState(
+    () => demoTargetOptions[0] ?? TARGET_EXAM_OPTIONS[0],
+  );
   const subs =
     course === "NEET"
       ? ["Biology", "Physics", "Chemistry"]
@@ -711,7 +713,7 @@ function DemoForm({
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <label className="block text-[13px]">
-          <span className="font-medium text-slate-700">Course</span>
+          <span className="font-medium text-slate-700">Target exam</span>
           <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
             Programme for this trial
           </span>
@@ -730,7 +732,7 @@ function DemoForm({
               pickSubject(next);
             }}
           >
-            {COURSE_OPTIONS.map((c) => (
+            {demoTargetOptions.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -982,7 +984,7 @@ function FeeSection({ lead }: { lead: Lead }) {
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
               <tr>
-                <th className={SX.dataTh}>Course</th>
+                <th className={SX.dataTh}>Target (exams)</th>
                 <th className={SX.dataTh}>Total fee</th>
                 <th className={SX.dataTh}>Discount (%)</th>
                 <th className={SX.dataTh}>Final fee</th>
@@ -991,7 +993,7 @@ function FeeSection({ lead }: { lead: Lead }) {
             </thead>
             <tbody>
               <tr>
-                <td className={SX.dataTd}>{lead.course}</td>
+                <td className={SX.dataTd}>{formatTargetExams(lead.targetExams)}</td>
                 <td className={SX.dataTd}>₹85,000</td>
                 <td className={SX.dataTd}>
                   <input
