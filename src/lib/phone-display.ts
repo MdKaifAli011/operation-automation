@@ -1,18 +1,18 @@
+import { dialCodeForCountry } from "./country-phone";
 import type { Lead } from "./types";
-
-const DIAL_BY_COUNTRY: Record<string, string> = {
-  India: "+91",
-  UAE: "+971",
-  Singapore: "+65",
-  Nepal: "+977",
-  "United States": "+1",
-  UK: "+44",
-};
 
 /** Display phone with a plausible dial code from country (CRM-style). */
 export function formatLeadPhone(lead: Lead): string {
-  const dial = DIAL_BY_COUNTRY[lead.country] ?? "+91";
+  const dial = dialCodeForCountry(lead.country);
   const digits = lead.phone.replace(/\D/g, "");
   if (!digits) return `${dial} —`;
   return `${dial} ${digits}`;
+}
+
+/** `tel:` link in E.164-style using stored country + national digits. */
+export function telHrefForLead(lead: Lead): string {
+  const cc = dialCodeForCountry(lead.country).replace(/\D/g, "");
+  const national = lead.phone.replace(/\D/g, "");
+  if (!national) return "";
+  return `tel:+${cc}${national}`;
 }

@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Lead } from "@/lib/types";
-import { TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
+import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { formatTargetExams } from "@/lib/lead-display";
 import { cn } from "@/lib/cn";
-import { formatLeadPhone } from "@/lib/phone-display";
+import { formatLeadPhone, telHrefForLead } from "@/lib/phone-display";
 import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 
@@ -65,6 +65,8 @@ type Props = {
   showRowSelect?: boolean;
   className?: string;
   variant?: "standard" | "daily";
+  /** Hide follow-up date column (e.g. Ongoing pipeline — use Follow-ups tab for dates). */
+  showFollowUpColumn?: boolean;
 };
 
 export function LeadSheetTable({
@@ -79,6 +81,7 @@ export function LeadSheetTable({
   showRowSelect = false,
   className,
   variant = "standard",
+  showFollowUpColumn = true,
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -169,7 +172,7 @@ export function LeadSheetTable({
   return (
     <div
       className={cn(
-        "relative max-h-[min(68vh,640px)] overflow-auto overscroll-contain rounded-lg shadow-sm [scrollbar-gutter:stable]",
+        "relative overflow-x-auto rounded-lg shadow-sm",
         "[scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.5)_transparent]",
         isDaily
           ? "border border-amber-200/70 bg-gradient-to-b from-amber-50/40 via-white to-white"
@@ -199,13 +202,15 @@ export function LeadSheetTable({
             <SheetTh w={COL_WIDTHS.date}>Date</SheetTh>
             <SheetTh w={COL_WIDTHS.studentName}>Student name</SheetTh>
             <SheetTh w={COL_WIDTHS.parentName}>Parent name</SheetTh>
-            <SheetTh w={COL_WIDTHS.dataType}>Data type</SheetTh>
             <SheetTh w={COL_WIDTHS.grade}>Grade</SheetTh>
             <SheetTh w={COL_WIDTHS.targetExams}>Target (exams)</SheetTh>
             <SheetTh w={COL_WIDTHS.country}>Country</SheetTh>
             <SheetTh w={COL_WIDTHS.phone}>Phone</SheetTh>
             <SheetTh w={COL_WIDTHS.status}>Status</SheetTh>
-            <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
+            <SheetTh w={COL_WIDTHS.dataType}>Data type</SheetTh>
+            {showFollowUpColumn && (
+              <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
+            )}
             <SheetTh w={COL_WIDTHS.action} className="px-1 text-center">
               Action
             </SheetTh>
@@ -369,27 +374,6 @@ export function LeadSheetTable({
                 />
                 <TextCell
                   lead={lead}
-                  field="dataType"
-                  width={COL_WIDTHS.dataType}
-                  selected={
-                    selectedCell?.leadId === lead.id &&
-                    selectedCell.field === "dataType"
-                  }
-                  onSelect={() =>
-                    setSelectedCell({ leadId: lead.id, field: "dataType" })
-                  }
-                  editing={
-                    activeEdit?.leadId === lead.id &&
-                    activeEdit.field === "dataType"
-                  }
-                  onEdit={() => startEdit(lead.id, "dataType")}
-                  onDraftPatch={onDraftPatch}
-                  onCancelEdit={() => setEditing(null)}
-                  tone={tone}
-                  sheetEditMode={sheetEditMode}
-                />
-                <TextCell
-                  lead={lead}
                   field="grade"
                   width={COL_WIDTHS.grade}
                   selected={
@@ -477,7 +461,7 @@ export function LeadSheetTable({
                     minWidth: COL_WIDTHS.phone,
                   }}
                   className={cn(
-                    "border border-slate-200/80 px-2 py-1.5",
+                    "whitespace-nowrap border border-slate-200/80 px-2 py-1.5",
                     selectedCell?.leadId === lead.id &&
                       selectedCell.field === "phone" &&
                       !(
@@ -514,12 +498,12 @@ export function LeadSheetTable({
                     />
                   ) : (
                     <a
-                      href={`tel:${lead.phone}`}
+                      href={telHrefForLead(lead) || `tel:${lead.phone.replace(/\D/g, "")}`}
                       title="Click to call"
-                      className="font-medium text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
+                      className="inline-block max-w-none whitespace-nowrap font-medium text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <span className="tabular-nums">
+                      <span className="tabular-nums whitespace-nowrap">
                         {formatLeadPhone(lead)}
                       </span>
                     </a>
@@ -531,24 +515,50 @@ export function LeadSheetTable({
                 >
                   <PipelineDots completed={lead.pipelineSteps} />
                 </td>
-                <td
-                  style={{ width: COL_WIDTHS.followUp }}
-                  className={cn("border border-slate-200/80 px-2 py-1.5 text-[12px]", tone)}
-                >
-                  {lead.followUpDate ? (
-                    <span
-                      className={cn(
-                        lead.sheetTab === "followup" &&
-                          "font-medium text-[#e65100]",
-                      )}
-                      title="Next follow-up date"
-                    >
-                      {format(parseISO(lead.followUpDate), "dd/MM/yyyy")}
-                    </span>
-                  ) : (
-                    <span className="text-[#bdbdbd]">—</span>
-                  )}
-                </td>
+                <TextCell
+                  lead={lead}
+                  field="dataType"
+                  width={COL_WIDTHS.dataType}
+                  selected={
+                    selectedCell?.leadId === lead.id &&
+                    selectedCell.field === "dataType"
+                  }
+                  onSelect={() =>
+                    setSelectedCell({ leadId: lead.id, field: "dataType" })
+                  }
+                  editing={
+                    activeEdit?.leadId === lead.id &&
+                    activeEdit.field === "dataType"
+                  }
+                  onEdit={() => startEdit(lead.id, "dataType")}
+                  onDraftPatch={onDraftPatch}
+                  onCancelEdit={() => setEditing(null)}
+                  tone={tone}
+                  sheetEditMode={sheetEditMode}
+                />
+                {showFollowUpColumn && (
+                  <td
+                    style={{ width: COL_WIDTHS.followUp }}
+                    className={cn(
+                      "border border-slate-200/80 px-2 py-1.5 text-[12px]",
+                      tone,
+                    )}
+                  >
+                    {lead.followUpDate ? (
+                      <span
+                        className={cn(
+                          lead.sheetTab === "followup" &&
+                            "font-medium text-[#e65100]",
+                        )}
+                        title="Next follow-up date"
+                      >
+                        {format(parseISO(lead.followUpDate), "dd/MM/yyyy")}
+                      </span>
+                    ) : (
+                      <span className="text-[#bdbdbd]">—</span>
+                    )}
+                  </td>
+                )}
                 <td
                   style={{ width: COL_WIDTHS.action }}
                   className={cn("border border-slate-200/80 px-0 py-1.5 text-center", tone)}

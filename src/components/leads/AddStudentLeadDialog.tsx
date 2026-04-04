@@ -2,27 +2,33 @@
 
 import { format } from "date-fns";
 import { useEffect, useId, useRef, useState } from "react";
-import type { Lead } from "@/lib/types";
+import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import {
-  DATA_TYPE_OPTIONS,
-  GRADE_OPTIONS,
-  TARGET_EXAM_OPTIONS,
-} from "@/lib/mock-data";
+  LEAD_COUNTRY_OPTIONS,
+  dialCodeForCountry,
+  digitsOnly,
+  normalizeDialCodeInput,
+  optionForCountry,
+  validateNationalNumber,
+} from "@/lib/country-phone";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onAdd: (lead: Lead) => void;
-  nextNumericId: number;
+  onAdded: () => void | Promise<void>;
 };
+
+const DEFAULT_COUNTRY = LEAD_COUNTRY_OPTIONS[0]!.value;
+/** Defaults when the short form omits source / grade (API + grid). */
+const DEFAULT_DATA_TYPE = "Organic";
+const DEFAULT_GRADE = "12th";
 
 export function AddStudentLeadDialog({
   open,
   onClose,
-  onAdd,
-  nextNumericId,
+  onAdded,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const formId = useId();
@@ -46,15 +52,20 @@ export function AddStudentLeadDialog({
   }, [open, onClose]);
 
   const [studentName, setStudentName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const [dialCode, setDialCode] = useState(() =>
+    dialCodeForCountry(DEFAULT_COUNTRY),
+  );
+  const [nationalNumber, setNationalNumber] = useState("");
   const [parentName, setParentName] = useState("");
-  const [dataType, setDataType] = useState<string>(DATA_TYPE_OPTIONS[0]);
-  const [grade, setGrade] = useState<string>(GRADE_OPTIONS[0]);
   const [targetExams, setTargetExams] = useState<string[]>([
     TARGET_EXAM_OPTIONS[0],
   ]);
-  const [country, setCountry] = useState("India");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const nationalHint =
+    optionForCountry(country)?.nationalHint ?? "Local number";
 
   const toggleTarget = (exam: string) => {
     setTargetExams((prev) => {
@@ -70,50 +81,71 @@ export function AddStudentLeadDialog({
     ref.current?.close();
   };
 
-  const submit = () => {
+  const submit = async () => {
     const name = studentName.trim();
     if (!name) {
       setError("Student name is required.");
       return;
     }
-    if (!phone.trim()) {
-      setError("Phone is required.");
+    const national = digitsOnly(nationalNumber);
+    const phoneErr = validateNationalNumber(country, national);
+    if (phoneErr) {
+      setError(phoneErr);
       return;
     }
     if (targetExams.length === 0) {
       setError("Select at least one target exam.");
       return;
     }
-    const id = String(nextNumericId);
-    const lead: Lead = {
-      id,
-      date: format(new Date(), "yyyy-MM-dd"),
-      followUpDate: null,
-      studentName: name,
-      parentName: parentName.trim() || "—",
-      dataType,
-      grade,
-      targetExams: [...targetExams],
-      country: country.trim() || "India",
-      phone: phone.replace(/\s+/g, ""),
-      pipelineSteps: 0,
-      rowTone: "new",
-      sheetTab: "ongoing",
-    };
-    onAdd(lead);
-    setStudentName("");
-    setPhone("");
-    setParentName("");
-    setDataType(DATA_TYPE_OPTIONS[0]);
-    setGrade(GRADE_OPTIONS[0]);
-    setTargetExams([TARGET_EXAM_OPTIONS[0]]);
-    setCountry("India");
+    setSubmitting(true);
     setError(null);
-    close();
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: format(new Date(), "yyyy-MM-dd"),
+          followUpDate: null,
+          studentName: name,
+          parentName: parentName.trim() || "—",
+          dataType: DEFAULT_DATA_TYPE,
+          grade: DEFAULT_GRADE,
+          targetExams: [...targetExams],
+          country: country.trim() || DEFAULT_COUNTRY,
+          phone: national,
+          pipelineSteps: 0,
+          rowTone: "new",
+          sheetTab: "ongoing",
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(
+          typeof body?.error === "string"
+            ? body.error
+            : "Could not create lead.",
+        );
+        return;
+      }
+      await onAdded();
+      setStudentName("");
+      setNationalNumber("");
+      setDialCode(dialCodeForCountry(DEFAULT_COUNTRY));
+      setParentName("");
+      setTargetExams([TARGET_EXAM_OPTIONS[0]]);
+      setCountry(DEFAULT_COUNTRY);
+      close();
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const field =
-    "mt-1 w-full rounded-none border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30";
+  /** No `w-full` here — clsx does not merge Tailwind; stacking w-full broke narrow code input. */
+  const inputBase =
+    "box-border rounded-none border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30";
+  const fieldFull = cn(inputBase, "mt-1 w-full min-w-0 max-w-full");
 
   return (
     <dialog
@@ -133,78 +165,114 @@ export function AddStudentLeadDialog({
           or open their workspace.
         </p>
       </div>
-      <div className="flex max-h-[min(70vh,520px)] flex-col overflow-y-auto px-4 py-4">
+
+      <div className="flex min-h-0 max-h-[min(70vh,520px)] flex-col overflow-y-auto overflow-x-hidden px-4 py-4">
         <form
           id={formId}
-          className="flex flex-col gap-3"
+          className="flex min-w-0 max-w-full flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            submit();
+            void submit();
           }}
         >
-          <label className="block text-[12px] font-medium text-slate-700">
+          <label className="block min-w-0 text-[12px] font-medium text-slate-700">
             Student name <span className="text-rose-600">*</span>
             <input
-              className={field}
+              className={fieldFull}
               value={studentName}
               onChange={(e) => setStudentName(e.target.value)}
               onFocus={() => setError(null)}
-              placeholder="e.g. Aditya Kumar"
+              placeholder="Full name, e.g. Aditya Kumar"
               autoComplete="name"
               autoFocus={open}
               required
             />
           </label>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Phone <span className="text-rose-600">*</span>
-            <input
-              className={cn(field, "tabular-nums")}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              onFocus={() => setError(null)}
-              placeholder="10-digit mobile"
-              inputMode="tel"
-              required
-            />
+
+          <label className="block min-w-0 text-[12px] font-medium text-slate-700">
+            Country <span className="text-rose-600">*</span>
+            <select
+              className={cn(fieldFull, "cursor-pointer")}
+              value={country}
+              onChange={(e) => {
+                const next = e.target.value;
+                setCountry(next);
+                setError(null);
+                setDialCode(dialCodeForCountry(next));
+              }}
+            >
+              {LEAD_COUNTRY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.value} ({c.dialCode})
+                </option>
+              ))}
+            </select>
           </label>
-          <label className="block text-[12px] font-medium text-slate-700">
+
+          <div className="block min-w-0 text-[12px] font-medium text-slate-700">
+            <span>
+              Phone <span className="text-rose-600">*</span>
+            </span>
+            <p className="mb-1 text-[11px] font-normal text-slate-500">
+              Code is set from country; change it if needed, then enter the local
+              number.
+            </p>
+            <div
+              className="mt-1 flex w-full min-w-0 max-w-full flex-nowrap items-stretch gap-2"
+              role="group"
+              aria-label="Phone number"
+            >
+              <label className="sr-only" htmlFor={`${formId}-dial`}>
+                Country code
+              </label>
+              <input
+                id={`${formId}-dial`}
+                className={cn(
+                  inputBase,
+                  "mt-0 w-[4.25rem] shrink-0 tabular-nums sm:w-20",
+                )}
+                value={dialCode}
+                onChange={(e) => {
+                  setError(null);
+                  setDialCode(normalizeDialCodeInput(e.target.value));
+                }}
+                onBlur={() => setDialCode(normalizeDialCodeInput(dialCode))}
+                placeholder="+91"
+                inputMode="tel"
+                autoComplete="tel-country-code"
+              />
+              <div className="min-w-0 flex-1">
+                <label className="sr-only" htmlFor={`${formId}-national`}>
+                  Mobile number
+                </label>
+                <input
+                  id={`${formId}-national`}
+                  className={cn(inputBase, "mt-0 w-full min-w-0 tabular-nums")}
+                  value={nationalNumber}
+                  onChange={(e) => {
+                    setError(null);
+                    setNationalNumber(digitsOnly(e.target.value));
+                  }}
+                  onFocus={() => setError(null)}
+                  placeholder={nationalHint}
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                />
+              </div>
+            </div>
+          </div>
+
+          <label className="block min-w-0 text-[12px] font-medium text-slate-700">
             Parent / guardian
             <input
-              className={field}
+              className={fieldFull}
               value={parentName}
               onChange={(e) => setParentName(e.target.value)}
               placeholder="Optional"
             />
           </label>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Data type
-            <select
-              className={field}
-              value={dataType}
-              onChange={(e) => setDataType(e.target.value)}
-            >
-              {DATA_TYPE_OPTIONS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Grade
-            <select
-              className={field}
-              value={grade}
-              onChange={(e) => setGrade(e.target.value)}
-            >
-              {GRADE_OPTIONS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-          <fieldset className="border border-slate-200 p-3">
+
+          <fieldset className="min-w-0 border border-slate-200 p-3">
             <legend className="px-1 text-[12px] font-medium text-slate-700">
               Target exams
             </legend>
@@ -228,15 +296,12 @@ export function AddStudentLeadDialog({
               ))}
             </div>
           </fieldset>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Country
-            <input
-              className={field}
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder="India"
-            />
-          </label>
+
+          <p className="text-[11px] leading-snug text-slate-500">
+            New leads default to <span className="font-medium">Organic</span> source
+            and <span className="font-medium">{DEFAULT_GRADE}</span> in the sheet —
+            edit in the grid if needed.
+          </p>
         </form>
         {error && (
           <p className="mt-2 text-[12px] text-rose-700" role="alert">
@@ -244,6 +309,7 @@ export function AddStudentLeadDialog({
           </p>
         )}
       </div>
+
       <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-white px-4 py-3">
         <button
           type="button"
@@ -252,8 +318,13 @@ export function AddStudentLeadDialog({
         >
           Cancel
         </button>
-        <button type="submit" form={formId} className={cn(SX.btnPrimary, "px-4 py-2")}>
-          Add to leads
+        <button
+          type="submit"
+          form={formId}
+          disabled={submitting}
+          className={cn(SX.btnPrimary, "px-4 py-2 disabled:opacity-50")}
+        >
+          {submitting ? "Saving…" : "Add to leads"}
         </button>
       </div>
     </dialog>

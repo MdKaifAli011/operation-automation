@@ -20,6 +20,8 @@ const inputClass =
 
 const labelClass = "text-[12px] font-medium text-slate-600";
 
+const DEFAULT_REMINDER_TIME = "07:00";
+
 export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -103,24 +105,12 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
               <h2 className="text-lg font-bold tracking-tight text-slate-900">
                 Schedule follow-up
               </h2>
-              <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500">
-                Set when to call back and optional reminder — saved with this lead.
-              </p>
             </div>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 [scrollbar-width:thin]">
           <div className="flex flex-col gap-4">
-            <label className="flex flex-col">
-              <span className={labelClass}>Follow-up reason</span>
-              <textarea
-                name="reason"
-                rows={3}
-                className={cn(inputClass, "min-h-[88px] resize-y")}
-                placeholder="e.g. Fee discussion, parent callback, documents pending…"
-              />
-            </label>
             <label className="flex flex-col">
               <span className={labelClass}>Follow-up date</span>
               <input
@@ -129,6 +119,7 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
                 min={todayStr}
                 defaultValue={defaultFollowUpStr}
                 className={cn(inputClass, "tabular-nums")}
+                required
               />
             </label>
             <label className="flex flex-col">
@@ -136,11 +127,21 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
               <input
                 name="reminder"
                 type="time"
+                defaultValue={DEFAULT_REMINDER_TIME}
                 className={cn(inputClass, "tabular-nums")}
               />
-              <span className="mt-1 text-[11px] text-slate-400">
-                Optional — team calendar reminder
+              <span className="mt-1 text-[11px] leading-snug text-slate-400">
+                On the follow-up date above · default 7:00 AM
               </span>
+            </label>
+            <label className="flex flex-col">
+              <span className={labelClass}>Follow-up reason</span>
+              <textarea
+                name="reason"
+                rows={3}
+                className={cn(inputClass, "min-h-[88px] resize-y")}
+                placeholder="e.g. Fee discussion, parent callback, documents pending…"
+              />
             </label>
             <label className="flex flex-col">
               <span className={labelClass}>Quick notes</span>

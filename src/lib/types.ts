@@ -22,9 +22,36 @@ export type Lead = {
   targetExams: string[];
   country: string;
   phone: string;
+  /** Optional contact email (stored in DB). */
+  email?: string | null;
   pipelineSteps: number; // 0–4 completed (Demo → Brochure → Fees → Schedule)
   rowTone: RowTone;
   sheetTab: SheetTabId;
+};
+
+export type Faculty = {
+  id: string;
+  name: string;
+  subjects: string[];
+  phone: string;
+  email: string;
+  active: boolean;
+  qualification: string;
+  experience: number;
+  joined: string;
+};
+
+export type FeeRecord = {
+  id: string;
+  studentName: string;
+  course: string;
+  total: number;
+  discount: number;
+  final: number;
+  paid: number;
+  emi: number;
+  status: "Paid" | "Partial" | "Pending" | "Overdue";
+  leadId?: string | null;
 };
 
 export type SortKey =

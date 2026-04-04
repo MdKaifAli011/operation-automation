@@ -1,48 +1,65 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { INITIAL_LEADS } from "@/lib/mock-data";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FeeRecord } from "@/lib/types";
 
-const ROWS = [
-  {
-    id: "1",
-    student: "Rahul Sharma",
-    course: "NEET",
-    total: 85000,
-    discount: 10,
-    final: 76500,
-    paid: 40000,
-    emi: 12,
-    status: "Partial" as const,
-  },
-  {
-    id: "2",
-    student: "Sneha Patel",
-    course: "JEE",
-    total: 90000,
-    discount: 5,
-    final: 85500,
-    paid: 85500,
-    emi: 0,
-    status: "Paid" as const,
-  },
-  {
-    id: "3",
-    student: "Aryan Mehta",
-    course: "CUET",
-    total: 70000,
-    discount: 0,
-    final: 70000,
-    paid: 0,
-    emi: 6,
-    status: "Pending" as const,
-  },
-];
+type FeeRow = {
+  id: string;
+  student: string;
+  course: string;
+  total: number;
+  discount: number;
+  final: number;
+  paid: number;
+  emi: number;
+  status: FeeRecord["status"];
+};
 
 export default function FeeManagementPage() {
-  const rows = ROWS;
+  const [rows, setRows] = useState<FeeRow[]>([]);
+  const [leadCount, setLeadCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourse, setFilterCourse] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [feesRes, leadsRes] = await Promise.all([
+        fetch("/api/fees", { cache: "no-store" }),
+        fetch("/api/leads", { cache: "no-store" }),
+      ]);
+      if (!feesRes.ok) throw new Error("fees");
+      const fees = (await feesRes.json()) as FeeRecord[];
+      setRows(
+        fees.map((f) => ({
+          id: f.id,
+          student: f.studentName,
+          course: f.course,
+          total: f.total,
+          discount: f.discount,
+          final: f.final,
+          paid: f.paid,
+          emi: f.emi,
+          status: f.status,
+        })),
+      );
+      if (leadsRes.ok) {
+        const leads = (await leadsRes.json()) as unknown[];
+        setLeadCount(leads.length);
+      }
+    } catch {
+      setError("Could not load fee data. Check MongoDB and run npm run seed.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -60,7 +77,7 @@ export default function FeeManagementPage() {
       totalRev,
       collected,
       pending,
-      month: 120000,
+      month: collected,
     };
   }, [rows]);
 
@@ -86,12 +103,19 @@ export default function FeeManagementPage() {
         </button>
       </div>
 
+      {error && (
+        <p className="text-sm text-rose-700" role="alert">
+          {error}
+        </p>
+      )}
+      {loading && <p className="text-sm text-[#757575]">Loading fees…</p>}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Total Revenue", `₹${(totals.totalRev / 1000).toFixed(0)},000`, "text-[#1565c0]"],
-          ["Collected", `₹${(totals.collected / 1000).toFixed(0)},000`, "text-[#2e7d32]"],
-          ["Pending", `₹${(totals.pending / 1000).toFixed(0)},000`, "text-[#f57f17]"],
-          ["This Month", `₹${(totals.month / 1000).toFixed(0)},000`, "text-[#212121]"],
+          ["Total Revenue", `₹${totals.totalRev.toLocaleString("en-IN")}`, "text-[#1565c0]"],
+          ["Collected", `₹${totals.collected.toLocaleString("en-IN")}`, "text-[#2e7d32]"],
+          ["Pending", `₹${totals.pending.toLocaleString("en-IN")}`, "text-[#f57f17]"],
+          ["This Month", `₹${totals.month.toLocaleString("en-IN")}`, "text-[#212121]"],
         ].map(([label, val, c]) => (
           <div
             key={label}
@@ -190,7 +214,8 @@ export default function FeeManagementPage() {
         </table>
       </div>
       <p className="text-xs text-[#757575]">
-        Sample rows linked to lead data count: {INITIAL_LEADS.length} leads in system.
+        Fee records from database: {rows.length} row{rows.length === 1 ? "" : "s"}.
+        {leadCount != null ? ` Leads in system: ${leadCount}.` : ""}
       </p>
     </div>
   );

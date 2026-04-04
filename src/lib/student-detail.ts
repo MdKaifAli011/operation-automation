@@ -1,9 +1,4 @@
-import { INITIAL_LEADS } from "./mock-data";
 import type { Lead } from "./types";
-
-export function getLeadById(id: string): Lead | undefined {
-  return INITIAL_LEADS.find((l) => l.id === id);
-}
 
 export type StudentDetailExtras = {
   country: string;
@@ -12,9 +7,10 @@ export type StudentDetailExtras = {
 };
 
 export function extrasForLead(lead: Lead): StudentDetailExtras {
+  const derivedEmail = `${(lead.studentName.split(" ")[0] ?? "student").toLowerCase()}@email.test`;
   return {
     country: lead.country,
-    email: `${lead.studentName.split(" ")[0].toLowerCase()}@email.test`,
+    email: lead.email?.trim() || derivedEmail,
     statusLabel:
       lead.rowTone === "new"
         ? "New"

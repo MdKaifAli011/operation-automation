@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SheetTabId } from "@/lib/types";
 import { leadsToExportCsv } from "@/lib/lead-csv";
-import { TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
+import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
@@ -62,6 +62,7 @@ type Props = {
 
 export function ExportLeadsButton({ leads }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const todayStr = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
   const [open, setOpen] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -99,6 +100,8 @@ export function ExportLeadsButton({ leads }: Props) {
 
   const matchingLeads = useMemo(() => {
     if (dateFrom && dateTo && dateFrom > dateTo) return [];
+    if (dateFrom && dateFrom > todayStr) return [];
+    if (dateTo && dateTo > todayStr) return [];
     return filterLeadsForExport(leads, {
       dateFrom,
       dateTo,
@@ -107,12 +110,32 @@ export function ExportLeadsButton({ leads }: Props) {
       listFilterEnabled,
       sheet,
     });
-  }, [leads, dateFrom, dateTo, course, country, listFilterEnabled, sheet]);
+  }, [
+    leads,
+    dateFrom,
+    dateTo,
+    todayStr,
+    course,
+    country,
+    listFilterEnabled,
+    sheet,
+  ]);
 
   const rangeError =
     dateFrom && dateTo && dateFrom > dateTo
       ? "Start date must be on or before end date."
       : null;
+
+  const futureDateError =
+    (dateFrom && dateFrom > todayStr) || (dateTo && dateTo > todayStr)
+      ? "Dates cannot be in the future — use today or earlier only."
+      : null;
+
+  const dateError = rangeError || futureDateError;
+
+  /** Latest allowed “from” date: not after today, and not after “to” when set. */
+  const fromDateMax =
+    dateTo && dateTo <= todayStr ? dateTo : todayStr;
 
   const openDialog = () => {
     setDateFrom("");
@@ -130,7 +153,7 @@ export function ExportLeadsButton({ leads }: Props) {
   };
 
   const runExport = () => {
-    if (rangeError) return;
+    if (dateError) return;
     const rows = matchingLeads;
     const csv = leadsToExportCsv(rows);
     const blob = new Blob(["\ufeff", csv], {
@@ -162,7 +185,7 @@ export function ExportLeadsButton({ leads }: Props) {
     "mt-1 w-full rounded-none border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30";
   const label = "block text-[12px] font-medium text-slate-700";
 
-  const canExport = !rangeError && matchingLeads.length > 0;
+  const canExport = !dateError && matchingLeads.length > 0;
 
   return (
     <>
@@ -190,25 +213,36 @@ export function ExportLeadsButton({ leads }: Props) {
         onClose={() => setOpen(false)}
         aria-labelledby="export-leads-title"
       >
-        <div className="border-b border-slate-100 bg-slate-50/90 px-4 py-3">
-          <h2
-            id="export-leads-title"
-            className="text-[15px] font-bold text-slate-900"
-          >
-            Export leads to CSV
-          </h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
-            Optionally limit to one lead list, then narrow by date, target exam,
-            and country. Empty fields mean &quot;all&quot; for that filter.
-            The file uses lowercase headers (
-            <code className="rounded bg-slate-100 px-1 text-[11px]">
-              date, student name, …
-            </code>
-            ) so you can re-import with the same column names in any casing.
-          </p>
+        <div className="border-b border-slate-100 bg-gradient-to-br from-sky-50/80 via-white to-white px-4 py-3">
+          <div className="flex items-start gap-3">
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary"
+              aria-hidden
+            >
+              <DownloadIcon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <h2
+                id="export-leads-title"
+                className="text-[15px] font-bold tracking-tight text-slate-900"
+              >
+                Export leads to CSV
+              </h2>
+              <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
+                Optional list filter, then narrow by{" "}
+                <span className="font-medium text-slate-700">intake date</span> (today or
+                past only), target exam, and country. Leave dates empty to include all
+                time. Headers match import (
+                <code className="rounded bg-white/80 px-1 text-[11px] ring-1 ring-slate-200/80">
+                  date, student name…
+                </code>
+                ).
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="max-h-[min(60vh,480px)] overflow-y-auto px-4 py-4">
+        <div className="max-h-[min(60vh,480px)] overflow-y-auto px-4 py-4 [scrollbar-width:thin]">
           <label
             className={cn(
               "flex cursor-pointer items-start gap-2 rounded-none border px-3 py-2.5 transition-colors",
@@ -259,31 +293,41 @@ export function ExportLeadsButton({ leads }: Props) {
             </select>
           </label>
 
-          <div className="grid gap-4 sm:grid-cols-2 mt-4">
-            <label className={label}>
-              From date
-              <input
-                type="date"
-                className={field}
-                value={dateFrom}
-                max={dateTo || undefined}
-                onChange={(e) => setDateFrom(e.target.value)}
-              />
-            </label>
-            <label className={label}>
-              To date
-              <input
-                type="date"
-                className={field}
-                value={dateTo}
-                min={dateFrom || undefined}
-                onChange={(e) => setDateTo(e.target.value)}
-              />
-            </label>
+          <div className="mt-4">
+            <p className="text-[12px] font-medium text-slate-700">
+              Intake date range
+            </p>
+            <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+              Only <span className="font-medium text-slate-600">today and past</span> —
+              future dates are disabled. Empty = no date limit on that side.
+            </p>
+            <div className="mt-2 grid gap-4 sm:grid-cols-2">
+              <label className={label}>
+                From
+                <input
+                  type="date"
+                  className={field}
+                  value={dateFrom}
+                  max={fromDateMax}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </label>
+              <label className={label}>
+                To
+                <input
+                  type="date"
+                  className={field}
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  max={todayStr}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </label>
+            </div>
           </div>
-          {rangeError && (
+          {dateError && (
             <p className="mt-2 text-[12px] font-medium text-rose-700" role="alert">
-              {rangeError}
+              {dateError}
             </p>
           )}
 
@@ -326,7 +370,7 @@ export function ExportLeadsButton({ leads }: Props) {
             {matchingLeads.length === 1
               ? " row matches"
               : " rows match"}
-            {matchingLeads.length === 0 && !rangeError && (
+            {matchingLeads.length === 0 && !dateError && (
               <span className="block mt-1 text-[11px] text-slate-500">
                 Widen filters or clear dates to include more leads.
               </span>
@@ -334,7 +378,7 @@ export function ExportLeadsButton({ leads }: Props) {
           </div>
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-white px-4 py-3">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3">
           <button
             type="button"
             className={cn(SX.btnSecondary, "px-4 py-2")}

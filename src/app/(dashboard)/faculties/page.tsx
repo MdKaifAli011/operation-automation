@@ -1,10 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { FACULTY_SEED } from "@/lib/mock-data";
+import { useCallback, useEffect, useState } from "react";
+import type { Faculty } from "@/lib/types";
 
 export default function FacultiesPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [faculty, setFaculty] = useState<Faculty[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/faculties", { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to load faculty");
+      const data = (await res.json()) as Faculty[];
+      setFaculty(data);
+    } catch {
+      setError("Could not load faculty. Check MongoDB and run npm run seed.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <div className="space-y-6">
@@ -19,8 +41,15 @@ export default function FacultiesPage() {
         </button>
       </div>
 
+      {error && (
+        <p className="text-sm text-rose-700" role="alert">
+          {error}
+        </p>
+      )}
+      {loading && <p className="text-sm text-[#757575]">Loading faculty…</p>}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {FACULTY_SEED.map((f) => (
+        {faculty.map((f) => (
           <article
             key={f.id}
             className="rounded-none border border-[#e0e0e0] bg-white p-6"
@@ -81,6 +110,10 @@ export default function FacultiesPage() {
                 ✕
               </button>
             </div>
+            <p className="mt-4 text-sm text-[#757575]">
+              Faculty are seeded via <code className="text-xs">npm run seed</code>.
+              API to create faculty can be added later.
+            </p>
             <form
               className="mt-6 space-y-4 text-sm"
               onSubmit={(e) => {

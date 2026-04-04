@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { StudentDetailPage } from "@/components/student/StudentDetailPage";
-import { getLeadById } from "@/lib/student-detail";
+import { getLeadById } from "@/lib/data/leads";
+
+export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function StudentPage({ params }: Props) {
   const { id } = await params;
-  const lead = getLeadById(id);
+  const lead = await getLeadById(id);
 
   if (!lead) {
     return (

@@ -11,8 +11,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Lead } from "@/lib/types";
-import { FACULTY_SEED, TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
+import type { Faculty, Lead } from "@/lib/types";
+import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { formatTargetExams } from "@/lib/lead-display";
 import { formatLeadPhone } from "@/lib/phone-display";
 import { extrasForLead } from "@/lib/student-detail";
@@ -151,6 +151,39 @@ function defaultStudentTimeZone(country: string): string {
   return "Asia/Kolkata";
 }
 
+function pickDefaultTeacher(subj: string, faculties: Faculty[]): string {
+  if (faculties.length > 0) {
+    const L = (s: string) => s.toLowerCase();
+    const bySub = (kw: string) =>
+      faculties.find((f) => f.subjects.some((x) => L(x).includes(kw)));
+    if (subj === "Biology") {
+      const m = bySub("bio") ?? faculties.find((f) => f.name.includes("Meena"));
+      if (m) return m.name;
+    }
+    if (subj === "Physics") {
+      const m = bySub("phys") ?? faculties.find((f) => f.name.includes("Ravi"));
+      if (m) return m.name;
+    }
+    if (subj === "Chemistry") {
+      const m = bySub("chem");
+      if (m) return m.name;
+    }
+    if (subj === "Mathematics") {
+      const m = bySub("math");
+      if (m) return m.name;
+    }
+    const m =
+      bySub("english") ??
+      bySub("reason") ??
+      bySub("cuet") ??
+      faculties[0];
+    return m.name;
+  }
+  if (subj === "Biology") return "Dr. Meena Singh";
+  if (subj === "Physics") return "Mr. Ravi Kumar";
+  return "Ms. Priya Sharma";
+}
+
 type DemoTableRow = {
   subject: string;
   teacher: string;
@@ -178,6 +211,21 @@ export function StudentDetailPage({ lead }: Props) {
   const [scheduleView, setScheduleView] = useState<"table" | "calendar">(
     "table",
   );
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/faculties")
+      .then((res) => res.json())
+      .then((data: unknown) => {
+        if (cancelled || !Array.isArray(data)) return;
+        setFaculties(data as Faculty[]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const badgeClass =
     lead.rowTone === "interested"
@@ -333,7 +381,9 @@ export function StudentDetailPage({ lead }: Props) {
               id={`pipeline-panel-${activeStep}`}
               aria-labelledby={`pipeline-tab-${activeStep}`}
             >
-              {activeStep === 1 && <DemoSection lead={lead} />}
+              {activeStep === 1 && (
+                <DemoSection lead={lead} faculties={faculties} />
+              )}
               {activeStep === 2 && <BrochureSection />}
               {activeStep === 3 && <FeeSection lead={lead} />}
               {activeStep === 4 && (
@@ -348,30 +398,8 @@ export function StudentDetailPage({ lead }: Props) {
 
           <aside className={SX.asidePane}>
             <p className={SX.asideIntro}>
-              Notes, activity, and calls for this lead.
+              Activity, notes, and calls for this lead.
             </p>
-            <div className={SX.sidePanel}>
-              <div className={SX.sideHead}>Notes</div>
-              <div className={SX.sideBody}>
-                <textarea
-                  rows={8}
-                  className={cn(SX.textarea, "min-h-[140px] resize-y")}
-                  placeholder="Type notes here — visible to your team in this session."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  onBlur={() => {
-                    setNotesSaved(true);
-                    window.setTimeout(() => setNotesSaved(false), 2000);
-                  }}
-                />
-                {notesSaved && (
-                  <p className="mt-2 flex items-center gap-1 text-[12px] text-success">
-                    <IconCheck className="h-3.5 w-3.5" /> Saved
-                  </p>
-                )}
-              </div>
-            </div>
-
             <div className={SX.sidePanel}>
               <div className={SX.sideHead}>Activity</div>
               <div className={SX.sideBody}>
@@ -413,6 +441,28 @@ export function StudentDetailPage({ lead }: Props) {
                     </li>
                   ))}
                 </ul>
+              </div>
+            </div>
+
+            <div className={SX.sidePanel}>
+              <div className={SX.sideHead}>Notes</div>
+              <div className={SX.sideBody}>
+                <textarea
+                  rows={8}
+                  className={cn(SX.textarea, "min-h-[140px] resize-y")}
+                  placeholder="Type notes here — visible to your team in this session."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  onBlur={() => {
+                    setNotesSaved(true);
+                    window.setTimeout(() => setNotesSaved(false), 2000);
+                  }}
+                />
+                {notesSaved && (
+                  <p className="mt-2 flex items-center gap-1 text-[12px] text-success">
+                    <IconCheck className="h-3.5 w-3.5" /> Saved
+                  </p>
+                )}
               </div>
             </div>
 
@@ -632,7 +682,7 @@ function StepFooter({
   );
 }
 
-function DemoSection({ lead }: { lead: Lead }) {
+function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) {
   const [expanded, setExpanded] = useState(false);
   const [rows, setRows] = useState<DemoTableRow[]>([]);
   const [scheduleSuccessOpen, setScheduleSuccessOpen] = useState(false);
@@ -750,6 +800,7 @@ function DemoSection({ lead }: { lead: Lead }) {
       ) : rows.length === 0 && expanded ? (
         <DemoForm
           lead={lead}
+          faculties={faculties}
           onCancel={() => setExpanded(false)}
           onSchedule={(r) => {
             setRows([r]);
@@ -923,6 +974,7 @@ function DemoSection({ lead }: { lead: Lead }) {
           {expanded && (
             <DemoForm
               lead={lead}
+              faculties={faculties}
               onCancel={() => setExpanded(false)}
               onSchedule={(r) => {
                 setRows((prev) => [...prev, r]);
@@ -938,6 +990,7 @@ function DemoSection({ lead }: { lead: Lead }) {
     <DemoEditRowDialog
       open={rowAction?.type === "edit"}
       draft={editDraft}
+      faculties={faculties}
       onDraftChange={patchEditDraft}
       onClose={closeRowModal}
       onSave={saveEditRow}
@@ -975,6 +1028,7 @@ function DemoSection({ lead }: { lead: Lead }) {
 function DemoEditRowDialog({
   open,
   draft,
+  faculties,
   onDraftChange,
   onClose,
   onSave,
@@ -982,6 +1036,7 @@ function DemoEditRowDialog({
 }: {
   open: boolean;
   draft: DemoTableRow | null;
+  faculties: Faculty[];
   onDraftChange: (patch: Partial<DemoTableRow>) => void;
   onClose: () => void;
   onSave: () => void;
@@ -1000,10 +1055,12 @@ function DemoEditRowDialog({
   }, [draft]);
 
   const teacherOptions = useMemo(() => {
-    const names = FACULTY_SEED.map((f) => f.name);
-    if (!draft) return names;
-    return names.includes(draft.teacher) ? names : [draft.teacher, ...names];
-  }, [draft]);
+    const names = faculties.map((f) => f.name);
+    if (!draft) return names.length ? names : ["Dr. Meena Singh"];
+    return names.includes(draft.teacher)
+      ? names
+      : [draft.teacher, ...names];
+  }, [draft, faculties]);
 
   useEffect(() => {
     const d = ref.current;
@@ -1604,10 +1661,12 @@ function DemoScheduleWarningDialog({
 
 function DemoForm({
   lead,
+  faculties,
   onCancel,
   onSchedule,
 }: {
   lead: Lead;
+  faculties: Faculty[];
   onCancel: () => void;
   onSchedule: (r: DemoTableRow) => void;
 }) {
@@ -1623,13 +1682,9 @@ function DemoForm({
         ? ["Physics", "Chemistry", "Mathematics"]
         : ["English", "GK", "Reasoning"];
   const [subj, setSubj] = useState(subs[0]);
-  const defaultTeacher =
-    subj === "Biology"
-      ? "Dr. Meena Singh"
-      : subj === "Physics"
-        ? "Mr. Ravi Kumar"
-        : FACULTY_SEED[0].name;
-  const [teacher, setTeacher] = useState(defaultTeacher);
+  const [teacher, setTeacher] = useState(() =>
+    pickDefaultTeacher(subj, faculties),
+  );
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [demoDate, setDemoDate] = useState(todayStr);
   const [demoTime, setDemoTime] = useState("10:00");
@@ -1647,16 +1702,20 @@ function DemoForm({
     return `${formatDateInZone(slot, studentTimeZone)} · ${formatTime12hInZone(slot, studentTimeZone)} ${zoneShortLabel(studentTimeZone)}`;
   }, [effectiveDemoDate, demoTime, studentTimeZone]);
 
+  const teacherNameOptions = useMemo(() => {
+    const n = faculties.map((f) => f.name);
+    return n.length > 0 ? n : [pickDefaultTeacher(subj, faculties)];
+  }, [faculties, subj]);
+
+  const effectiveTeacher = useMemo(() => {
+    if (teacherNameOptions.includes(teacher)) return teacher;
+    return teacherNameOptions[0] ?? pickDefaultTeacher(subj, faculties);
+  }, [teacher, teacherNameOptions, subj, faculties]);
+
   const pickSubject = (s: string) => {
     setScheduleWarnMsg(null);
     setSubj(s);
-    const t =
-      s === "Biology"
-        ? "Dr. Meena Singh"
-        : s === "Physics"
-          ? "Mr. Ravi Kumar"
-          : FACULTY_SEED[0].name;
-    setTeacher(t);
+    setTeacher(pickDefaultTeacher(s, faculties));
   };
 
   return (
@@ -1748,17 +1807,16 @@ function DemoForm({
               <td className={SX.dataTd}>
                 <select
                   className={cn(SX.select, "w-full max-w-[320px]")}
-                  value={teacher}
+                  value={effectiveTeacher}
                   onChange={(e) => {
                     setScheduleWarnMsg(null);
                     setTeacher(e.target.value);
                   }}
                   aria-label="Teacher"
                 >
-                  <option value={defaultTeacher}>{defaultTeacher}</option>
-                  {FACULTY_SEED.map((f) => (
-                    <option key={f.id} value={f.name}>
-                      {f.name}
+                  {teacherNameOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
                     </option>
                   ))}
                 </select>
@@ -1870,7 +1928,7 @@ function DemoForm({
               }
               onSchedule({
                 subject: subj,
-                teacher,
+                teacher: effectiveTeacher,
                 studentTimeZone,
                 status: "Scheduled",
                 isoDate: effectiveDemoDate,

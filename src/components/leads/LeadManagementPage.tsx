@@ -1,9 +1,9 @@
 "use client";
 
-import { addDays, format, isSameDay, parseISO } from "date-fns";
+import { addDays, format } from "date-fns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SortDir, SortKey } from "@/lib/types";
-import { INITIAL_LEADS, TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
+import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { AddStudentLeadDialog } from "./AddStudentLeadDialog";
 import { ExportLeadsButton } from "./ExportLeadsButton";
 import { FollowUpDialog } from "./FollowUpDialog";
@@ -41,7 +41,9 @@ function sortLeads(
 }
 
 export function LeadManagementPage() {
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [mainTab, setMainTab] = useState<LeadMainTab>("ongoing");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -60,12 +62,36 @@ export function LeadManagementPage() {
   );
   const toolbarRef = useRef<HTMLDivElement>(null);
 
-  const nextLeadNumericId = useMemo(() => {
-    const nums = leads
-      .map((l) => parseInt(l.id, 10))
-      .filter((n) => !Number.isNaN(n));
-    return (nums.length ? Math.max(...nums) : 0) + 1;
-  }, [leads]);
+  const refreshLeads = useCallback(async () => {
+    const res = await fetch("/api/leads", { cache: "no-store" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        typeof err?.error === "string" ? err.error : "Failed to load leads",
+      );
+    }
+    const data = (await res.json()) as Lead[];
+    setLeads(data);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    refreshLeads()
+      .catch((e) => {
+        if (!cancelled)
+          setLoadError(
+            e instanceof Error ? e.message : "Could not load leads from API.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshLeads]);
 
   useEffect(() => {
     if (!filterOpen && !sortOpen) return;
@@ -96,8 +122,6 @@ export function LeadManagementPage() {
     window.addEventListener("lead-followup", onFu);
     return () => window.removeEventListener("lead-followup", onFu);
   }, []);
-
-  const today = useMemo(() => new Date(), []);
 
   const filtered = useMemo(() => {
     let list = leads;
@@ -139,29 +163,13 @@ export function LeadManagementPage() {
     sortDir,
   ]);
 
-  /** Ongoing tab · today’s area: new leads today (ongoing) OR follow-ups scheduled for today (still on follow-up sheet). */
-  const todaysOngoingLeads = useMemo(() => {
-    return filtered.filter((l) => {
-      const isNewToday =
-        l.sheetTab === "ongoing" && isSameDay(parseISO(l.date), today);
-      const isFollowUpDueToday =
-        l.sheetTab === "followup" &&
-        l.followUpDate != null &&
-        l.followUpDate !== "" &&
-        isSameDay(parseISO(l.followUpDate), today);
-      return isNewToday || isFollowUpDueToday;
-    });
-  }, [filtered, today]);
-
-  /** Ongoing tab: rest of pipeline (ongoing, not today) — avoids duplicating today’s rows in both tables. */
-  const ongoingLeadsRest = useMemo(
+  /** Ongoing tab: only Interested rows still on the ongoing sheet (pipeline: Demo → …). */
+  const ongoingInterestedLeads = useMemo(
     () =>
       filtered.filter(
-        (l) =>
-          l.sheetTab === "ongoing" &&
-          !isSameDay(parseISO(l.date), today),
+        (l) => l.sheetTab === "ongoing" && l.rowTone === "interested",
       ),
-    [filtered, today],
+    [filtered],
   );
 
   const followUpLeads = useMemo(
@@ -184,7 +192,9 @@ export function LeadManagementPage() {
   );
 
   const counts = useMemo(() => {
-    const ongoing = leads.filter((l) => l.sheetTab === "ongoing").length;
+    const ongoing = leads.filter(
+      (l) => l.sheetTab === "ongoing" && l.rowTone === "interested",
+    ).length;
     const followup = leads.filter((l) => l.sheetTab === "followup").length;
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
@@ -195,11 +205,30 @@ export function LeadManagementPage() {
     return { ongoing, followup, notInterested, converted };
   }, [leads]);
 
-  const onUpdateLead = useCallback((id: string, patch: Partial<Lead>) => {
-    setLeads((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-    );
-  }, []);
+  const onUpdateLead = useCallback(
+    async (id: string, patch: Partial<Lead>) => {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+      );
+      try {
+        const res = await fetch(`/api/leads/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) throw new Error();
+        const updated = (await res.json()) as Lead;
+        setLeads((prev) => prev.map((l) => (l.id === id ? updated : l)));
+      } catch {
+        try {
+          await refreshLeads();
+        } catch {
+          setLoadError("Could not sync with server.");
+        }
+      }
+    },
+    [refreshLeads],
+  );
 
   const onDraftPatch = useCallback((id: string, patch: Partial<Lead>) => {
     setLeadDraft((d) => ({
@@ -220,10 +249,10 @@ export function LeadManagementPage() {
     [leadDraft],
   );
 
-  const saveSheetDraft = () => {
+  const saveSheetDraft = async () => {
     for (const [id, patch] of Object.entries(leadDraft)) {
       if (patch && Object.keys(patch).length > 0) {
-        onUpdateLead(id, patch);
+        await onUpdateLead(id, patch);
       }
     }
     setLeadDraft({});
@@ -235,18 +264,15 @@ export function LeadManagementPage() {
     setSheetEditMode(false);
   };
 
-  const ongoingTabTotal =
-    todaysOngoingLeads.length + ongoingLeadsRest.length;
-
   const tabCounts = useMemo(
     () => ({
-      ongoing: ongoingTabTotal,
+      ongoing: ongoingInterestedLeads.length,
       not_interested: notInterestedLeads.length,
       followup: followUpLeads.length,
       converted: convertedLeadsFullPipeline.length,
     }),
     [
-      ongoingTabTotal,
+      ongoingInterestedLeads.length,
       notInterestedLeads.length,
       followUpLeads.length,
       convertedLeadsFullPipeline.length,
@@ -311,6 +337,24 @@ export function LeadManagementPage() {
 
   return (
     <div className={SX.leadPageRoot}>
+      {loadError && (
+        <div
+          className="rounded-none border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-900"
+          role="alert"
+        >
+          {loadError}{" "}
+          <span className="text-slate-600">
+            Add <code className="text-xs">MONGODB_URI</code> to{" "}
+            <code className="text-xs">.env.local</code> and run{" "}
+            <code className="text-xs">npm run seed</code> to insert sample data.
+          </span>
+        </div>
+      )}
+      {loading && (
+        <p className="text-sm text-slate-500" aria-live="polite">
+          Loading leads…
+        </p>
+      )}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
           Leads
@@ -330,12 +374,7 @@ export function LeadManagementPage() {
             Add student
           </button>
           <ExportLeadsButton leads={leads} />
-          <ImportExcelControl
-            nextStartId={nextLeadNumericId}
-            onImport={(incoming) =>
-              setLeads((prev) => [...incoming, ...prev])
-            }
-          />
+          <ImportExcelControl onImported={refreshLeads} />
         </div>
       </header>
 
@@ -522,7 +561,7 @@ export function LeadManagementPage() {
                   type="button"
                   className={cn(SX.btnPrimary, "h-9 px-3 text-[13px]")}
                   disabled={!hasSheetDraft}
-                  onClick={saveSheetDraft}
+                  onClick={() => void saveSheetDraft()}
                 >
                   Save changes
                 </button>
@@ -548,91 +587,44 @@ export function LeadManagementPage() {
 
         <div className={SX.leadSheetBody}>
           {mainTab === "ongoing" && (
-            <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
-              <section aria-labelledby="daily-leads-heading">
-                {todaysOngoingLeads.length === 0 ? (
-                  <div
-                    className="border border-slate-200 bg-slate-50 px-4 py-8 text-center"
-                    role="status"
-                  >
-                    <h2
-                      id="daily-leads-heading"
-                      className="text-sm font-semibold text-slate-900"
-                    >
-                      Today
-                    </h2>
-                    <p className="mt-2 text-[13px] text-slate-600">
-                      No data available for today&apos;s queue.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-end justify-between gap-2">
-                      <div>
-                        <h2
-                          id="daily-leads-heading"
-                          className="text-sm font-semibold text-slate-900"
-                        >
-                          Today&apos;s queue
-                        </h2>
-                        <p className="mt-0.5 text-[12px] text-slate-500">
-                          New leads and follow-ups due ·{" "}
-                          <time dateTime={format(today, "yyyy-MM-dd")}>
-                            {format(today, "EEE, d MMM yyyy")}
-                          </time>
-                        </p>
-                      </div>
-                      <span className="rounded-none bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-100/80">
-                        {todaysOngoingLeads.length}{" "}
-                        {todaysOngoingLeads.length === 1 ? "row" : "rows"}
-                      </span>
-                    </div>
-                    <LeadSheetTable
-                      variant="daily"
-                      className={cn(SX.leadGridFlush, "border-x-0")}
-                      leads={applyDraftToList(todaysOngoingLeads)}
-                      sheetEditMode={sheetEditMode}
-                      onDraftPatch={onDraftPatch}
-                      onUpdateLead={onUpdateLead}
-                      visibleIds={todaysOngoingLeads.map((l) => l.id)}
-                    />
-                  </div>
-                )}
-              </section>
-
-              <section
-                className="space-y-3"
-                aria-labelledby="pipeline-heading"
-              >
-                <div className="flex flex-wrap items-end justify-between gap-2">
-                  <div>
-                    <h2
-                      id="pipeline-heading"
-                      className="text-sm font-semibold text-slate-900"
-                    >
-                      Rest of ongoing
-                    </h2>
-                    <p className="mt-0.5 text-[12px] text-slate-500">
-                      Active leads not in today&apos;s queue ·{" "}
-                      {ongoingLeadsRest.length}{" "}
-                      {ongoingLeadsRest.length === 1 ? "row" : "rows"}
-                    </p>
-                  </div>
-                  <span className="rounded-none bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-primary ring-1 ring-sky-100">
-                    Pipeline
+            <section
+              className="px-3 py-4 md:px-4 md:py-5"
+              aria-label="Interested ongoing pipeline"
+            >
+              <div className={SX.leadSectionHead}>
+                <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
+                <p className={SX.leadSectionMeta}>
+                  Only students marked <span className="font-medium">Interested</span> on
+                  the ongoing sheet — that&apos;s when you run Demo, Brochure, Fees, and
+                  Schedule.{" "}
+                  <span className="tabular-nums">
+                    {ongoingInterestedLeads.length}{" "}
+                    {ongoingInterestedLeads.length === 1 ? "row" : "rows"}
                   </span>
+                </p>
+              </div>
+              {ongoingInterestedLeads.length === 0 ? (
+                <div
+                  className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
+                  role="status"
+                >
+                  No interested leads here yet. Use the row <span className="font-medium">⋯</span>{" "}
+                  menu and choose <span className="font-medium">Interested</span> to move a
+                  lead into this pipeline.
                 </div>
+              ) : (
                 <LeadSheetTable
                   variant="standard"
-                  className={cn(SX.leadGridFlush, "border-x-0")}
-                  leads={applyDraftToList(ongoingLeadsRest)}
+                  showFollowUpColumn={false}
+                  className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                  leads={applyDraftToList(ongoingInterestedLeads)}
                   sheetEditMode={sheetEditMode}
                   onDraftPatch={onDraftPatch}
                   onUpdateLead={onUpdateLead}
-                  visibleIds={ongoingLeadsRest.map((l) => l.id)}
+                  visibleIds={ongoingInterestedLeads.map((l) => l.id)}
                 />
-              </section>
-            </div>
+              )}
+            </section>
           )}
 
           {mainTab === "followup" && (
@@ -646,6 +638,7 @@ export function LeadManagementPage() {
                 </p>
               </div>
               <LeadSheetTable
+                showFollowUpColumn
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(followUpLeads)}
                 sheetEditMode={sheetEditMode}
@@ -670,6 +663,7 @@ export function LeadManagementPage() {
                 </p>
               </div>
               <LeadSheetTable
+                showFollowUpColumn={false}
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(notInterestedLeads)}
                 sheetEditMode={sheetEditMode}
@@ -694,6 +688,7 @@ export function LeadManagementPage() {
                 </p>
               </div>
               <LeadSheetTable
+                showFollowUpColumn={false}
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(convertedLeadsFullPipeline)}
                 sheetEditMode={sheetEditMode}
@@ -709,11 +704,11 @@ export function LeadManagementPage() {
       <AddStudentLeadDialog
         open={addStudentOpen}
         onClose={() => setAddStudentOpen(false)}
-        nextNumericId={nextLeadNumericId}
-        onAdd={(lead) => setLeads((prev) => [lead, ...prev])}
+        onAdded={refreshLeads}
       />
 
       <FollowUpDialog
+        key={followUpId ?? "followup-dialog-closed"}
         open={followUpId !== null}
         onClose={() => setFollowUpId(null)}
         onSubmit={(data) => {
@@ -722,7 +717,7 @@ export function LeadManagementPage() {
               data.date && data.date.length >= 8
                 ? data.date
                 : format(addDays(new Date(), 1), "yyyy-MM-dd");
-            onUpdateLead(followUpId, {
+            void onUpdateLead(followUpId, {
               rowTone: "followup_later",
               sheetTab: "followup",
               followUpDate: fu,
