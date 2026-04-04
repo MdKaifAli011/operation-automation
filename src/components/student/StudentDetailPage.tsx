@@ -2,7 +2,15 @@
 
 import { addMonths, format, parseISO } from "date-fns";
 import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Lead } from "@/lib/types";
 import { FACULTY_SEED, TARGET_EXAM_OPTIONS } from "@/lib/mock-data";
 import { formatTargetExams } from "@/lib/lead-display";
@@ -16,10 +24,13 @@ import {
   IconCheck,
   IconCloudUpload,
   IconGlobe,
+  IconLink,
   IconMail,
+  IconPencil,
   IconPhone,
   IconPlus,
   IconSparkles,
+  IconTrash,
 } from "@/components/icons/CrmIcons";
 import { cn } from "@/lib/cn";
 
@@ -31,6 +42,163 @@ const STEPS = [
 ] as const;
 
 const PIPELINE_TOTAL = STEPS.length;
+
+/** Success toast modal after scheduling a demo */
+const DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS = 3200;
+
+/** IST wall-clock → instant (scheduling is always interpreted as Asia/Kolkata). */
+function parseIstSlot(isoDate: string, hm: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null;
+  if (!/^\d{1,2}:\d{2}$/.test(hm)) return null;
+  const [h, m] = hm.split(":").map((x) => parseInt(x, 10));
+  if (h > 23 || m > 59 || Number.isNaN(h) || Number.isNaN(m)) return null;
+  const hh = String(h).padStart(2, "0");
+  const mm = String(m).padStart(2, "0");
+  return new Date(`${isoDate}T${hh}:${mm}:00+05:30`);
+}
+
+function formatTime12hInZone(d: Date, timeZone: string): string {
+  const s = new Intl.DateTimeFormat("en-IN", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
+  return s.replace(/\b(AM|PM)\b/g, (x) => x.toLowerCase());
+}
+
+/** Calendar date as it reads in that zone (can differ from India when the slot crosses midnight). */
+function formatDateInZone(d: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+}
+
+const STUDENT_TIMEZONE_OPTIONS: { value: string; label: string }[] = [
+  { value: "Asia/Kolkata", label: "India — IST" },
+  { value: "Asia/Kathmandu", label: "Nepal — NPT" },
+  { value: "Asia/Dubai", label: "UAE — GST" },
+  { value: "Asia/Singapore", label: "Singapore — SGT" },
+  { value: "Asia/Riyadh", label: "Saudi Arabia — AST" },
+  { value: "Asia/Kuwait", label: "Kuwait — AST" },
+  { value: "Europe/London", label: "UK — GMT / BST" },
+  { value: "America/New_York", label: "US — Eastern" },
+  { value: "America/Los_Angeles", label: "US — Pacific" },
+];
+
+function zoneShortLabel(tz: string): string {
+  const o = STUDENT_TIMEZONE_OPTIONS.find((x) => x.value === tz);
+  if (!o) return tz.replace(/^.*\//, "");
+  const parts = o.label.split(" — ");
+  return (parts[1] ?? parts[0]).trim();
+}
+
+function studentTimeZoneMenuLabel(tz: string): string {
+  return (
+    STUDENT_TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz
+  );
+}
+
+/** One instant; message spells out IST + student zone so ops trust both were considered. */
+function buildPastSlotWarning(slot: Date, studentTz: string): string {
+  const ist = `${formatDateInZone(slot, "Asia/Kolkata")}, ${formatTime12hInZone(slot, "Asia/Kolkata")} IST`;
+  const st = `${formatDateInZone(slot, studentTz)}, ${formatTime12hInZone(slot, studentTz)} ${zoneShortLabel(studentTz)}`;
+  return (
+    "This demo time is already in the past — it cannot be created. " +
+    "Checked in India (IST) and in the student timezone. " +
+    `India: ${ist}. Student (${studentTimeZoneMenuLabel(studentTz)}): ${st}. ` +
+    "Choose a later time or a future date."
+  );
+}
+
+/** Allowed student-facing local clock (same moment as IST; blocks e.g. 3:30 am Pacific for a 4 pm IST slot). */
+const STUDENT_DEMO_LOCAL_START_MINS = 6 * 60;
+const STUDENT_DEMO_LOCAL_END_MINS = 21 * 60 + 59;
+
+function getLocalMinutesFromMidnightInZone(d: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(d);
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? NaN);
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? NaN);
+  if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+  return h * 60 + m;
+}
+
+function isStudentLocalTimeOutsideContactWindow(slot: Date, studentTz: string): boolean {
+  const mins = getLocalMinutesFromMidnightInZone(slot, studentTz);
+  if (mins < 0) return false;
+  return mins < STUDENT_DEMO_LOCAL_START_MINS || mins > STUDENT_DEMO_LOCAL_END_MINS;
+}
+
+function buildStudentLocalWindowWarning(slot: Date, studentTz: string): string {
+  const stLine = `${formatDateInZone(slot, studentTz)}, ${formatTime12hInZone(slot, studentTz)} ${zoneShortLabel(studentTz)}`;
+  const istLine = `${formatDateInZone(slot, "Asia/Kolkata")}, ${formatTime12hInZone(slot, "Asia/Kolkata")} IST`;
+  return (
+    "The student's local time for this demo is outside allowed hours (6:00 am – 9:59 pm in their timezone). " +
+    "The demo was not created. " +
+    `Student (${studentTimeZoneMenuLabel(studentTz)}): ${stLine}. ` +
+    `Same moment in India: ${istLine}. ` +
+    "Choose a different IST time so their local time falls in that window, or confirm the student timezone."
+  );
+}
+
+function validateScheduledDemoSlot(
+  isoDate: string,
+  timeHmIST: string,
+  studentTimeZone: string,
+): string | null {
+  const slot = parseIstSlot(isoDate, timeHmIST);
+  if (!slot) return "Enter a valid date and time.";
+  if (slot.getTime() < Date.now()) return buildPastSlotWarning(slot, studentTimeZone);
+  if (isStudentLocalTimeOutsideContactWindow(slot, studentTimeZone))
+    return buildStudentLocalWindowWarning(slot, studentTimeZone);
+  return null;
+}
+
+const DEMO_EDIT_SUBJECTS = [
+  "Biology",
+  "Physics",
+  "Chemistry",
+  "Mathematics",
+  "English",
+  "GK",
+  "Reasoning",
+] as const;
+
+function demoRowSummaryLine(r: DemoTableRow): string {
+  const slot = parseIstSlot(r.isoDate, r.timeHmIST);
+  const ist = slot
+    ? `${format(parseISO(r.isoDate), "d MMM yyyy")} · ${formatTime12hInZone(slot, "Asia/Kolkata")} IST`
+    : r.isoDate;
+  return `${r.subject} · ${r.teacher} · ${ist}`;
+}
+
+function defaultStudentTimeZone(country: string): string {
+  const c = country.trim().toLowerCase();
+  if (c === "uae" || c.includes("emirates")) return "Asia/Dubai";
+  if (c === "singapore") return "Asia/Singapore";
+  if (c === "nepal") return "Asia/Kathmandu";
+  if (c === "saudi" || c === "ksa") return "Asia/Riyadh";
+  return "Asia/Kolkata";
+}
+
+type DemoTableRow = {
+  subject: string;
+  teacher: string;
+  studentTimeZone: string;
+  status: string;
+  /** yyyy-MM-dd — source of truth for display */
+  isoDate: string;
+  /** HH:mm wall clock in India (IST) */
+  timeHmIST: string;
+};
 
 type Props = { lead: Lead };
 
@@ -527,19 +695,95 @@ function StepFooter({
 
 function DemoSection({ lead }: { lead: Lead }) {
   const [expanded, setExpanded] = useState(false);
-  const [rows, setRows] = useState<
-    { subject: string; teacher: string; date: string; time: string; status: string }[]
-  >([]);
+  const [rows, setRows] = useState<DemoTableRow[]>([]);
+  const [scheduleSuccessOpen, setScheduleSuccessOpen] = useState(false);
+  const dismissScheduleSuccess = useCallback(() => setScheduleSuccessOpen(false), []);
+  const [shareSuccessOpen, setShareSuccessOpen] = useState(false);
+  const dismissShareSuccess = useCallback(() => setShareSuccessOpen(false), []);
+
+  const [rowAction, setRowAction] = useState<
+    | { type: "edit"; index: number }
+    | { type: "delete"; index: number }
+    | { type: "send"; index: number }
+    | null
+  >(null);
+  const [editDraft, setEditDraft] = useState<DemoTableRow | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const closeRowModal = useCallback(() => {
+    setRowAction(null);
+    setEditDraft(null);
+    setEditError(null);
+  }, []);
+
+  const patchEditDraft = useCallback((patch: Partial<DemoTableRow>) => {
+    setEditDraft((d) => (d ? { ...d, ...patch } : null));
+    setEditError(null);
+  }, []);
+
+  const saveEditRow = useCallback(() => {
+    if (!editDraft || rowAction?.type !== "edit") return;
+    const err = validateScheduledDemoSlot(
+      editDraft.isoDate,
+      editDraft.timeHmIST,
+      editDraft.studentTimeZone,
+    );
+    if (err) {
+      setEditError(err);
+      return;
+    }
+    const i = rowAction.index;
+    setRows((prev) => prev.map((row, j) => (j === i ? { ...editDraft } : row)));
+    closeRowModal();
+  }, [editDraft, rowAction, closeRowModal]);
+
+  const confirmDeleteRow = useCallback(() => {
+    if (rowAction?.type !== "delete") return;
+    const i = rowAction.index;
+    setRows((prev) => prev.filter((_, j) => j !== i));
+    closeRowModal();
+  }, [rowAction, closeRowModal]);
+
+  const confirmSendRow = useCallback(() => {
+    if (rowAction?.type !== "send") return;
+    closeRowModal();
+    setShareSuccessOpen(true);
+  }, [rowAction, closeRowModal]);
+
+  const activeRow =
+    rowAction && rows[rowAction.index] ? rows[rowAction.index] : null;
+
+  const showAddInHeader = rows.length > 0 && !expanded;
+
+  const demoActionBtn =
+    "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-sm border border-[#e0e0e0] bg-white px-2 text-[11px] font-medium text-[#424242] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#1565c0]";
+
   return (
+    <>
     <section className={SX.section}>
       <div className={SX.sectionHead}>
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
-          <p className="mt-0.5 max-w-[520px] text-[11px] font-normal leading-snug text-[#757575]">
-            Schedule trials by subject. Rows behave like a worksheet — add as many
-            as you need.
+          <p className="mt-0.5 max-w-[560px] text-[11px] font-normal leading-snug text-[#757575]">
+            One row per trial. You schedule in{" "}
+            <span className="font-medium text-[#616161]">IST</span>;{" "}
+            <span className="font-medium text-[#616161]">Student time</span> shows their
+            local date and time for invites.
           </p>
         </div>
+        {showAddInHeader ? (
+          <button
+            type="button"
+            className={cn(
+              SX.btnPrimary,
+              "inline-flex shrink-0 items-center gap-1.5",
+            )}
+            onClick={() => setExpanded(true)}
+          >
+            <IconPlus className="h-3.5 w-3.5" />
+            Add another demo
+          </button>
+        ) : null}
       </div>
       <div className={SX.sectionBody}>
       {rows.length === 0 && !expanded ? (
@@ -572,60 +816,171 @@ function DemoSection({ lead }: { lead: Lead }) {
           onSchedule={(r) => {
             setRows([r]);
             setExpanded(false);
+            setScheduleSuccessOpen(true);
           }}
         />
       ) : (
         <div className="overflow-auto">
-          <table className={cn(SX.dataTable, "min-w-[640px]")}>
+          <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
               <tr>
                 <th className={SX.dataTh}>#</th>
                 <th className={SX.dataTh}>Subject</th>
                 <th className={SX.dataTh}>Teacher</th>
-                <th className={SX.dataTh}>Date</th>
-                <th className={SX.dataTh}>Time (IST)</th>
-                <th className={SX.dataTh}>Local</th>
+                <th className={SX.dataTh}>When (India)</th>
+                <th className={SX.dataTh}>Student time</th>
                 <th className={SX.dataTh}>Status</th>
                 <th className={SX.dataTh}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="min-h-[40px]">
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{i + 1}</td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.subject}</td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.teacher}</td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.date}</td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>{r.time}</td>
-                  <td className={cn(SX.dataTdMuted, i % 2 === 1 && SX.zebraRow)}>
-                    12:30 PM SGT
-                  </td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
-                    <select className={cn(SX.select, "w-full min-w-[100px] text-[12px]")}>
-                      <option>Scheduled</option>
-                      <option>Completed</option>
-                      <option>Cancelled</option>
-                    </select>
-                  </td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow, "text-[#1565c0]")}>
-                    Edit · Delete ·{" "}
-                    <button type="button" className="rounded-none bg-[#e3f2fd] px-2 py-0.5 text-[12px] font-medium">
-                      Send link
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r, i) => {
+                const slot = parseIstSlot(r.isoDate, r.timeHmIST);
+                return (
+                  <tr key={i} className="min-h-[44px]">
+                    <td
+                      className={cn(
+                        SX.dataTd,
+                        "py-2.5 align-top tabular-nums",
+                        i % 2 === 1 && SX.zebraRow,
+                      )}
+                    >
+                      {i + 1}
+                    </td>
+                    <td
+                      className={cn(
+                        SX.dataTd,
+                        "max-w-[120px] py-2.5 align-top font-medium",
+                        i % 2 === 1 && SX.zebraRow,
+                      )}
+                    >
+                      {r.subject}
+                    </td>
+                    <td
+                      className={cn(
+                        SX.dataTd,
+                        "max-w-[min(200px,28vw)] py-2.5 align-top text-[12px] leading-snug",
+                        i % 2 === 1 && SX.zebraRow,
+                      )}
+                    >
+                      {r.teacher}
+                    </td>
+                    <td
+                      className={cn(
+                        SX.dataTd,
+                        "min-w-[128px] py-2.5 align-top",
+                        i % 2 === 1 && SX.zebraRow,
+                      )}
+                    >
+                      {slot ? (
+                        <>
+                          <div className="text-[13px] font-medium leading-tight text-[#212121]">
+                            {format(parseISO(r.isoDate), "d MMM yyyy")}
+                          </div>
+                          <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
+                            {formatTime12hInZone(slot, "Asia/Kolkata")} IST
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-[12px] text-[#b71c1c]">—</span>
+                      )}
+                    </td>
+                    <td
+                      className={cn(
+                        SX.dataTdMuted,
+                        "min-w-[148px] py-2.5 align-top",
+                        i % 2 === 1 && SX.zebraRow,
+                      )}
+                    >
+                      {slot ? (
+                        <>
+                          <div className="text-[13px] font-medium leading-tight text-[#424242]">
+                            {formatDateInZone(slot, r.studentTimeZone)}
+                          </div>
+                          <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
+                            {formatTime12hInZone(slot, r.studentTimeZone)}{" "}
+                            {zoneShortLabel(r.studentTimeZone)}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-[12px]">—</span>
+                      )}
+                    </td>
+                    <td
+                      className={cn(SX.dataTd, "py-2.5 align-top", i % 2 === 1 && SX.zebraRow)}
+                    >
+                      <select
+                        className={cn(
+                          SX.select,
+                          "h-7 w-full min-w-[104px] max-w-[128px] text-[12px]",
+                        )}
+                        value={r.status}
+                        onChange={(e) =>
+                          setRows((prev) =>
+                            prev.map((row, j) =>
+                              j === i ? { ...row, status: e.target.value } : row,
+                            ),
+                          )
+                        }
+                        aria-label={`Status for ${r.subject} demo`}
+                      >
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </td>
+                    <td
+                      className={cn(SX.dataTd, "py-2.5 align-top", i % 2 === 1 && SX.zebraRow)}
+                    >
+                      <div className="flex flex-wrap items-center gap-1">
+                        <button
+                          type="button"
+                          className={demoActionBtn}
+                          aria-label="Edit demo"
+                          onClick={() => {
+                            setEditDraft({ ...r });
+                            setEditError(null);
+                            setRowAction({ type: "edit", index: i });
+                          }}
+                        >
+                          <IconPencil />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            demoActionBtn,
+                            "hover:border-[#ffcdd2] hover:bg-[#fff8f8] hover:text-[#c62828]",
+                          )}
+                          aria-label="Delete demo"
+                          onClick={() => setRowAction({ type: "delete", index: i })}
+                        >
+                          <IconTrash />
+                          Delete
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            demoActionBtn,
+                            "text-[#1565c0] hover:border-[#90caf9] hover:bg-[#e3f2fd]",
+                          )}
+                          aria-label="Share demo invite"
+                          onClick={() => setRowAction({ type: "send", index: i })}
+                        >
+                          <IconLink />
+                          Share
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          <button
-            type="button"
-            className={cn(SX.btnGhost, "mt-3")}
-            onClick={() => setExpanded(true)}
-          >
-            + Add another demo
-          </button>
-          <p className="mt-2 text-[12px] text-[#757575]">
-            Students can schedule multiple demos across different subjects.
+          <p className="mt-2.5 text-[11px] leading-relaxed text-[#78909c]">
+            {!expanded
+              ? "More subjects? Use Add another demo in the header."
+              : "Finish the form below to add this row."}
           </p>
           {expanded && (
             <DemoForm
@@ -634,6 +989,7 @@ function DemoSection({ lead }: { lead: Lead }) {
               onSchedule={(r) => {
                 setRows((prev) => [...prev, r]);
                 setExpanded(false);
+                setScheduleSuccessOpen(true);
               }}
             />
           )}
@@ -641,6 +997,670 @@ function DemoSection({ lead }: { lead: Lead }) {
       )}
       </div>
     </section>
+    <DemoEditRowDialog
+      open={rowAction?.type === "edit"}
+      draft={editDraft}
+      onDraftChange={patchEditDraft}
+      onClose={closeRowModal}
+      onSave={saveEditRow}
+      error={editError}
+    />
+    <DemoDeleteRowDialog
+      open={rowAction?.type === "delete"}
+      summary={activeRow ? demoRowSummaryLine(activeRow) : ""}
+      onClose={closeRowModal}
+      onConfirm={confirmDeleteRow}
+    />
+    <DemoSendRowDialog
+      open={rowAction?.type === "send"}
+      lead={lead}
+      summary={activeRow ? demoRowSummaryLine(activeRow) : ""}
+      onClose={closeRowModal}
+      onConfirm={confirmSendRow}
+    />
+    <DemoScheduleSuccessDialog
+      open={scheduleSuccessOpen}
+      onDismiss={dismissScheduleSuccess}
+    />
+    <DemoScheduleSuccessDialog
+      open={shareSuccessOpen}
+      onDismiss={dismissShareSuccess}
+      headerTitle="Sent"
+      headline="Invite queued"
+      body="The demo join link will be sent to the parent using your usual channel (SMS / WhatsApp / email)."
+      autoCloseMs={DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS}
+    />
+    </>
+  );
+}
+
+function DemoEditRowDialog({
+  open,
+  draft,
+  onDraftChange,
+  onClose,
+  onSave,
+  error,
+}: {
+  open: boolean;
+  draft: DemoTableRow | null;
+  onDraftChange: (patch: Partial<DemoTableRow>) => void;
+  onClose: () => void;
+  onSave: () => void;
+  error: string | null;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const show = open && draft != null;
+
+  const subjectOptions = useMemo(() => {
+    if (!draft) return [...DEMO_EDIT_SUBJECTS];
+    const set = new Set<string>(DEMO_EDIT_SUBJECTS);
+    return set.has(draft.subject)
+      ? [...DEMO_EDIT_SUBJECTS]
+      : [draft.subject, ...DEMO_EDIT_SUBJECTS];
+  }, [draft]);
+
+  const teacherOptions = useMemo(() => {
+    const names = FACULTY_SEED.map((f) => f.name);
+    if (!draft) return names;
+    return names.includes(draft.teacher) ? names : [draft.teacher, ...names];
+  }, [draft]);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (show) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [show]);
+
+  useEffect(() => {
+    if (!show) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdrop = (e: MouseEvent) => {
+      if (e.target === dlg) onClose();
+    };
+    dlg.addEventListener("mousedown", onBackdrop);
+    return () => dlg.removeEventListener("mousedown", onBackdrop);
+  }, [show, onClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[205] w-[min(100vw-1rem,26rem)] max-h-[min(92vh,640px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="demo-edit-title"
+    >
+      <div className="flex items-center justify-between border-b border-[#d0d0d0] bg-[#e3f2fd] px-3 py-2.5">
+        <h2
+          id="demo-edit-title"
+          className="text-[13px] font-bold tracking-tight text-[#0d47a1]"
+        >
+          Edit demo
+        </h2>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center text-[18px] leading-none text-[#546e7a] hover:bg-black/5"
+          aria-label="Close"
+          onClick={() => ref.current?.close()}
+        >
+          ×
+        </button>
+      </div>
+      {draft ? (
+        <div className="max-h-[min(70vh,480px)] overflow-y-auto px-3 py-3">
+          <div className="space-y-3 text-[13px]">
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                Subject
+              </label>
+              <select
+                className={cn(SX.select, "w-full")}
+                value={draft.subject}
+                onChange={(e) => onDraftChange({ subject: e.target.value })}
+              >
+                {subjectOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                Teacher
+              </label>
+              <select
+                className={cn(SX.select, "w-full")}
+                value={draft.teacher}
+                onChange={(e) => onDraftChange({ teacher: e.target.value })}
+              >
+                {teacherOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                Date (IST calendar)
+              </label>
+              <input
+                type="date"
+                min={todayStr}
+                className={cn(SX.input)}
+                value={draft.isoDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v >= todayStr) onDraftChange({ isoDate: v });
+                }}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                Start time (IST)
+              </label>
+              <input
+                type="time"
+                className={cn(SX.input, "max-w-[140px]")}
+                value={draft.timeHmIST}
+                onChange={(e) => onDraftChange({ timeHmIST: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                Student timezone
+              </label>
+              <select
+                className={cn(SX.select, "w-full")}
+                value={draft.studentTimeZone}
+                onChange={(e) => onDraftChange({ studentTimeZone: e.target.value })}
+              >
+                {STUDENT_TIMEZONE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+                Status
+              </label>
+              <select
+                className={cn(SX.select, "w-full")}
+                value={draft.status}
+                onChange={(e) => onDraftChange({ status: e.target.value })}
+              >
+                <option value="Scheduled">Scheduled</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+          {error ? (
+            <p
+              className="mt-3 border border-[#ffcdd2] bg-[#ffebee] px-2 py-2 text-[12px] leading-relaxed text-[#b71c1c]"
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
+        <button type="button" className={SX.btnSecondary} onClick={() => ref.current?.close()}>
+          Cancel
+        </button>
+        <button type="button" className={SX.btnPrimary} onClick={onSave}>
+          Save changes
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+function DemoDeleteRowDialog({
+  open,
+  summary,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  summary: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdrop = (e: MouseEvent) => {
+      if (e.target === dlg) onClose();
+    };
+    dlg.addEventListener("mousedown", onBackdrop);
+    return () => dlg.removeEventListener("mousedown", onBackdrop);
+  }, [open, onClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[205] w-[min(100vw-1.5rem,24rem)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="demo-delete-title"
+    >
+      <div className="flex items-center justify-between border-b border-[#ffcdd2] bg-[#ffebee] px-3 py-2.5">
+        <h2
+          id="demo-delete-title"
+          className="text-[13px] font-bold tracking-tight text-[#b71c1c]"
+        >
+          Delete demo
+        </h2>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center text-[18px] leading-none text-[#b71c1c] hover:bg-black/5"
+          aria-label="Close"
+          onClick={() => ref.current?.close()}
+        >
+          ×
+        </button>
+      </div>
+      <div className="px-3 py-4">
+        <p className="text-[13px] leading-relaxed text-[#37474f]">
+          Remove this demo from the list? This cannot be undone.
+        </p>
+        {summary ? (
+          <p className="mt-2 border border-[#eceff1] bg-[#fafafa] px-2 py-2 text-[12px] leading-snug text-[#546e7a]">
+            {summary}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
+        <button type="button" className={SX.btnSecondary} onClick={() => ref.current?.close()}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="rounded-none border border-[#b71c1c] bg-[#c62828] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#b71c1c]"
+          onClick={onConfirm}
+        >
+          Delete
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+function DemoSendRowDialog({
+  open,
+  lead,
+  summary,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  lead: Lead;
+  summary: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdrop = (e: MouseEvent) => {
+      if (e.target === dlg) onClose();
+    };
+    dlg.addEventListener("mousedown", onBackdrop);
+    return () => dlg.removeEventListener("mousedown", onBackdrop);
+  }, [open, onClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[205] w-[min(100vw-1.5rem,24rem)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="demo-send-title"
+    >
+      <div className="flex items-center justify-between border-b border-[#90caf9] bg-[#e3f2fd] px-3 py-2.5">
+        <h2
+          id="demo-send-title"
+          className="text-[13px] font-bold tracking-tight text-[#0d47a1]"
+        >
+          Send demo link
+        </h2>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center text-[18px] leading-none text-[#1565c0] hover:bg-black/5"
+          aria-label="Close"
+          onClick={() => ref.current?.close()}
+        >
+          ×
+        </button>
+      </div>
+      <div className="px-3 py-4">
+        <p className="text-[13px] leading-relaxed text-[#37474f]">
+          Share the join link with the parent for this trial class.
+        </p>
+        {summary ? (
+          <p className="mt-2 border border-[#eceff1] bg-[#fafafa] px-2 py-2 text-[12px] leading-snug text-[#546e7a]">
+            {summary}
+          </p>
+        ) : null}
+        <p className="mt-3 text-[12px] text-[#757575]">
+          <span className="font-semibold text-[#546e7a]">{lead.parentName}</span>
+          {" · "}
+          <span className="tabular-nums">{formatLeadPhone(lead)}</span>
+        </p>
+      </div>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
+        <button type="button" className={SX.btnSecondary} onClick={() => ref.current?.close()}>
+          Cancel
+        </button>
+        <button type="button" className={SX.btnPrimary} onClick={onConfirm}>
+          Send link
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+function DemoScheduleSuccessDialog({
+  open,
+  onDismiss,
+  headerTitle = "Success",
+  headline = "Success!",
+  body = "The demo was scheduled successfully.",
+  autoCloseMs = DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS,
+}: {
+  open: boolean;
+  onDismiss: () => void;
+  headerTitle?: string;
+  headline?: string;
+  body?: string;
+  /** Set 0 to disable auto-close (e.g. share confirmation). */
+  autoCloseMs?: number;
+}) {
+  const titleId = useId();
+  const descId = useId();
+  const ref = useRef<HTMLDialogElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closingRef = useRef(false);
+  const [exiting, setExiting] = useState(false);
+
+  const finishClose = useCallback(() => {
+    const d = ref.current;
+    if (!d?.open) return;
+    closingRef.current = false;
+    setExiting(false);
+    d.close();
+  }, []);
+
+  const beginClose = useCallback(() => {
+    if (closingRef.current) return;
+    const d = ref.current;
+    if (!d?.open) return;
+    closingRef.current = true;
+    const panel = panelRef.current;
+    if (panel) {
+      panel.classList.remove("animate-demo-success-panel-in");
+      void panel.offsetWidth;
+    }
+    setExiting(true);
+  }, []);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      closingRef.current = false;
+      d.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const id = requestAnimationFrame(() => {
+      closingRef.current = false;
+      setExiting(false);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || exiting || autoCloseMs <= 0) return;
+    const id = window.setTimeout(beginClose, autoCloseMs);
+    return () => window.clearTimeout(id);
+  }, [open, exiting, beginClose, autoCloseMs]);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    const onCancel = (e: Event) => {
+      e.preventDefault();
+      beginClose();
+    };
+    d.addEventListener("cancel", onCancel);
+    return () => d.removeEventListener("cancel", onCancel);
+  }, [beginClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdropMouseDown = (e: MouseEvent) => {
+      if (e.target === dlg) beginClose();
+    };
+    dlg.addEventListener("mousedown", onBackdropMouseDown);
+    return () => dlg.removeEventListener("mousedown", onBackdropMouseDown);
+  }, [open, beginClose]);
+
+  const onPanelAnimationEnd = (e: React.AnimationEvent<HTMLDivElement>) => {
+    if (!closingRef.current) return;
+    if (!e.animationName.includes("demo-success-panel-out")) return;
+    finishClose();
+  };
+
+  useEffect(() => {
+    if (!exiting) return;
+    const id = window.setTimeout(() => {
+      if (closingRef.current && ref.current?.open) finishClose();
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [exiting, finishClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "demo-schedule-success fixed inset-0 z-[210] m-0 h-full max-h-none w-full max-w-none",
+        "border-0 bg-transparent p-0 shadow-none",
+        "backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:items-center open:justify-center",
+      )}
+      onClose={onDismiss}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) beginClose();
+      }}
+      aria-labelledby={titleId}
+      aria-describedby={descId}
+    >
+      <div
+        ref={panelRef}
+        className={cn(
+          "w-[min(100vw-1.5rem,22rem)] origin-center overflow-hidden rounded-none border border-[#d0d0d0] bg-white shadow-2xl shadow-black/20",
+          exiting
+            ? "animate-demo-success-panel-out"
+            : "animate-demo-success-panel-in",
+        )}
+        onAnimationEnd={onPanelAnimationEnd}
+      >
+        <div className="flex items-center justify-between border-b border-[#1b5e20] bg-[#2e7d32] px-3 py-2.5">
+          <h2
+            id={titleId}
+            className="text-[13px] font-bold tracking-tight text-white"
+          >
+            {headerTitle}
+          </h2>
+          <button
+            type="button"
+            className="flex h-7 w-7 items-center justify-center text-[18px] leading-none text-white transition-colors hover:bg-white/15 focus:outline-none focus-visible:ring-1 focus-visible:ring-white"
+            aria-label="Close"
+            onClick={beginClose}
+          >
+            ×
+          </button>
+        </div>
+        <div className="px-4 pb-4 pt-5 text-center">
+          <div
+            className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#2e7d32] shadow-sm"
+            aria-hidden
+          >
+            <IconCheck className="h-6 w-6 text-white" />
+          </div>
+          <p className="text-[15px] font-bold text-[#212121]">{headline}</p>
+          <p
+            id={descId}
+            className="mt-2 text-[13px] leading-relaxed text-[#546e7a]"
+          >
+            {body}
+          </p>
+        </div>
+        <div className="flex justify-end border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
+          <button
+            type="button"
+            className="rounded-none border border-[#1b5e20] bg-[#2e7d32] px-4 py-1.5 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-colors hover:bg-[#1b5e20] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#2e7d32]"
+            onClick={beginClose}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+function DemoScheduleWarningDialog({
+  message,
+  onDismiss,
+}: {
+  message: string | null;
+  onDismiss: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (message) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [message]);
+
+  useEffect(() => {
+    if (!message) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdropMouseDown = (e: MouseEvent) => {
+      if (e.target === dlg) onDismiss();
+    };
+    dlg.addEventListener("mousedown", onBackdropMouseDown);
+    return () => dlg.removeEventListener("mousedown", onBackdropMouseDown);
+  }, [message, onDismiss]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-1.5rem,26rem)] max-h-[min(90vh,520px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onDismiss}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="demo-schedule-warn-title"
+    >
+      <div className="border-b border-[#ffcdd2] bg-[#ffebee] px-3 py-2.5">
+        <h2
+          id="demo-schedule-warn-title"
+          className="text-[13px] font-bold tracking-tight text-[#b71c1c]"
+        >
+          Cannot schedule demo
+        </h2>
+      </div>
+      <div className="max-h-[min(60vh,320px)] overflow-y-auto px-3 py-3">
+        <p className="text-[13px] leading-relaxed text-[#37474f]">{message ?? ""}</p>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2">
+        <button
+          type="button"
+          className={SX.btnPrimary}
+          onClick={() => ref.current?.close()}
+        >
+          OK
+        </button>
+      </div>
+    </dialog>
   );
 }
 
@@ -651,13 +1671,7 @@ function DemoForm({
 }: {
   lead: Lead;
   onCancel: () => void;
-  onSchedule: (r: {
-    subject: string;
-    teacher: string;
-    date: string;
-    time: string;
-    status: string;
-  }) => void;
+  onSchedule: (r: DemoTableRow) => void;
 }) {
   const demoTargetOptions =
     lead.targetExams.length > 0 ? lead.targetExams : [...TARGET_EXAM_OPTIONS];
@@ -681,11 +1695,22 @@ function DemoForm({
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [demoDate, setDemoDate] = useState(todayStr);
   const [demoTime, setDemoTime] = useState("10:00");
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [studentTimeZone, setStudentTimeZone] = useState(() =>
+    defaultStudentTimeZone(lead.country),
+  );
+  const [scheduleWarnMsg, setScheduleWarnMsg] = useState<string | null>(null);
+  const dismissScheduleWarn = useCallback(() => setScheduleWarnMsg(null), []);
   /** If the tab crosses midnight, raw `demoDate` can lag; never schedule or show a past calendar day. */
   const effectiveDemoDate = demoDate < todayStr ? todayStr : demoDate;
 
+  const studentLocalPreview = useMemo(() => {
+    const slot = parseIstSlot(effectiveDemoDate, demoTime);
+    if (!slot || Number.isNaN(slot.getTime())) return "";
+    return `${formatDateInZone(slot, studentTimeZone)} · ${formatTime12hInZone(slot, studentTimeZone)} ${zoneShortLabel(studentTimeZone)}`;
+  }, [effectiveDemoDate, demoTime, studentTimeZone]);
+
   const pickSubject = (s: string) => {
+    setScheduleWarnMsg(null);
     setSubj(s);
     const t =
       s === "Biology"
@@ -697,174 +1722,228 @@ function DemoForm({
   };
 
   return (
+    <>
     <div
-      className="rounded-none border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-slate-900/[0.04] sm:p-5"
+      className="mt-3 overflow-hidden border border-[#d0d0d0] bg-white"
       role="form"
       aria-label="Schedule demo class"
     >
-      <div className="border-b border-slate-100 pb-4">
-        <h3 className="text-[15px] font-bold text-slate-900">Schedule a trial class</h3>
-        <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
-          Pick course, subject, and faculty — then set date and time in{" "}
-          <strong className="font-semibold text-slate-700">IST</strong>. We show a
-          local-time hint from the student&apos;s country.
-        </p>
-      </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="block text-[13px]">
-          <span className="font-medium text-slate-700">Target exam</span>
-          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
-            Programme for this trial
-          </span>
-          <select
-            className={cn(SX.select, "mt-1 w-full")}
-            value={course}
-            onChange={(e) => {
-              const v = e.target.value;
-              setCourse(v);
-              const next =
-                v === "NEET"
-                  ? "Biology"
-                  : v === "JEE"
-                    ? "Physics"
-                    : "English";
-              pickSubject(next);
-            }}
-          >
-            {demoTargetOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-[13px]">
-          <span className="font-medium text-slate-700">Assigned teacher</span>
-          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
-            Suggested from subject; you can override
-          </span>
-          <select
-            className={cn(SX.select, "mt-1 w-full")}
-            value={teacher}
-            onChange={(e) => setTeacher(e.target.value)}
-          >
-            <option value={defaultTeacher}>{defaultTeacher}</option>
-            {FACULTY_SEED.map((f) => (
-              <option key={f.id} value={f.name}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <fieldset className="mt-5">
-        <legend className="text-[13px] font-medium text-slate-700">Subject</legend>
-        <p className="mb-2 text-[11px] text-slate-500">
-          One subject per trial row — add another demo later for more subjects.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {subs.map((s) => (
-            <label
-              key={s}
-              className={cn(
-                "inline-flex cursor-pointer items-center gap-2 rounded-none border px-3 py-2 text-[13px] transition-colors",
-                subj === s
-                  ? "border-primary bg-sky-50 font-medium text-primary ring-1 ring-primary/20"
-                  : "border-slate-200 bg-slate-50/80 text-slate-700 hover:border-slate-300",
-              )}
-            >
-              <input
-                type="radio"
-                name="demo-subj"
-                className="sr-only"
-                checked={subj === s}
-                onChange={() => pickSubject(s)}
-              />
-              {s}
-            </label>
-          ))}
+      <div className={SX.sectionHead}>
+        <div className="min-w-0 flex-1">
+          <h3 className={SX.sectionTitle}>Schedule a trial class</h3>
+          <p className="mt-0.5 text-[11px] leading-snug text-[#757575]">
+            Schedule in <span className="font-medium text-[#424242]">IST</span> (left).
+            Set the student&apos;s timezone (right) so invites show the right local time
+            — default follows country ({lead.country}).
+          </p>
         </div>
-      </fieldset>
-
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <label className="block text-[13px]">
-          <span className="font-medium text-slate-700">Demo date</span>
-          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
-            Today or a future date — demos can&apos;t be scheduled in the past
-          </span>
-          <input
-            type="date"
-            min={todayStr}
-            value={effectiveDemoDate}
-            onChange={(e) => {
-              setScheduleError(null);
-              const v = e.target.value;
-              if (v >= todayStr) setDemoDate(v);
-            }}
-            className={cn(SX.input, "mt-1 w-full")}
-            aria-invalid={!!scheduleError}
-          />
-        </label>
-        <label className="block text-[13px]">
-          <span className="font-medium text-slate-700">Start time (IST)</span>
-          <span className="mb-1 mt-0.5 block text-[11px] text-slate-500">
-            India Standard Time
-          </span>
-          <input
-            type="time"
-            value={demoTime}
-            onChange={(e) => {
-              setScheduleError(null);
-              setDemoTime(e.target.value);
-            }}
-            className={cn(SX.input, "mt-1 w-full")}
-          />
-          {effectiveDemoDate === todayStr && (
-            <span className="mt-1 block text-[11px] text-amber-800/90">
-              If today is selected, pick a time that hasn&apos;t passed yet (IST workflow).
-            </span>
-          )}
-        </label>
       </div>
 
-      {scheduleError && (
-        <p
-          className="mt-3 rounded-none border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800"
-          role="alert"
-        >
-          {scheduleError}
-        </p>
-      )}
+      <div className="overflow-x-auto border-t border-[#d0d0d0]">
+        <table className={cn(SX.dataTable, "w-full min-w-[280px]")}>
+          <tbody>
+            <tr>
+              <th
+                scope="row"
+                className={cn(SX.dataTh, "w-[min(36%,180px)] align-top")}
+              >
+                Exam &amp; subject
+              </th>
+              <td className={SX.dataTd}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  <select
+                    className={cn(SX.select, "w-full min-w-[140px] max-w-[200px]")}
+                    value={course}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setCourse(v);
+                      const next =
+                        v === "NEET"
+                          ? "Biology"
+                          : v === "JEE"
+                            ? "Physics"
+                            : "English";
+                      pickSubject(next);
+                    }}
+                    aria-label="Target exam"
+                  >
+                    {demoTargetOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    className="flex flex-wrap gap-1.5"
+                    role="group"
+                    aria-label="Subject for this demo"
+                  >
+                    {subs.map((s) => (
+                      <label
+                        key={s}
+                        className={cn(
+                          "inline-flex cursor-pointer items-center border px-2.5 py-1.5 text-[13px]",
+                          subj === s
+                            ? "border-[#1565c0] bg-[#e3f2fd] font-medium text-[#1565c0]"
+                            : "border-[#d0d0d0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="demo-subj"
+                          className="sr-only"
+                          checked={subj === s}
+                          onChange={() => pickSubject(s)}
+                        />
+                        {s}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className={cn(SX.dataTh, "align-middle")}>
+                Teacher
+              </th>
+              <td className={SX.dataTd}>
+                <select
+                  className={cn(SX.select, "w-full max-w-[320px]")}
+                  value={teacher}
+                  onChange={(e) => {
+                    setScheduleWarnMsg(null);
+                    setTeacher(e.target.value);
+                  }}
+                  aria-label="Teacher"
+                >
+                  <option value={defaultTeacher}>{defaultTeacher}</option>
+                  {FACULTY_SEED.map((f) => (
+                    <option key={f.id} value={f.name}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className={cn(SX.dataTh, "align-top")}>
+                When
+              </th>
+              <td className={SX.dataTd}>
+                <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
+                  <div className="min-w-0 space-y-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-[#757575]">
+                      India (IST)
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="date"
+                        min={todayStr}
+                        value={effectiveDemoDate}
+                        onChange={(e) => {
+                          setScheduleWarnMsg(null);
+                          const v = e.target.value;
+                          if (v >= todayStr) setDemoDate(v);
+                        }}
+                        className={cn(SX.input, "w-[148px]")}
+                        aria-invalid={!!scheduleWarnMsg}
+                        aria-label="Demo date (IST)"
+                      />
+                      <span className="text-[12px] text-[#9e9e9e]" aria-hidden={true}>
+                        at
+                      </span>
+                      <input
+                        type="time"
+                        value={demoTime}
+                        onChange={(e) => {
+                          setScheduleWarnMsg(null);
+                          setDemoTime(e.target.value);
+                        }}
+                        className={cn(SX.input, "w-[112px]")}
+                        aria-label="Start time India Standard Time"
+                      />
+                      <span className="text-[11px] font-medium text-[#616161]">
+                        IST
+                      </span>
+                    </div>
+                  </div>
+                  <div className="min-w-0 space-y-2 border-t border-[#e0e0e0] pt-4 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+                    <label
+                      htmlFor="demo-student-tz"
+                      className="block text-[10px] font-semibold uppercase tracking-wide text-[#757575]"
+                    >
+                      Student timezone
+                    </label>
+                    <select
+                      id="demo-student-tz"
+                      className={cn(SX.select, "w-full max-w-[320px]")}
+                      value={studentTimeZone}
+                      onChange={(e) => {
+                        setScheduleWarnMsg(null);
+                        setStudentTimeZone(e.target.value);
+                      }}
+                      aria-label="Student timezone for invite preview"
+                    >
+                      {STUDENT_TIMEZONE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    {studentLocalPreview ? (
+                      <div className="space-y-1">
+                        <p className="text-[12px] leading-snug text-[#424242]">
+                          <span className="text-[#757575]">Preview: </span>
+                          {studentLocalPreview}
+                        </p>
+                        <p className="text-[10px] leading-snug text-[#9e9e9e]">
+                          Demos are only saved if student local time is between{" "}
+                          <span className="font-medium text-[#757575]">6:00 am</span> and{" "}
+                          <span className="font-medium text-[#757575]">9:59 pm</span> in
+                          that timezone (and the slot is still in the future).
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#d0d0d0] bg-[#f5f7fa] px-2 py-2">
         <button type="button" className={SX.btnSecondary} onClick={onCancel}>
           Cancel
         </button>
         <button
           type="button"
-          className={cn(
-            "inline-flex items-center rounded-none border border-success bg-success px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#27692a]",
-          )}
+          className={SX.btnPrimary}
           onClick={() => {
-            setScheduleError(null);
-            const slot = new Date(`${effectiveDemoDate}T${demoTime}:00`);
+            setScheduleWarnMsg(null);
+            const slot = parseIstSlot(effectiveDemoDate, demoTime);
+            if (!slot) {
+              setScheduleWarnMsg("Enter a valid date and time.");
+              return;
+            }
             const now = new Date();
             if (slot.getTime() < now.getTime()) {
-              setScheduleError(
-                "That slot is already in the past. Pick a later time or a future date.",
+              setScheduleWarnMsg(buildPastSlotWarning(slot, studentTimeZone));
+              return;
+            }
+            if (isStudentLocalTimeOutsideContactWindow(slot, studentTimeZone)) {
+              setScheduleWarnMsg(
+                buildStudentLocalWindowWarning(slot, studentTimeZone),
               );
               return;
             }
             onSchedule({
               subject: subj,
               teacher,
-              date: format(parseISO(effectiveDemoDate), "dd/MM/yyyy"),
-              time: demoTime.includes(":")
-                ? `${demoTime} IST`
-                : demoTime,
+              studentTimeZone,
               status: "Scheduled",
+              isoDate: effectiveDemoDate,
+              timeHmIST: demoTime,
             });
           }}
         >
@@ -872,6 +1951,11 @@ function DemoForm({
         </button>
       </div>
     </div>
+    <DemoScheduleWarningDialog
+      message={scheduleWarnMsg}
+      onDismiss={dismissScheduleWarn}
+    />
+    </>
   );
 }
 
