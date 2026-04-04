@@ -242,7 +242,16 @@ export function IconMail({ className }: IconProps) {
 
 export function IconCheck({ className }: IconProps) {
   return (
-    <svg className={cn("h-3 w-3", className)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden>
+    <svg
+      className={cn("h-3 w-3 shrink-0", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       <path d="M20 6L9 17l-5-5" />
     </svg>
   );

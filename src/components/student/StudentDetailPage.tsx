@@ -18,12 +18,11 @@ import { formatLeadPhone } from "@/lib/phone-display";
 import { extrasForLead } from "@/lib/student-detail";
 import { SX } from "@/components/student/student-excel-ui";
 import {
-  IconBookMarked,
   IconCalendar,
   IconCalendarLarge,
   IconCheck,
   IconCloudUpload,
-  IconGlobe,
+  IconFileText,
   IconLink,
   IconMail,
   IconPencil,
@@ -219,12 +218,12 @@ export function StudentDetailPage({ lead }: Props) {
 
   const badgeClass =
     lead.rowTone === "interested"
-      ? "bg-[#e8f5e9] text-[#1b5e20] ring-1 ring-[#c8e6c9]"
+      ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-100"
       : lead.rowTone === "not_interested"
-        ? "bg-[#ffebee] text-[#b71c1c] ring-1 ring-[#ffcdd2]"
+        ? "bg-red-50 text-red-800 ring-1 ring-red-100"
         : lead.rowTone === "followup_later"
-          ? "bg-[#fff8e1] text-[#e65100] ring-1 ring-[#ffe082]"
-          : "bg-[#e3f2fd] text-[#0d47a1] ring-1 ring-[#bbdefb]";
+          ? "bg-amber-50 text-amber-900 ring-1 ring-amber-100"
+          : "bg-sky-50 text-sky-900 ring-1 ring-sky-100";
 
   const sheetTabLabel =
     lead.sheetTab === "ongoing"
@@ -245,7 +244,7 @@ export function StudentDetailPage({ lead }: Props) {
             <Link href="/" className={SX.studentHeroBack}>
               ← Back to Leads
             </Link>
-            <span className="text-[#dadce0]" aria-hidden>
+            <span className="text-slate-300" aria-hidden>
               |
             </span>
             <span className={SX.studentHeroMetaTop}>
@@ -258,7 +257,7 @@ export function StudentDetailPage({ lead }: Props) {
               <h1 className={SX.studentHeroName}>{lead.studentName}</h1>
               <span
                 className={cn(
-                  "shrink-0 rounded-none px-3 py-1 text-[12px] font-bold uppercase tracking-wide",
+                  "shrink-0 rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
                   badgeClass,
                 )}
               >
@@ -266,85 +265,88 @@ export function StudentDetailPage({ lead }: Props) {
               </span>
             </div>
 
-            <div
-              className={SX.studentHeroIconRow}
+            <dl
+              className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-100 pt-5 sm:grid-cols-4 sm:gap-x-8"
               role="group"
               aria-label="Primary contact details"
             >
-              <span className={SX.studentHeroIconItem}>
-                <IconPhone
-                  className={cn(SX.studentHeroIcon, "text-[#ec407a]")}
-                  aria-hidden
-                />
-                {lead.phone ? (
-                  <a
-                    href={`tel:${lead.phone}`}
-                    className="font-medium tabular-nums text-[#202124] hover:underline"
-                  >
-                    {formatLeadPhone(lead)}
-                  </a>
-                ) : (
-                  <span className="text-[#9aa0a6]">—</span>
-                )}
-              </span>
-              <span className={SX.studentHeroIconItem}>
-                <IconBookMarked
-                  className={cn(SX.studentHeroIcon, "text-[#1565c0]")}
-                  aria-hidden
-                />
-                <span className={SX.studentHeroCourseBadge}>
-                  {formatTargetExams(lead.targetExams)}
-                </span>
-              </span>
-              <span className={SX.studentHeroIconItem}>
-                <IconGlobe
-                  className={cn(SX.studentHeroIcon, "text-[#1565c0]")}
-                  aria-hidden
-                />
-                <span className="font-medium text-[#202124]">
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                  Phone
+                </dt>
+                <dd className="mt-1 text-[13px] font-medium tabular-nums text-slate-900">
+                  {lead.phone ? (
+                    <a
+                      href={`tel:${lead.phone}`}
+                      className="hover:text-primary hover:underline"
+                    >
+                      {formatLeadPhone(lead)}
+                    </a>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                  Target exams
+                </dt>
+                <dd className="mt-1">
+                  <span className={SX.studentHeroCourseBadge}>
+                    {formatTargetExams(lead.targetExams)}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                  Country
+                </dt>
+                <dd className="mt-1 text-[13px] font-medium text-slate-900">
                   {extras.country}
-                </span>
-              </span>
-              <span className={SX.studentHeroIconItem}>
-                <IconCalendar
-                  className={cn(SX.studentHeroIcon, "text-[#7e57c2]")}
-                  aria-hidden
-                />
-                <span className="font-medium tabular-nums text-[#202124]">
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                  Lead date
+                </dt>
+                <dd className="mt-1 text-[13px] font-medium tabular-nums text-slate-900">
                   {format(parseISO(lead.date), "dd/MM/yyyy")}
-                </span>
-              </span>
-            </div>
+                </dd>
+              </div>
+            </dl>
 
-            <p className={SX.studentHeroSubline}>
-              <span className={SX.studentHeroSubLabel}>Parent</span>{" "}
-              <span className={SX.studentHeroSubVal}>
-                {lead.parentName || "—"}
-              </span>
-              <span className="mx-2 text-[#dadce0]" aria-hidden>
-                ·
-              </span>
-              <span className={SX.studentHeroSubLabel}>Sheet</span>{" "}
-              <span className={SX.studentHeroSubVal}>{sheetTabLabel}</span>
-              <span className="mx-2 text-[#dadce0]" aria-hidden>
-                ·
-              </span>
-              <span className={SX.studentHeroSubLabel}>Pipeline</span>{" "}
-              <span className={SX.studentHeroSubVal}>
-                {pipeDone}/{PIPELINE_TOTAL}
-              </span>
-              <span className="mx-2 text-[#dadce0]" aria-hidden>
-                ·
-              </span>
-              <span className={SX.studentHeroSubLabel}>Email</span>{" "}
-              <a
-                href={`mailto:${extras.email}`}
-                className="font-medium text-[#1565c0] hover:underline"
-                title={extras.email}
-              >
-                {extras.email}
-              </a>
-            </p>
+            <div className={SX.studentHeroSubline}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>
+                  <span className={SX.studentHeroSubLabel}>Parent</span>{" "}
+                  <span className={SX.studentHeroSubVal}>
+                    {lead.parentName || "—"}
+                  </span>
+                </span>
+                <span className="hidden h-3 w-px bg-slate-200 sm:inline-block" aria-hidden />
+                <span>
+                  <span className={SX.studentHeroSubLabel}>Sheet</span>{" "}
+                  <span className={SX.studentHeroSubVal}>{sheetTabLabel}</span>
+                </span>
+                <span className="hidden h-3 w-px bg-slate-200 sm:inline-block" aria-hidden />
+                <span>
+                  <span className={SX.studentHeroSubLabel}>Pipeline</span>{" "}
+                  <span className={SX.studentHeroSubVal}>
+                    {pipeDone}/{PIPELINE_TOTAL}
+                  </span>
+                </span>
+              </div>
+              <p className="mt-2">
+                <span className={SX.studentHeroSubLabel}>Email</span>{" "}
+                <a
+                  href={`mailto:${extras.email}`}
+                  className="font-medium text-primary hover:underline"
+                  title={extras.email}
+                >
+                  {extras.email}
+                </a>
+              </p>
+            </div>
             {lead.followUpDate && (
               <p className="mt-2 text-[12px] font-medium text-[#e65100]">
                 Next follow-up:{" "}
@@ -383,8 +385,7 @@ export function StudentDetailPage({ lead }: Props) {
 
           <aside className={SX.asidePane}>
             <p className={SX.asideIntro}>
-              <span className="font-semibold text-slate-700">Workspace</span> — Notes,
-              activity, and calls stay with this student across every step.
+              Notes, activity, and calls for this lead.
             </p>
             <div className={SX.sidePanel}>
               <div className={SX.sideHead}>Notes</div>
@@ -411,97 +412,72 @@ export function StudentDetailPage({ lead }: Props) {
             <div className={SX.sidePanel}>
               <div className={SX.sideHead}>Activity</div>
               <div className={SX.sideBody}>
-                <table className={SX.dataTable}>
-                  <thead>
-                    <tr>
-                      <th className={SX.dataTh}>Event</th>
-                      <th className={SX.dataTh}>When</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      {
-                        StepIcon: IconMail,
-                        text: "Brochure sent (WhatsApp)",
-                        time: "2h ago",
-                      },
-                      {
-                        StepIcon: IconPhone,
-                        text: "Call — Interested",
-                        time: "1d ago",
-                      },
-                      {
-                        StepIcon: IconCalendar,
-                        text: "Demo scheduled · Biology",
-                        time: "2d ago",
-                      },
-                      {
-                        StepIcon: IconPlus,
-                        text: "Lead created",
-                        time: "3d ago",
-                      },
-                    ].map(({ StepIcon, text, time }, i) => (
-                      <tr key={i}>
-                        <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
-                          <span className="inline-flex items-start gap-2">
-                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-none border border-slate-200 bg-white text-primary">
-                              <StepIcon className="h-3 w-3" />
-                            </span>
-                            <span>{text}</span>
-                          </span>
-                        </td>
-                        <td
-                          className={cn(
-                            SX.dataTdMuted,
-                            i % 2 === 1 && SX.zebraRow,
-                          )}
-                        >
-                          {time}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <ul className="divide-y divide-slate-100 text-[13px]">
+                  {[
+                    {
+                      StepIcon: IconMail,
+                      text: "Brochure sent (WhatsApp)",
+                      time: "2h ago",
+                    },
+                    {
+                      StepIcon: IconPhone,
+                      text: "Call — Interested",
+                      time: "1d ago",
+                    },
+                    {
+                      StepIcon: IconCalendar,
+                      text: "Demo scheduled · Biology",
+                      time: "2d ago",
+                    },
+                    {
+                      StepIcon: IconPlus,
+                      text: "Lead created",
+                      time: "3d ago",
+                    },
+                  ].map(({ StepIcon, text, time }, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-3 py-2.5 first:pt-0 last:pb-0"
+                    >
+                      <StepIcon
+                        className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                        aria-hidden
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="leading-snug text-slate-800">{text}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">{time}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 
             <div className={SX.sidePanel}>
               <div className={SX.sideHead}>Call history</div>
               <div className={SX.sideBody}>
-                <table className={SX.dataTable}>
-                  <thead>
-                    <tr>
-                      <th className={SX.dataTh}>Date</th>
-                      <th className={SX.dataTh}>Outcome</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className={SX.dataTd}>02 Apr 2026</td>
-                      <td className={SX.dataTd}>
-                        <span className="rounded-none bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">
-                          Interested
-                        </span>
-                        <p className="mt-1 text-[12px] italic text-slate-500">
-                          Discussed fee plan.
-                        </p>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className={cn(SX.dataTd, SX.zebraRow)}>28 Mar 2026</td>
-                      <td className={cn(SX.dataTd, SX.zebraRow)}>
-                        <span className="rounded-none bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
-                          No answer
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <ul className="divide-y divide-slate-100 text-[13px]">
+                  <li className="flex flex-col gap-1 py-3 first:pt-0">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="tabular-nums text-slate-600">02 Apr 2026</span>
+                      <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                        Interested
+                      </span>
+                    </div>
+                    <p className="text-[12px] text-slate-500">Discussed fee plan.</p>
+                  </li>
+                  <li className="flex flex-wrap items-baseline justify-between gap-2 py-3">
+                    <span className="tabular-nums text-slate-600">28 Mar 2026</span>
+                    <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                      No answer
+                    </span>
+                  </li>
+                </ul>
                 <button
                   type="button"
                   className={cn(
                     SX.btnGhost,
-                    "mt-3 w-full justify-center rounded-none border border-dashed border-slate-300 py-2.5 text-slate-700",
+                    "mt-4 w-full justify-center border border-dashed border-slate-200 py-2.5 text-slate-600 hover:bg-slate-50",
                   )}
                   onClick={() => setCallOpen((v) => !v)}
                 >
@@ -509,7 +485,7 @@ export function StudentDetailPage({ lead }: Props) {
                 </button>
                 {callOpen && (
                   <form
-                    className="mt-3 space-y-2 rounded-none border border-slate-200 bg-slate-50/80 p-3 text-[13px]"
+                    className="mt-3 space-y-2 border border-slate-200 bg-slate-50/80 p-3 text-[13px]"
                     onSubmit={(e) => {
                       e.preventDefault();
                       setCallOpen(false);
@@ -553,10 +529,10 @@ function Stepper({
     STEPS.find((s) => s.n === activeStep)?.label ?? "—";
 
   return (
-    <div className="border-b border-[#d0d0d0] bg-white">
+    <div className="border-b border-slate-100 bg-white">
       <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-4">
         <div
-          className="flex min-w-0 flex-1 items-stretch gap-px overflow-x-auto border border-slate-200 bg-slate-200 [scrollbar-width:thin]"
+          className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-md bg-slate-200/90 p-1 shadow-inner shadow-slate-900/[0.05] [scrollbar-width:thin]"
           role="tablist"
           aria-label={`Pipeline: ${doneCount} of ${PIPELINE_TOTAL} done. Open step below.`}
         >
@@ -580,38 +556,38 @@ function Stepper({
                 }
                 onClick={() => onStepSelect(s.n)}
                 className={cn(
-                  "flex min-w-[4.25rem] flex-1 items-center justify-center gap-1.5 px-2 py-1.5 text-left transition-colors sm:min-w-0 sm:px-2.5",
+                  "flex min-h-9 min-w-[4.5rem] flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-[12px] font-medium transition-all sm:min-w-0 sm:px-2.5",
                   isActive &&
-                    "bg-white font-semibold text-primary ring-2 ring-inset ring-primary/35",
+                    "bg-white font-semibold text-primary shadow-sm ring-1 ring-slate-200/70",
                   !isActive &&
                     isDone &&
-                    "bg-emerald-50/90 text-emerald-900 hover:bg-emerald-100/90",
+                    "text-emerald-900 hover:bg-white/80",
                   !isActive &&
                     !isDone &&
-                    "bg-slate-50 text-slate-600 hover:bg-slate-100",
+                    "text-slate-700 hover:bg-white/70",
                 )}
               >
                 <span
                   className={cn(
-                    "flex h-5 w-5 shrink-0 items-center justify-center border text-[10px] font-bold tabular-nums leading-none",
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold tabular-nums leading-none transition-colors",
                     isDone &&
-                      "border-emerald-600 bg-emerald-600 text-white",
+                      "bg-emerald-600 text-white shadow-sm shadow-emerald-900/20",
                     !isDone &&
                       isActive &&
-                      "border-primary bg-primary text-white",
+                      "border-2 border-primary bg-white text-primary shadow-sm ring-2 ring-primary/20",
                     !isDone &&
                       !isActive &&
-                      "border-slate-300 bg-white text-slate-500",
+                      "border border-slate-300 bg-white text-slate-700",
                   )}
                   aria-hidden
                 >
                   {isDone ? (
-                    <IconCheck className="h-3 w-3" />
+                    <IconCheck className="h-3.5 w-3.5 text-white" />
                   ) : (
                     s.n
                   )}
                 </span>
-                <span className="min-w-0 truncate text-[11px] sm:text-[12px]">
+                <span className="min-w-0 truncate sm:text-[13px]">
                   {s.label}
                 </span>
               </button>
@@ -620,23 +596,23 @@ function Stepper({
         </div>
 
         <div
-          className="flex shrink-0 items-center justify-between gap-2 sm:flex-col sm:items-end sm:border-l sm:border-slate-200 sm:pl-3 sm:pt-0"
+          className="flex shrink-0 items-center justify-between gap-2.5 sm:flex-col sm:items-end sm:border-l sm:border-slate-200 sm:pl-3"
           title={`${doneCount} of ${PIPELINE_TOTAL} onboarding steps completed`}
         >
-          <p className="min-w-0 text-[11px] leading-tight text-slate-600 sm:text-right">
+          <p className="min-w-0 text-[11px] leading-tight text-slate-600 sm:text-right sm:text-xs">
             <span className="sr-only">Currently viewing: </span>
-            <span className="font-semibold text-slate-800">{activeLabel}</span>
-            <span className="text-slate-400" aria-hidden>
+            <span className="font-semibold text-slate-900">{activeLabel}</span>
+            <span className="text-slate-300" aria-hidden>
               {" "}
               ·{" "}
             </span>
-            <span className="tabular-nums text-slate-600">
-              <strong className="text-slate-900">{doneCount}</strong>/
+            <span className="tabular-nums text-slate-700">
+              <span className="font-bold text-slate-900">{doneCount}</span>/
               {PIPELINE_TOTAL}
             </span>
           </p>
           <div
-            className="relative h-1.5 w-full min-w-[5rem] max-w-[140px] overflow-hidden border border-slate-200 bg-slate-100 sm:max-w-[160px]"
+            className="relative h-1.5 w-full min-w-[5.5rem] max-w-[140px] overflow-hidden rounded-full bg-slate-200 sm:max-w-[160px]"
             role="progressbar"
             aria-valuenow={doneCount}
             aria-valuemin={0}
@@ -644,7 +620,7 @@ function Stepper({
             aria-label={`${doneCount} of ${PIPELINE_TOTAL} steps completed`}
           >
             <div
-              className="h-full bg-emerald-500 transition-[width] duration-300 ease-out"
+              className="h-full rounded-full bg-emerald-500 shadow-sm shadow-emerald-900/20 transition-[width] duration-300 ease-out"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -764,11 +740,10 @@ function DemoSection({ lead }: { lead: Lead }) {
       <div className={SX.sectionHead}>
         <div className="min-w-0 flex-1">
           <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
-          <p className="mt-0.5 max-w-[560px] text-[11px] font-normal leading-snug text-[#757575]">
-            One row per trial. You schedule in{" "}
-            <span className="font-medium text-[#616161]">IST</span>;{" "}
-            <span className="font-medium text-[#616161]">Student time</span> shows their
-            local date and time for invites.
+          <p className="mt-0.5 max-w-xl text-xs leading-snug text-slate-500">
+            Schedule in <span className="font-medium text-slate-600">IST</span>.{" "}
+            <span className="font-medium text-slate-600">Student time</span> is their
+            local date &amp; time on the invite.
           </p>
         </div>
         {showAddInHeader ? (
@@ -787,13 +762,13 @@ function DemoSection({ lead }: { lead: Lead }) {
       </div>
       <div className={SX.sectionBody}>
       {rows.length === 0 && !expanded ? (
-        <div className="flex flex-col items-center justify-center gap-3 border border-dashed border-[#b0bec5] bg-[#fafbfc] px-4 py-8 text-center">
-          <IconCalendarLarge />
-          <div className="space-y-1">
-            <p className="text-[13px] font-semibold text-[#37474f]">
+        <div className="flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/60 px-3 py-5 text-center">
+          <IconCalendarLarge className="h-10 w-10 text-slate-300" />
+          <div className="space-y-0.5">
+            <p className="text-[13px] font-semibold text-slate-800">
               No demo scheduled yet
             </p>
-            <p className="mx-auto max-w-[300px] text-[12px] leading-relaxed text-[#78909c]">
+            <p className="mx-auto max-w-[280px] text-[12px] leading-snug text-slate-500">
               Use Create demo to add date, time, and teacher. Everything stays in
               the table below.
             </p>
@@ -977,10 +952,10 @@ function DemoSection({ lead }: { lead: Lead }) {
               })}
             </tbody>
           </table>
-          <p className="mt-2.5 text-[11px] leading-relaxed text-[#78909c]">
+          <p className="mt-2 text-xs text-slate-500">
             {!expanded
-              ? "More subjects? Use Add another demo in the header."
-              : "Finish the form below to add this row."}
+              ? "More demos: use Add another demo in the header."
+              : "Complete the form below to add a row."}
           </p>
           {expanded && (
             <DemoForm
@@ -1724,22 +1699,23 @@ function DemoForm({
   return (
     <>
     <div
-      className="mt-3 overflow-hidden border border-[#d0d0d0] bg-white"
+      className="mt-2 overflow-hidden border-t border-slate-100 pt-2"
       role="form"
       aria-label="Schedule demo class"
     >
-      <div className={SX.sectionHead}>
+      <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
         <div className="min-w-0 flex-1">
           <h3 className={SX.sectionTitle}>Schedule a trial class</h3>
-          <p className="mt-0.5 text-[11px] leading-snug text-[#757575]">
-            Schedule in <span className="font-medium text-[#424242]">IST</span> (left).
+          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+            Schedule in <span className="font-medium text-slate-700">IST</span> (left).
             Set the student&apos;s timezone (right) so invites show the right local time
             — default follows country ({lead.country}).
           </p>
         </div>
       </div>
 
-      <div className="overflow-x-auto border-t border-[#d0d0d0]">
+      <div className="overflow-hidden rounded-sm border border-slate-200">
+        <div className="overflow-x-auto">
         <table className={cn(SX.dataTable, "w-full min-w-[280px]")}>
           <tbody>
             <tr>
@@ -1910,45 +1886,46 @@ function DemoForm({
             </tr>
           </tbody>
         </table>
-      </div>
+        </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#d0d0d0] bg-[#f5f7fa] px-2 py-2">
-        <button type="button" className={SX.btnSecondary} onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className={SX.btnPrimary}
-          onClick={() => {
-            setScheduleWarnMsg(null);
-            const slot = parseIstSlot(effectiveDemoDate, demoTime);
-            if (!slot) {
-              setScheduleWarnMsg("Enter a valid date and time.");
-              return;
-            }
-            const now = new Date();
-            if (slot.getTime() < now.getTime()) {
-              setScheduleWarnMsg(buildPastSlotWarning(slot, studentTimeZone));
-              return;
-            }
-            if (isStudentLocalTimeOutsideContactWindow(slot, studentTimeZone)) {
-              setScheduleWarnMsg(
-                buildStudentLocalWindowWarning(slot, studentTimeZone),
-              );
-              return;
-            }
-            onSchedule({
-              subject: subj,
-              teacher,
-              studentTimeZone,
-              status: "Scheduled",
-              isoDate: effectiveDemoDate,
-              timeHmIST: demoTime,
-            });
-          }}
-        >
-          Schedule demo
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
+          <button type="button" className={SX.btnSecondary} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={SX.btnPrimary}
+            onClick={() => {
+              setScheduleWarnMsg(null);
+              const slot = parseIstSlot(effectiveDemoDate, demoTime);
+              if (!slot) {
+                setScheduleWarnMsg("Enter a valid date and time.");
+                return;
+              }
+              const now = new Date();
+              if (slot.getTime() < now.getTime()) {
+                setScheduleWarnMsg(buildPastSlotWarning(slot, studentTimeZone));
+                return;
+              }
+              if (isStudentLocalTimeOutsideContactWindow(slot, studentTimeZone)) {
+                setScheduleWarnMsg(
+                  buildStudentLocalWindowWarning(slot, studentTimeZone),
+                );
+                return;
+              }
+              onSchedule({
+                subject: subj,
+                teacher,
+                studentTimeZone,
+                status: "Scheduled",
+                isoDate: effectiveDemoDate,
+                timeHmIST: demoTime,
+              });
+            }}
+          >
+            Schedule demo
+          </button>
+        </div>
       </div>
     </div>
     <DemoScheduleWarningDialog
@@ -1967,15 +1944,15 @@ function BrochureSection() {
       <div className={SX.sectionHead}>
         <div>
           <h2 className={SX.sectionTitle}>Step 2 · Course brochure</h2>
-          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
-            Upload or generate a PDF, then send to the student from here.
+          <p className="mt-1 max-w-xl text-xs text-slate-500">
+            Upload or generate a PDF, then send to the family.
           </p>
         </div>
       </div>
       <div className={SX.sectionBody}>
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-[#d0d0d0] bg-[#fafafa] px-4 text-center text-[13px] text-[#616161]">
+          <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600">
             <input
               type="file"
               accept=".pdf,image/*"
@@ -1984,7 +1961,7 @@ function BrochureSection() {
             />
             <IconCloudUpload />
             <span>Upload PDF or image</span>
-            <span className="text-[12px] text-[#9e9e9e]">PDF, JPG, PNG</span>
+            <span className="text-[12px] text-slate-400">PDF, JPG, PNG</span>
           </label>
           {file && (
             <p className="mt-2 text-[13px]">
@@ -2000,7 +1977,7 @@ function BrochureSection() {
           )}
         </div>
         <div>
-          <label className="text-[13px] font-semibold text-[#212121]">Generate from performance notes</label>
+          <label className="text-[13px] font-semibold text-slate-900">Generate from performance notes</label>
           <textarea
             rows={4}
             className={cn(SX.textarea, "mt-2")}
@@ -2021,7 +1998,7 @@ function BrochureSection() {
           )}
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-[#e8e8e8] pt-4">
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
         <button type="button" className="rounded-none bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]">
           Send via WhatsApp
         </button>
@@ -2150,8 +2127,8 @@ function FeeSection({ lead }: { lead: Lead }) {
       <div className={SX.sectionHead}>
         <div className="min-w-0 flex-1">
           <h2 className={SX.sectionTitle}>Step 3 · Fee structure</h2>
-          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
-            Scholarship and payment split for this student.
+          <p className="mt-1 max-w-xl text-xs text-slate-500">
+            Scholarship, final fee, and installments.
           </p>
         </div>
         {!installmentEnabled && (
@@ -2169,7 +2146,7 @@ function FeeSection({ lead }: { lead: Lead }) {
         )}
       </div>
       <div className={SX.sectionBody}>
-        <div className="overflow-auto rounded-none border border-[#d0d0d0] bg-white">
+        <div className="overflow-auto border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.02]">
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
               <tr>
@@ -2228,7 +2205,7 @@ function FeeSection({ lead }: { lead: Lead }) {
         </div>
 
         {installmentEnabled && (
-          <div className="mt-3 overflow-hidden border border-[#d0d0d0] bg-white">
+          <div className="mt-3 overflow-hidden border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.02]">
             <div className={SX.sectionHead}>
               <h3 className={SX.sectionTitle}>Installments</h3>
               <button
@@ -2425,34 +2402,44 @@ function ScheduleSection({
       <div className={SX.sectionHead}>
         <div className="min-w-0 flex-1">
           <h2 className={SX.sectionTitle}>Step 4 · Class schedule</h2>
-          <p className="mt-0.5 max-w-[480px] text-[11px] text-[#757575]">
-            Switch table vs week view. Confirmed classes appear in both.
+          <p className="mt-1 max-w-xl text-xs text-slate-500">
+            Table or week view for confirmed classes.
           </p>
         </div>
-        <div className="inline-flex shrink-0 rounded-none border border-[#d0d0d0] bg-white p-px text-[13px]">
+        <div
+          className="inline-flex shrink-0 gap-0.5 rounded-md border border-slate-200 bg-slate-200/80 p-1 text-[12px] shadow-inner shadow-slate-900/[0.05]"
+          role="tablist"
+          aria-label="Schedule view"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={view === "table"}
             className={cn(
-              "rounded-none px-3 py-1 font-medium",
+              "inline-flex min-h-9 min-w-[5rem] items-center justify-center gap-1.5 rounded-sm px-2.5 py-1.5 font-medium transition-all",
               view === "table"
-                ? "bg-[#1565c0] text-white"
-                : "text-[#616161] hover:bg-[#f5f5f5]",
+                ? "bg-white font-semibold text-primary shadow-sm ring-1 ring-slate-200/80"
+                : "text-slate-600 hover:bg-white/60 hover:text-slate-900",
             )}
             onClick={() => onViewChange("table")}
           >
-            Table
+            <IconFileText className="h-4 w-4 shrink-0 text-current [&_path]:stroke-[2]" />
+            <span className="sm:text-[13px]">Table</span>
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={view === "calendar"}
             className={cn(
-              "rounded-none px-3 py-1 font-medium",
+              "inline-flex min-h-9 min-w-[5rem] items-center justify-center gap-1.5 rounded-sm px-2.5 py-1.5 font-medium transition-all",
               view === "calendar"
-                ? "bg-[#1565c0] text-white"
-                : "text-[#616161] hover:bg-[#f5f5f5]",
+                ? "bg-white font-semibold text-primary shadow-sm ring-1 ring-slate-200/80"
+                : "text-slate-600 hover:bg-white/60 hover:text-slate-900",
             )}
             onClick={() => onViewChange("calendar")}
           >
-            Calendar
+            <IconCalendar className="h-4 w-4 shrink-0 text-current [&_path]:stroke-[2] [&_rect]:stroke-[2]" />
+            <span className="sm:text-[13px]">Calendar</span>
           </button>
         </div>
       </div>
