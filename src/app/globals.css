@@ -10,9 +10,9 @@
   --color-surface: #ffffff;
   --color-text: #0f172a;
   --color-text-secondary: #64748b;
-  --radius: 8px;
-  --radius-card: 14px;
-  --radius-badge: 6px;
+  --radius: 0px;
+  --radius-card: 0px;
+  --radius-badge: 0px;
   --sidebar-collapsed: 72px;
   --sidebar-expanded: 220px;
   --header-h: 64px;

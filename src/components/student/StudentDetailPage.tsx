@@ -36,7 +36,11 @@ type Props = { lead: Lead };
 export function StudentDetailPage({ lead }: Props) {
   const extras = useMemo(() => extrasForLead(lead), [lead]);
   const completed = lead.pipelineSteps;
-  const [activeStep, setActiveStep] = useState(1);
+  const [activeStep, setActiveStep] = useState(() => {
+    const c = lead.pipelineSteps;
+    if (c >= PIPELINE_TOTAL) return PIPELINE_TOTAL;
+    return Math.min(Math.max(c, 0) + 1, PIPELINE_TOTAL);
+  });
   const [notes, setNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
@@ -85,7 +89,7 @@ export function StudentDetailPage({ lead }: Props) {
               <h1 className={SX.studentHeroName}>{lead.studentName}</h1>
               <span
                 className={cn(
-                  "shrink-0 rounded-md px-3 py-1 text-[12px] font-bold uppercase tracking-wide",
+                  "shrink-0 rounded-none px-3 py-1 text-[12px] font-bold uppercase tracking-wide",
                   badgeClass,
                 )}
               >
@@ -192,7 +196,12 @@ export function StudentDetailPage({ lead }: Props) {
 
         <div className={SX.mainSplit}>
           <div className={SX.mainPane}>
-            <div className="min-h-0 flex-1">
+            <div
+              className="min-h-0 flex-1"
+              role="tabpanel"
+              id={`pipeline-panel-${activeStep}`}
+              aria-labelledby={`pipeline-tab-${activeStep}`}
+            >
               {activeStep === 1 && <DemoSection lead={lead} />}
               {activeStep === 2 && <BrochureSection />}
               {activeStep === 3 && <FeeSection lead={lead} />}
@@ -269,7 +278,7 @@ export function StudentDetailPage({ lead }: Props) {
                       <tr key={i}>
                         <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
                           <span className="inline-flex items-start gap-2">
-                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-primary">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-none border border-slate-200 bg-white text-primary">
                               <StepIcon className="h-3 w-3" />
                             </span>
                             <span>{text}</span>
@@ -304,7 +313,7 @@ export function StudentDetailPage({ lead }: Props) {
                     <tr>
                       <td className={SX.dataTd}>02 Apr 2026</td>
                       <td className={SX.dataTd}>
-                        <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">
+                        <span className="rounded-none bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">
                           Interested
                         </span>
                         <p className="mt-1 text-[12px] italic text-slate-500">
@@ -315,7 +324,7 @@ export function StudentDetailPage({ lead }: Props) {
                     <tr>
                       <td className={cn(SX.dataTd, SX.zebraRow)}>28 Mar 2026</td>
                       <td className={cn(SX.dataTd, SX.zebraRow)}>
-                        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+                        <span className="rounded-none bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
                           No answer
                         </span>
                       </td>
@@ -326,7 +335,7 @@ export function StudentDetailPage({ lead }: Props) {
                   type="button"
                   className={cn(
                     SX.btnGhost,
-                    "mt-3 w-full justify-center rounded-lg border border-dashed border-slate-300 py-2.5 text-slate-700",
+                    "mt-3 w-full justify-center rounded-none border border-dashed border-slate-300 py-2.5 text-slate-700",
                   )}
                   onClick={() => setCallOpen((v) => !v)}
                 >
@@ -334,7 +343,7 @@ export function StudentDetailPage({ lead }: Props) {
                 </button>
                 {callOpen && (
                   <form
-                    className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-[13px]"
+                    className="mt-3 space-y-2 rounded-none border border-slate-200 bg-slate-50/80 p-3 text-[13px]"
                     onSubmit={(e) => {
                       e.preventDefault();
                       setCallOpen(false);
@@ -374,83 +383,105 @@ function Stepper({
 }) {
   const doneCount = Math.min(Math.max(completed, 0), PIPELINE_TOTAL);
   const pct = (doneCount / PIPELINE_TOTAL) * 100;
+  const activeLabel =
+    STEPS.find((s) => s.n === activeStep)?.label ?? "—";
 
   return (
-    <div className="border-b border-slate-200/90 bg-gradient-to-b from-white to-slate-50/40 px-4 py-5 sm:px-6">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div
-            className="flex flex-wrap items-center gap-x-1 gap-y-2"
-            role="tablist"
-            aria-label="Pipeline steps"
-          >
-            {STEPS.map((s, i) => {
-              const done = completed >= s.n;
-              const selected = activeStep === s.n;
-              const last = i === STEPS.length - 1;
-              return (
-                <Fragment key={s.id}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    title={`Step ${s.n}: ${s.label}`}
-                    onClick={() => onStepSelect(s.n)}
-                    className={cn(
-                      "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-2 text-left text-[12px] font-semibold shadow-sm transition-all duration-200",
-                      done &&
-                        "border-emerald-200/90 bg-emerald-50/95 text-emerald-900 ring-1 ring-emerald-100",
-                      !done &&
-                        selected &&
-                        "border-primary/40 bg-white text-slate-800 ring-2 ring-primary/25",
-                      !done &&
-                        !selected &&
-                        "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50/80",
-                    )}
-                  >
-                    {done ? (
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-900/15">
-                        <IconCheck className="h-3.5 w-3.5" />
-                      </span>
-                    ) : (
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-[11px] font-bold tabular-nums text-slate-500">
-                        {s.n}
-                      </span>
-                    )}
-                    <span className="min-w-0 truncate sm:max-w-[9rem]">
-                      {s.label}
-                    </span>
-                  </button>
-                  {!last && (
-                    <span
-                      className="hidden px-0.5 text-slate-300 sm:inline"
-                      aria-hidden
-                    >
-                      ›
-                    </span>
+    <div className="border-b border-[#d0d0d0] bg-white">
+      <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-4">
+        <div
+          className="flex min-w-0 flex-1 items-stretch gap-px overflow-x-auto border border-slate-200 bg-slate-200 [scrollbar-width:thin]"
+          role="tablist"
+          aria-label={`Pipeline: ${doneCount} of ${PIPELINE_TOTAL} done. Open step below.`}
+        >
+          {STEPS.map((s) => {
+            const isDone = completed >= s.n;
+            const isActive = activeStep === s.n;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                id={`pipeline-tab-${s.n}`}
+                role="tab"
+                aria-selected={isActive}
+                aria-current={isActive ? "step" : undefined}
+                title={
+                  isDone
+                    ? `${s.label} — completed`
+                    : isActive
+                      ? `${s.label} — open (in progress)`
+                      : `${s.label} — not started`
+                }
+                onClick={() => onStepSelect(s.n)}
+                className={cn(
+                  "flex min-w-[4.25rem] flex-1 items-center justify-center gap-1.5 px-2 py-1.5 text-left transition-colors sm:min-w-0 sm:px-2.5",
+                  isActive &&
+                    "bg-white font-semibold text-primary ring-2 ring-inset ring-primary/35",
+                  !isActive &&
+                    isDone &&
+                    "bg-emerald-50/90 text-emerald-900 hover:bg-emerald-100/90",
+                  !isActive &&
+                    !isDone &&
+                    "bg-slate-50 text-slate-600 hover:bg-slate-100",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center border text-[10px] font-bold tabular-nums leading-none",
+                    isDone &&
+                      "border-emerald-600 bg-emerald-600 text-white",
+                    !isDone &&
+                      isActive &&
+                      "border-primary bg-primary text-white",
+                    !isDone &&
+                      !isActive &&
+                      "border-slate-300 bg-white text-slate-500",
                   )}
-                </Fragment>
-              );
-            })}
-          </div>
-          <p className="shrink-0 text-sm text-slate-600 lg:text-right">
-            <strong className="text-lg font-bold tabular-nums text-slate-900">
-              {doneCount}
-            </strong>
-            <span className="text-slate-500"> of {PIPELINE_TOTAL} completed</span>
-          </p>
+                  aria-hidden
+                >
+                  {isDone ? (
+                    <IconCheck className="h-3 w-3" />
+                  ) : (
+                    s.n
+                  )}
+                </span>
+                <span className="min-w-0 truncate text-[11px] sm:text-[12px]">
+                  {s.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-slate-200/90 shadow-inner">
+        <div
+          className="flex shrink-0 items-center justify-between gap-2 sm:flex-col sm:items-end sm:border-l sm:border-slate-200 sm:pl-3 sm:pt-0"
+          title={`${doneCount} of ${PIPELINE_TOTAL} onboarding steps completed`}
+        >
+          <p className="min-w-0 text-[11px] leading-tight text-slate-600 sm:text-right">
+            <span className="sr-only">Currently viewing: </span>
+            <span className="font-semibold text-slate-800">{activeLabel}</span>
+            <span className="text-slate-400" aria-hidden>
+              {" "}
+              ·{" "}
+            </span>
+            <span className="tabular-nums text-slate-600">
+              <strong className="text-slate-900">{doneCount}</strong>/
+              {PIPELINE_TOTAL}
+            </span>
+          </p>
           <div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm transition-[width] duration-500 ease-out"
-            style={{ width: `${pct}%` }}
+            className="relative h-1.5 w-full min-w-[5rem] max-w-[140px] overflow-hidden border border-slate-200 bg-slate-100 sm:max-w-[160px]"
             role="progressbar"
             aria-valuenow={doneCount}
             aria-valuemin={0}
             aria-valuemax={PIPELINE_TOTAL}
-            aria-label={`${doneCount} of ${PIPELINE_TOTAL} pipeline steps completed`}
-          />
+            aria-label={`${doneCount} of ${PIPELINE_TOTAL} steps completed`}
+          >
+            <div
+              className="h-full bg-emerald-500 transition-[width] duration-300 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -580,7 +611,7 @@ function DemoSection({ lead }: { lead: Lead }) {
                   </td>
                   <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow, "text-[#1565c0]")}>
                     Edit · Delete ·{" "}
-                    <button type="button" className="rounded-[2px] bg-[#e3f2fd] px-2 py-0.5 text-[12px] font-medium">
+                    <button type="button" className="rounded-none bg-[#e3f2fd] px-2 py-0.5 text-[12px] font-medium">
                       Send link
                     </button>
                   </td>
@@ -665,7 +696,7 @@ function DemoForm({
 
   return (
     <div
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-slate-900/[0.04] sm:p-5"
+      className="rounded-none border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-slate-900/[0.04] sm:p-5"
       role="form"
       aria-label="Schedule demo class"
     >
@@ -736,7 +767,7 @@ function DemoForm({
             <label
               key={s}
               className={cn(
-                "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[13px] transition-colors",
+                "inline-flex cursor-pointer items-center gap-2 rounded-none border px-3 py-2 text-[13px] transition-colors",
                 subj === s
                   ? "border-primary bg-sky-50 font-medium text-primary ring-1 ring-primary/20"
                   : "border-slate-200 bg-slate-50/80 text-slate-700 hover:border-slate-300",
@@ -798,18 +829,12 @@ function DemoForm({
 
       {scheduleError && (
         <p
-          className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800"
+          className="mt-3 rounded-none border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800"
           role="alert"
         >
           {scheduleError}
         </p>
       )}
-
-      <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50/80 px-3 py-2.5 text-[12px] leading-snug text-slate-700">
-        <span className="font-semibold text-sky-900">Timezone tip · </span>
-        Example: 10:00 IST ≈ 12:30 SGT for Singapore — adjust comms for{" "}
-        <strong>{lead.country}</strong>.
-      </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
         <button type="button" className={SX.btnSecondary} onClick={onCancel}>
@@ -818,7 +843,7 @@ function DemoForm({
         <button
           type="button"
           className={cn(
-            "inline-flex items-center rounded-lg border border-success bg-success px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#27692a]",
+            "inline-flex items-center rounded-none border border-success bg-success px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#27692a]",
           )}
           onClick={() => {
             setScheduleError(null);
@@ -911,7 +936,7 @@ function BrochureSection() {
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-[#e8e8e8] pt-4">
-        <button type="button" className="rounded-[2px] bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]">
+        <button type="button" className="rounded-none bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]">
           Send via WhatsApp
         </button>
         <button type="button" className={SX.btnPrimary}>
@@ -953,7 +978,7 @@ function FeeSection({ lead }: { lead: Lead }) {
         </div>
       </div>
       <div className={SX.sectionBody}>
-        <div className="overflow-auto rounded-lg border border-slate-200">
+        <div className="overflow-auto rounded-none border border-slate-200">
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
               <tr>
@@ -1029,7 +1054,7 @@ function FeeSection({ lead }: { lead: Lead }) {
           </p>
         )}
 
-        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+        <div className="mt-5 rounded-none border border-slate-200 bg-slate-50/80 p-4">
           <label className="text-[13px] font-semibold text-slate-800">
             Convert to student&apos;s currency
           </label>
@@ -1059,7 +1084,7 @@ function FeeSection({ lead }: { lead: Lead }) {
           </span>
           <button
             type="button"
-            className="rounded-lg bg-[#25d366] px-3 py-2 text-[13px] font-medium text-white shadow-sm hover:bg-[#1fb855]"
+            className="rounded-none bg-[#25d366] px-3 py-2 text-[13px] font-medium text-white shadow-sm hover:bg-[#1fb855]"
           >
             WhatsApp
           </button>
@@ -1099,11 +1124,11 @@ function ScheduleSection({
             Switch table vs week view. Confirmed classes appear in both.
           </p>
         </div>
-        <div className="inline-flex shrink-0 rounded-[2px] border border-[#d0d0d0] bg-white p-px text-[13px]">
+        <div className="inline-flex shrink-0 rounded-none border border-[#d0d0d0] bg-white p-px text-[13px]">
           <button
             type="button"
             className={cn(
-              "rounded-[1px] px-3 py-1 font-medium",
+              "rounded-none px-3 py-1 font-medium",
               view === "table"
                 ? "bg-[#1565c0] text-white"
                 : "text-[#616161] hover:bg-[#f5f5f5]",
@@ -1115,7 +1140,7 @@ function ScheduleSection({
           <button
             type="button"
             className={cn(
-              "rounded-[1px] px-3 py-1 font-medium",
+              "rounded-none px-3 py-1 font-medium",
               view === "calendar"
                 ? "bg-[#1565c0] text-white"
                 : "text-[#616161] hover:bg-[#f5f5f5]",
@@ -1196,7 +1221,7 @@ function ScheduleSection({
                   >
                     {h === 9 && c === 0 && (
                       <div
-                        className="rounded-[2px] bg-[#2e7d32] px-1 py-0.5 text-[10px] font-medium text-white"
+                        className="rounded-none bg-[#2e7d32] px-1 py-0.5 text-[10px] font-medium text-white"
                         title="Biology · Dr. Meena · 90 min"
                       >
                         Biology
@@ -1211,7 +1236,7 @@ function ScheduleSection({
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#e8e8e8] pt-3">
         <span className="text-[13px] font-semibold">Send schedule</span>
-        <button type="button" className="rounded-[2px] bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]">
+        <button type="button" className="rounded-none bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]">
           WhatsApp
         </button>
         <button type="button" className={SX.btnPrimary}>

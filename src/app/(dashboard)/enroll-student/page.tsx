@@ -64,7 +64,7 @@ export default function EnrollStudentPage() {
           ).map(([label, val, accent]) => (
             <div
               key={label}
-              className="rounded-xl border border-slate-200/90 bg-slate-50/50 px-3 py-3 text-center shadow-sm"
+              className="rounded-none border border-slate-200/90 bg-slate-50/50 px-3 py-3 text-center shadow-sm"
             >
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 {label}
@@ -122,7 +122,7 @@ export default function EnrollStudentPage() {
                     {r.name}
                   </td>
                   <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
-                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[12px] font-medium text-primary">
+                    <span className="rounded-none bg-sky-50 px-2 py-0.5 text-[12px] font-medium text-primary">
                       {r.course}
                     </span>
                   </td>
@@ -141,7 +141,7 @@ export default function EnrollStudentPage() {
                   <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
                     <span
                       className={cn(
-                        "rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                        "rounded-none px-2 py-0.5 text-[11px] font-semibold",
                         r.fee === "Paid"
                           ? "bg-emerald-50 text-emerald-800"
                           : "bg-amber-50 text-amber-900",

@@ -33,6 +33,8 @@ const ACTION_MENU_W = 180;
 
 type ActionMenuState = { leadId: string; top: number; left: number } | null;
 
+const EMPTY_SELECTED = new Set<string>();
+
 const DEFAULT_WIDTHS: Record<string, number> = {
   idx: 52,
   date: 118,
@@ -52,10 +54,12 @@ type EditTarget = { leadId: string; field: ColKey | "pipeline" } | null;
 type Props = {
   leads: Lead[];
   onUpdateLead: (id: string, patch: Partial<Lead>) => void;
-  selectedIds: Set<string>;
-  onToggleRow: (id: string, checked: boolean) => void;
-  onSelectAll: (checked: boolean, visibleIds: string[]) => void;
   visibleIds: string[];
+  selectedIds?: Set<string>;
+  onToggleRow?: (id: string, checked: boolean) => void;
+  onSelectAll?: (checked: boolean, visibleIds: string[]) => void;
+  /** Row checkboxes + select-all (e.g. bulk actions). Default off for a cleaner grid. */
+  showRowSelect?: boolean;
   /** Flush to parent sheet: no outer radius, optional top border off when stacked. */
   className?: string;
   /** `daily` = today’s digest: no A–J row, warmer chrome. `standard` = full worksheet grid. */
@@ -65,10 +69,11 @@ type Props = {
 export function LeadSheetTable({
   leads,
   onUpdateLead,
-  selectedIds,
-  onToggleRow,
-  onSelectAll,
+  selectedIds = EMPTY_SELECTED,
+  onToggleRow = () => {},
+  onSelectAll = () => {},
   visibleIds,
+  showRowSelect = false,
   className,
   variant = "standard",
 }: Props) {
@@ -121,7 +126,9 @@ export function LeadSheetTable({
   }, [actionMenu]);
 
   const allSelected =
-    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    showRowSelect &&
+    visibleIds.length > 0 &&
+    visibleIds.every((id) => selectedIds.has(id));
 
   const stickyLeft = useMemo(() => {
     const w = widths;
@@ -244,10 +251,10 @@ export function LeadSheetTable({
   return (
     <div
       className={cn(
-        "relative overflow-auto rounded-xl shadow-sm",
+        "relative overflow-auto rounded-none shadow-sm",
         isDaily
-          ? "rounded-2xl border border-amber-200/60 bg-gradient-to-b from-amber-50/50 via-white to-white ring-1 ring-amber-100/70"
-          : "border border-slate-200/90 bg-white ring-1 ring-slate-900/[0.04]",
+          ? "border border-amber-200/60 bg-gradient-to-b from-amber-50/50 via-white to-white"
+          : "border border-slate-200/90 bg-white",
         className,
       )}
     >
@@ -340,12 +347,16 @@ export function LeadSheetTable({
               style={{ width: widths.idx, minWidth: widths.idx }}
               className="sticky left-0 z-30 border border-slate-200 bg-slate-50/95 px-1 py-2 text-center"
             >
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={(e) => onSelectAll(e.target.checked, visibleIds)}
-                aria-label="Select all"
-              />
+              {showRowSelect ? (
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={(e) => onSelectAll(e.target.checked, visibleIds)}
+                  aria-label="Select all"
+                />
+              ) : (
+                <span className="text-slate-500">#</span>
+              )}
             </th>
             <ResizableTh
               w={widths.date}
@@ -444,15 +455,19 @@ export function LeadSheetTable({
                   style={{ width: widths.idx }}
                   className="sticky left-0 z-10 border border-slate-200 bg-slate-50/95 px-1 py-1 text-center text-xs text-[#757575]"
                 >
-                  <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(lead.id)}
-                      onChange={(e) => onToggleRow(lead.id, e.target.checked)}
-                      aria-label={`Select ${lead.studentName}`}
-                    />
+                  {showRowSelect ? (
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(lead.id)}
+                        onChange={(e) => onToggleRow(lead.id, e.target.checked)}
+                        aria-label={`Select ${lead.studentName}`}
+                      />
+                      <span>{rowIndex + 1}</span>
+                    </div>
+                  ) : (
                     <span>{rowIndex + 1}</span>
-                  </div>
+                  )}
                 </td>
                 <DataCell
                   width={widths.date}
@@ -473,7 +488,7 @@ export function LeadSheetTable({
                   {editing?.leadId === lead.id && editing.field === "date" ? (
                     <input
                       type="date"
-                      className="w-full rounded-[4px] border border-primary bg-white px-1 py-1 text-[13px]"
+                      className="w-full rounded-none border border-primary bg-white px-1 py-1 text-[13px]"
                       defaultValue={lead.date}
                       onBlur={(e) => {
                         onUpdateLead(lead.id, { date: e.target.value });
@@ -517,7 +532,7 @@ export function LeadSheetTable({
                   {editing?.leadId === lead.id &&
                   editing.field === "studentName" ? (
                     <input
-                      className="w-full rounded-[4px] border border-primary bg-white px-1 py-1 font-semibold"
+                      className="w-full rounded-none border border-primary bg-white px-1 py-1 font-semibold"
                       defaultValue={lead.studentName}
                       onBlur={(e) => {
                         onUpdateLead(lead.id, {
@@ -660,7 +675,7 @@ export function LeadSheetTable({
                 >
                   {editing?.leadId === lead.id && editing.field === "phone" ? (
                     <input
-                      className="w-full rounded-[4px] border border-primary bg-white px-1 py-1"
+                      className="w-full rounded-none border border-primary bg-white px-1 py-1"
                       defaultValue={lead.phone}
                       onBlur={(e) => {
                         onUpdateLead(lead.id, { phone: e.target.value });
@@ -711,7 +726,7 @@ export function LeadSheetTable({
                 >
                   <button
                     type="button"
-                    className="rounded-lg px-2 py-1 text-lg leading-none text-slate-700 transition-colors hover:bg-slate-100"
+                    className="rounded-none px-2 py-1 text-lg leading-none text-slate-700 transition-colors hover:bg-slate-100"
                     aria-expanded={actionMenu?.leadId === lead.id}
                     aria-haspopup="menu"
                     aria-controls={`${baseId}-menu-${lead.id}`}
@@ -753,7 +768,7 @@ export function LeadSheetTable({
             ref={actionMenuRef}
             id={`${baseId}-menu-${actionMenu.leadId}`}
             role="menu"
-            className="fixed z-[200] min-w-[180px] rounded-[6px] border border-slate-200 bg-white py-1 text-left text-sm shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+            className="fixed z-[200] min-w-[180px] rounded-none border border-slate-200 bg-white py-1 text-left text-sm shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
             style={{
               top: actionMenu.top,
               left: actionMenu.left,
@@ -890,7 +905,7 @@ function TextCell({
     >
       {editing ? (
         <input
-          className="w-full rounded-[4px] border border-primary bg-white px-1 py-1"
+          className="w-full rounded-none border border-primary bg-white px-1 py-1"
           defaultValue={val}
           onBlur={(e) => {
             onCommit(e.target.value);
@@ -933,7 +948,7 @@ function CourseEditor({
   return (
     <div className="flex flex-col gap-1">
       <select
-        className="w-full rounded-[4px] border border-primary bg-white px-1 py-1 text-[13px]"
+        className="w-full rounded-none border border-primary bg-white px-1 py-1 text-[13px]"
         value={COURSE_OPTIONS.includes(v as (typeof COURSE_OPTIONS)[number]) ? v : "Other"}
         onChange={(e) => {
           const nv = e.target.value;
@@ -955,7 +970,7 @@ function CourseEditor({
       <div className="flex gap-1">
         <button
           type="button"
-          className="rounded-md bg-success px-2 py-0.5 text-xs text-white"
+          className="rounded-none bg-success px-2 py-0.5 text-xs text-white"
           onClick={() => onCommit(v)}
         >
           OK

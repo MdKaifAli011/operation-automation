@@ -18,7 +18,7 @@ export default function CourseBrochurePage() {
         <button
           type="button"
           onClick={() => setDrawer(true)}
-          className="rounded-[6px] bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
+          className="rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
         >
           + Upload Brochure
         </button>
@@ -28,9 +28,9 @@ export default function CourseBrochurePage() {
         {BROCHURES.map((b) => (
           <article
             key={b.id}
-            className="rounded-[12px] border border-[#e0e0e0] bg-white p-4"
+            className="rounded-none border border-[#e0e0e0] bg-white p-4"
           >
-            <div className="flex h-32 items-center justify-center rounded-[6px] bg-[#f8f9fa] text-4xl text-[#757575]">
+            <div className="flex h-32 items-center justify-center rounded-none bg-[#f8f9fa] text-4xl text-[#757575]">
               📄
             </div>
             <h2 className="mt-3 font-bold text-[#212121]">{b.course}</h2>
@@ -71,7 +71,7 @@ export default function CourseBrochurePage() {
             >
               <label className="block">
                 Course
-                <select className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2">
+                <select className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2">
                   <option>NEET</option>
                   <option>JEE</option>
                   <option>CUET</option>
@@ -79,7 +79,7 @@ export default function CourseBrochurePage() {
               </label>
               <label className="block">
                 Brochure Name
-                <input className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2" />
+                <input className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2" />
               </label>
               <label className="block">
                 File
@@ -87,15 +87,15 @@ export default function CourseBrochurePage() {
               </label>
               <label className="block">
                 Version
-                <input className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2" />
+                <input className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2" />
               </label>
               <label className="block">
                 Notes
-                <textarea rows={2} className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2" />
+                <textarea rows={2} className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2" />
               </label>
               <button
                 type="submit"
-                className="w-full rounded-[6px] bg-[#2e7d32] py-3 text-white"
+                className="w-full rounded-none bg-[#2e7d32] py-3 text-white"
               >
                 Upload
               </button>

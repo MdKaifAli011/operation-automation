@@ -1,10 +1,13 @@
 "use client";
 
 import { addDays, format, isSameDay, parseISO } from "date-fns";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Lead, SheetTabId, SortDir, SortKey } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Lead, SortDir, SortKey } from "@/lib/types";
 import { INITIAL_LEADS } from "@/lib/mock-data";
+import { AddStudentLeadDialog } from "./AddStudentLeadDialog";
+import { ExportLeadsButton } from "./ExportLeadsButton";
 import { FollowUpDialog } from "./FollowUpDialog";
+import { ImportExcelControl } from "./ImportExcelControl";
 import { LeadSheetTable } from "./LeadSheetTable";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
@@ -37,7 +40,6 @@ function sortLeads(
 export function LeadManagementPage() {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [mainTab, setMainTab] = useState<LeadMainTab>("ongoing");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [search, setSearch] = useState("");
@@ -49,6 +51,36 @@ export function LeadManagementPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCounsellor, setFilterCounsellor] = useState("");
   const [followUpId, setFollowUpId] = useState<string | null>(null);
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  const nextLeadNumericId = useMemo(() => {
+    const nums = leads
+      .map((l) => parseInt(l.id, 10))
+      .filter((n) => !Number.isNaN(n));
+    return (nums.length ? Math.max(...nums) : 0) + 1;
+  }, [leads]);
+
+  useEffect(() => {
+    if (!filterOpen && !sortOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (toolbarRef.current?.contains(e.target as Node)) return;
+      setFilterOpen(false);
+      setSortOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setFilterOpen(false);
+        setSortOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [filterOpen, sortOpen]);
 
   useEffect(() => {
     const onFu = (e: Event) => {
@@ -165,19 +197,6 @@ export function LeadManagementPage() {
     );
   }, []);
 
-  const onBulkStatus = (
-    tone: Lead["rowTone"],
-    tab: SheetTabId,
-    extra?: Partial<Lead>,
-  ) => {
-    setLeads((prev) =>
-      prev.map((l) =>
-        selectedIds.has(l.id) ? { ...l, rowTone: tone, sheetTab: tab, ...extra } : l,
-      ),
-    );
-    setSelectedIds(new Set());
-  };
-
   const ongoingTabTotal =
     todaysOngoingLeads.length + ongoingLeadsRest.length;
 
@@ -223,76 +242,100 @@ export function LeadManagementPage() {
   };
 
   const filterInput =
-    "mt-1 w-full rounded-[2px] border border-[#d0d0d0] px-2 py-1 text-[13px] shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]";
+    "mt-1 w-full rounded-none border border-[#d0d0d0] px-2 py-1 text-[13px] shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]";
+
+  const statItems = [
+    {
+      key: "ongoing",
+      label: "Ongoing",
+      value: counts.ongoing,
+      accent: "text-primary",
+    },
+    {
+      key: "followup",
+      label: "Follow-up",
+      value: counts.followup,
+      accent: "text-emerald-600",
+    },
+    {
+      key: "ni",
+      label: "Not interested",
+      value: counts.notInterested,
+      accent: "text-rose-600",
+    },
+    {
+      key: "conv",
+      label: "Converted",
+      value: counts.converted,
+      accent: "text-indigo-600",
+    },
+  ] as const;
 
   return (
     <div className={SX.leadPageRoot}>
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {(
-          [
-            {
-              key: "ongoing",
-              label: "Ongoing",
-              value: counts.ongoing,
-              bar: "border-l-primary bg-white",
-              accent: "text-primary",
-            },
-            {
-              key: "followup",
-              label: "Follow-up",
-              value: counts.followup,
-              bar: "border-l-emerald-500 bg-white",
-              accent: "text-emerald-600",
-            },
-            {
-              key: "ni",
-              label: "Not interested",
-              value: counts.notInterested,
-              bar: "border-l-rose-500 bg-white",
-              accent: "text-rose-600",
-            },
-            {
-              key: "conv",
-              label: "Converted",
-              value: counts.converted,
-              bar: "border-l-indigo-600 bg-white",
-              accent: "text-indigo-700",
-            },
-          ] as const
-        ).map((c) => (
-          <div
-            key={c.key}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+          Leads
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
             className={cn(
-              "overflow-hidden rounded-xl border border-slate-200/90 shadow-sm ring-1 ring-slate-900/[0.03]",
-              "border-l-4",
-              c.bar,
+              SX.leadBtnGreen,
+              "h-9 gap-1.5 px-3 text-[13px] font-semibold",
             )}
+            onClick={() => setAddStudentOpen(true)}
           >
-            <div className="px-4 py-3.5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+            <span className="text-lg leading-none" aria-hidden>
+              +
+            </span>
+            Add student
+          </button>
+          <ExportLeadsButton leads={leads} />
+          <ImportExcelControl />
+        </div>
+      </header>
+
+      <div
+        className="rounded-none border border-slate-200/80 bg-white px-3 py-3 shadow-sm sm:px-5 sm:py-3.5"
+        aria-label="Lead counts"
+      >
+        <div className="flex flex-wrap gap-y-3 sm:gap-0 sm:divide-x sm:divide-slate-100">
+          {statItems.map((c, i) => (
+            <div
+              key={c.key}
+              className={cn(
+                "flex min-w-[7.5rem] flex-1 flex-col gap-0.5 sm:px-5",
+                i === 0 && "sm:pl-0",
+              )}
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {c.label}
-              </p>
-              <p
+              </span>
+              <span
                 className={cn(
-                  "mt-1 text-3xl font-bold tabular-nums tracking-tight",
+                  "text-2xl font-bold tabular-nums tracking-tight",
                   c.accent,
                 )}
               >
                 {c.value}
-              </p>
+              </span>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       <div className={SX.leadWorkbook}>
-        <div className={SX.leadToolbar}>
+        <div ref={toolbarRef} className={SX.leadToolbar}>
           <div className="relative">
             <button
               type="button"
               className={SX.leadToolbarIconBtn}
               aria-expanded={filterOpen}
-              onClick={() => setFilterOpen((v) => !v)}
+              onClick={() => {
+                setSortOpen(false);
+                setFilterOpen((v) => !v);
+              }}
               title="Filter"
             >
               <FilterIcon />
@@ -381,7 +424,10 @@ export function LeadManagementPage() {
               type="button"
               className={SX.leadToolbarIconBtn}
               aria-expanded={sortOpen}
-              onClick={() => setSortOpen((v) => !v)}
+              onClick={() => {
+                setFilterOpen(false);
+                setSortOpen((v) => !v);
+              }}
               title="Sort"
             >
               <SortIcon />
@@ -400,7 +446,7 @@ export function LeadManagementPage() {
                   <button
                     key={k}
                     type="button"
-                    className="flex w-full justify-between rounded-[2px] px-2 py-1.5 text-left text-[13px] hover:bg-[#f5f5f5]"
+                    className="flex w-full justify-between rounded-none px-2 py-1.5 text-left text-[13px] hover:bg-[#f5f5f5]"
                     onClick={() => {
                       setSortKey(k);
                       setSortDir((d) =>
@@ -419,40 +465,12 @@ export function LeadManagementPage() {
           <input
             type="search"
             placeholder="Search student, phone, course…"
-            className={SX.leadSearch}
+            className={cn(SX.leadSearch, "ml-auto sm:max-w-[min(100%,360px)]")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-
-          <select
-            disabled={selectedIds.size === 0}
-            className={cn(SX.leadSelectSm, "ml-auto w-[min(100%,200px)] shrink-0")}
-            defaultValue=""
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v === "interested")
-                onBulkStatus("interested", "ongoing", { followUpDate: null });
-              if (v === "not_interested")
-                onBulkStatus("not_interested", "not_interested", {
-                  followUpDate: null,
-                });
-              if (v === "followup")
-                onBulkStatus("followup_later", "followup", {
-                  followUpDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
-                });
-              e.target.selectedIndex = 0;
-            }}
-          >
-            <option value="" disabled>
-              Bulk status…
-            </option>
-            <option value="interested">Interested</option>
-            <option value="not_interested">Not Interested</option>
-            <option value="followup">Follow-up Later</option>
-          </select>
         </div>
 
-       
         <div className={SX.leadTabBar}>
           {tabBtn("ongoing", "Ongoing")}
           {tabBtn("not_interested", "Not Interested")}
@@ -462,93 +480,83 @@ export function LeadManagementPage() {
 
         <div className={SX.leadSheetBody}>
           {mainTab === "ongoing" && (
-            <div className="space-y-10 px-2 pb-4 pt-2 sm:px-4">
+            <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
               <section aria-labelledby="daily-leads-heading">
-                <div className="mb-4 flex flex-col gap-2 border-b border-amber-200/50 pb-4 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                      <h2
-                        id="daily-leads-heading"
-                        className="text-base font-bold tracking-tight text-slate-900"
-                      >
-                        Daily &amp; today
-                      </h2>
-                      <span className="rounded-full bg-amber-100/90 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200/80">
-                        {format(today, "dd MMM yyyy")}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[13px] text-slate-500">
-                      New intakes today and follow-ups due —{" "}
-                      <span className="font-medium text-slate-700">
-                        {todaysOngoingLeads.length}
-                      </span>{" "}
-                      {todaysOngoingLeads.length === 1 ? "row" : "rows"}
+                {todaysOngoingLeads.length === 0 ? (
+                  <div
+                    className="border border-slate-200 bg-slate-50 px-4 py-8 text-center"
+                    role="status"
+                  >
+                    <h2
+                      id="daily-leads-heading"
+                      className="text-sm font-semibold text-slate-900"
+                    >
+                      Today
+                    </h2>
+                    <p className="mt-2 text-[13px] text-slate-600">
+                      No data available for today&apos;s queue.
                     </p>
                   </div>
-                </div>
-                <LeadSheetTable
-                  variant="daily"
-                  className={cn(SX.leadGridFlush, "border-x-0")}
-                  leads={todaysOngoingLeads}
-                  onUpdateLead={onUpdateLead}
-                  selectedIds={selectedIds}
-                  onToggleRow={(id, checked) => {
-                    setSelectedIds((prev) => {
-                      const n = new Set(prev);
-                      if (checked) n.add(id);
-                      else n.delete(id);
-                      return n;
-                    });
-                  }}
-                  onSelectAll={(checked, ids) => {
-                    if (checked) setSelectedIds(new Set(ids));
-                    else setSelectedIds(new Set());
-                  }}
-                  visibleIds={todaysOngoingLeads.map((l) => l.id)}
-                />
-              </section>
-
-              <section aria-labelledby="pipeline-heading">
-                <div className="mb-4 flex flex-col gap-2 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                      <h2
-                        id="pipeline-heading"
-                        className="text-base font-bold tracking-tight text-slate-900"
-                      >
-                        Ongoing pipeline
-                      </h2>
-                      <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-primary ring-1 ring-sky-200/80">
-                        Full sheet
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                      <div>
+                        <h2
+                          id="daily-leads-heading"
+                          className="text-sm font-semibold text-slate-900"
+                        >
+                          Today&apos;s queue
+                        </h2>
+                        <p className="mt-0.5 text-[12px] text-slate-500">
+                          New leads and follow-ups due ·{" "}
+                          <time dateTime={format(today, "yyyy-MM-dd")}>
+                            {format(today, "EEE, d MMM yyyy")}
+                          </time>
+                        </p>
+                      </div>
+                      <span className="rounded-none bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-100/80">
+                        {todaysOngoingLeads.length}{" "}
+                        {todaysOngoingLeads.length === 1 ? "row" : "rows"}
                       </span>
                     </div>
-                    <p className="mt-1 text-[13px] text-slate-500">
-                      Rest of active leads (not in today&apos;s queue) —{" "}
-                      <span className="font-medium text-slate-700">
-                        {ongoingLeadsRest.length}
-                      </span>{" "}
+                    <LeadSheetTable
+                      variant="daily"
+                      className={cn(SX.leadGridFlush, "border-x-0")}
+                      leads={todaysOngoingLeads}
+                      onUpdateLead={onUpdateLead}
+                      visibleIds={todaysOngoingLeads.map((l) => l.id)}
+                    />
+                  </div>
+                )}
+              </section>
+
+              <section
+                className="space-y-3"
+                aria-labelledby="pipeline-heading"
+              >
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h2
+                      id="pipeline-heading"
+                      className="text-sm font-semibold text-slate-900"
+                    >
+                      Rest of ongoing
+                    </h2>
+                    <p className="mt-0.5 text-[12px] text-slate-500">
+                      Active leads not in today&apos;s queue ·{" "}
+                      {ongoingLeadsRest.length}{" "}
                       {ongoingLeadsRest.length === 1 ? "row" : "rows"}
                     </p>
                   </div>
+                  <span className="rounded-none bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-primary ring-1 ring-sky-100">
+                    Pipeline
+                  </span>
                 </div>
                 <LeadSheetTable
                   variant="standard"
                   className={cn(SX.leadGridFlush, "border-x-0")}
                   leads={ongoingLeadsRest}
                   onUpdateLead={onUpdateLead}
-                  selectedIds={selectedIds}
-                  onToggleRow={(id, checked) => {
-                    setSelectedIds((prev) => {
-                      const n = new Set(prev);
-                      if (checked) n.add(id);
-                      else n.delete(id);
-                      return n;
-                    });
-                  }}
-                  onSelectAll={(checked, ids) => {
-                    if (checked) setSelectedIds(new Set(ids));
-                    else setSelectedIds(new Set());
-                  }}
                   visibleIds={ongoingLeadsRest.map((l) => l.id)}
                 />
               </section>
@@ -556,99 +564,76 @@ export function LeadManagementPage() {
           )}
 
           {mainTab === "followup" && (
-            <div>
+            <section className="px-3 py-4 md:px-4 md:py-5" aria-label="Follow-up leads">
               <div className={SX.leadSectionHead}>
-                <h2 className={SX.leadSectionTitle}>Follow-up</h2>
+                <h2 className={SX.leadSectionTitle}>Follow-ups</h2>
                 <p className={SX.leadSectionMeta}>
                   {followUpLeads.length} lead
-                  {followUpLeads.length === 1 ? "" : "s"}
+                  {followUpLeads.length === 1 ? "" : "s"} · call or message on
+                  the date shown
                 </p>
               </div>
               <LeadSheetTable
-                className={cn(SX.leadGridFlush, "border-x-0")}
+                className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={followUpLeads}
                 onUpdateLead={onUpdateLead}
-                selectedIds={selectedIds}
-                onToggleRow={(id, checked) => {
-                  setSelectedIds((prev) => {
-                    const n = new Set(prev);
-                    if (checked) n.add(id);
-                    else n.delete(id);
-                    return n;
-                  });
-                }}
-                onSelectAll={(checked, ids) => {
-                  if (checked) setSelectedIds(new Set(ids));
-                  else setSelectedIds(new Set());
-                }}
                 visibleIds={followUpLeads.map((l) => l.id)}
               />
-            </div>
+            </section>
           )}
 
           {mainTab === "not_interested" && (
-            <div>
+            <section
+              className="px-3 py-4 md:px-4 md:py-5"
+              aria-label="Not interested leads"
+            >
               <div className={SX.leadSectionHead}>
                 <h2 className={SX.leadSectionTitle}>Not interested</h2>
                 <p className={SX.leadSectionMeta}>
-                  {notInterestedLeads.length} lead
-                  {notInterestedLeads.length === 1 ? "" : "s"}
+                  {notInterestedLeads.length} closed lead
+                  {notInterestedLeads.length === 1 ? "" : "s"} · archived from
+                  active work
                 </p>
               </div>
               <LeadSheetTable
-                className={cn(SX.leadGridFlush, "border-x-0")}
+                className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={notInterestedLeads}
                 onUpdateLead={onUpdateLead}
-                selectedIds={selectedIds}
-                onToggleRow={(id, checked) => {
-                  setSelectedIds((prev) => {
-                    const n = new Set(prev);
-                    if (checked) n.add(id);
-                    else n.delete(id);
-                    return n;
-                  });
-                }}
-                onSelectAll={(checked, ids) => {
-                  if (checked) setSelectedIds(new Set(ids));
-                  else setSelectedIds(new Set());
-                }}
                 visibleIds={notInterestedLeads.map((l) => l.id)}
               />
-            </div>
+            </section>
           )}
 
           {mainTab === "converted" && (
-            <div>
+            <section
+              className="px-3 py-4 md:px-4 md:py-5"
+              aria-label="Converted leads"
+            >
               <div className={SX.leadSectionHead}>
                 <h2 className={SX.leadSectionTitle}>Converted</h2>
                 <p className={SX.leadSectionMeta}>
-                  Full pipeline · {convertedLeadsFullPipeline.length} lead
+                  Students who finished onboarding ·{" "}
+                  {convertedLeadsFullPipeline.length} lead
                   {convertedLeadsFullPipeline.length === 1 ? "" : "s"}
                 </p>
               </div>
               <LeadSheetTable
-                className={cn(SX.leadGridFlush, "border-x-0")}
+                className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={convertedLeadsFullPipeline}
                 onUpdateLead={onUpdateLead}
-                selectedIds={selectedIds}
-                onToggleRow={(id, checked) => {
-                  setSelectedIds((prev) => {
-                    const n = new Set(prev);
-                    if (checked) n.add(id);
-                    else n.delete(id);
-                    return n;
-                  });
-                }}
-                onSelectAll={(checked, ids) => {
-                  if (checked) setSelectedIds(new Set(ids));
-                  else setSelectedIds(new Set());
-                }}
                 visibleIds={convertedLeadsFullPipeline.map((l) => l.id)}
               />
-            </div>
+            </section>
           )}
         </div>
       </div>
+
+      <AddStudentLeadDialog
+        open={addStudentOpen}
+        onClose={() => setAddStudentOpen(false)}
+        nextNumericId={nextLeadNumericId}
+        onAdd={(lead) => setLeads((prev) => [lead, ...prev])}
+      />
 
       <FollowUpDialog
         open={followUpId !== null}

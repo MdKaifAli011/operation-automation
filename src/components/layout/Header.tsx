@@ -11,17 +11,17 @@ export function Header() {
       <div className="flex items-center gap-3">
         <button
           type="button"
-          className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="relative rounded-none p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
           aria-label="Notifications"
         >
           <BellIcon className="h-5 w-5" />
-          <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#c62828] px-0.5 text-[10px] font-medium text-white">
+          <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-none bg-[#c62828] px-0.5 text-[10px] font-medium text-white">
             3
           </span>
         </button>
         <div className="flex items-center gap-2">
           <span
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#0d47a1] text-sm font-medium text-white shadow-sm"
+            className="flex h-9 w-9 items-center justify-center rounded-none bg-gradient-to-br from-primary to-[#0d47a1] text-sm font-medium text-white shadow-sm"
             aria-hidden
           >
             A

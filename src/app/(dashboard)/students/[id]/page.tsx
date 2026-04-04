@@ -10,7 +10,7 @@ export default async function StudentPage({ params }: Props) {
 
   if (!lead) {
     return (
-      <div className="rounded-[12px] border border-[#e0e0e0] p-8 text-center">
+      <div className="rounded-none border border-[#e0e0e0] p-8 text-center">
         <p className="text-[#757575]">Student not found.</p>
         <Link href="/" className="mt-4 inline-block text-[#1565c0] underline">
           Back to Leads
@@ -19,5 +19,5 @@ export default async function StudentPage({ params }: Props) {
     );
   }
 
-  return <StudentDetailPage lead={lead} />;
+  return <StudentDetailPage key={lead.id} lead={lead} />;
 }

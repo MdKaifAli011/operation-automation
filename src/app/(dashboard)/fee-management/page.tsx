@@ -80,7 +80,7 @@ export default function FeeManagementPage() {
         <h1 className="text-xl font-bold text-[#212121]">Fee Management</h1>
         <button
           type="button"
-          className="rounded-[6px] bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
+          className="rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
         >
           + Add Fee Structure
         </button>
@@ -95,7 +95,7 @@ export default function FeeManagementPage() {
         ].map(([label, val, c]) => (
           <div
             key={label}
-            className="rounded-[12px] border border-[#e0e0e0] bg-white p-4"
+            className="rounded-none border border-[#e0e0e0] bg-white p-4"
           >
             <p className="text-xs text-[#757575]">{label}</p>
             <p className={`mt-1 text-lg font-bold ${c}`}>{val}</p>
@@ -105,7 +105,7 @@ export default function FeeManagementPage() {
 
       <div className="flex flex-wrap gap-3">
         <select
-          className="rounded-[6px] border border-[#e0e0e0] px-3 py-2 text-sm"
+          className="rounded-none border border-[#e0e0e0] px-3 py-2 text-sm"
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
         >
@@ -116,7 +116,7 @@ export default function FeeManagementPage() {
           <option value="Overdue">Overdue</option>
         </select>
         <select
-          className="rounded-[6px] border border-[#e0e0e0] px-3 py-2 text-sm"
+          className="rounded-none border border-[#e0e0e0] px-3 py-2 text-sm"
           value={filterCourse}
           onChange={(e) => setFilterCourse(e.target.value)}
         >
@@ -125,10 +125,10 @@ export default function FeeManagementPage() {
           <option value="JEE">JEE</option>
           <option value="CUET">CUET</option>
         </select>
-        <input type="date" className="rounded-[6px] border border-[#e0e0e0] px-3 py-2 text-sm" />
+        <input type="date" className="rounded-none border border-[#e0e0e0] px-3 py-2 text-sm" />
       </div>
 
-      <div className="overflow-auto rounded-[6px] border border-[#e0e0e0]">
+      <div className="overflow-auto rounded-none border border-[#e0e0e0]">
         <table className="w-full min-w-[900px] border-collapse text-sm">
           <thead>
             <tr className="bg-[#f8f9fa] text-left text-xs uppercase text-[#757575]">
@@ -157,7 +157,7 @@ export default function FeeManagementPage() {
                 <td className="border-b border-[#e0e0e0] px-2 py-2">
                   <input
                     type="number"
-                    className="w-14 rounded-[6px] border border-[#e0e0e0] px-1"
+                    className="w-14 rounded-none border border-[#e0e0e0] px-1"
                     defaultValue={r.discount}
                   />
                   %
@@ -176,7 +176,7 @@ export default function FeeManagementPage() {
                 </td>
                 <td className="border-b border-[#e0e0e0] px-2 py-2">
                   <span
-                    className={`rounded-[4px] px-2 py-0.5 text-xs font-medium ${badge(r.status)}`}
+                    className={`rounded-none px-2 py-0.5 text-xs font-medium ${badge(r.status)}`}
                   >
                     {r.status}
                   </span>

@@ -13,7 +13,7 @@ export default function FacultiesPage() {
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          className="rounded-[6px] bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
+          className="rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
         >
           + Add Faculty
         </button>
@@ -23,10 +23,10 @@ export default function FacultiesPage() {
         {FACULTY_SEED.map((f) => (
           <article
             key={f.id}
-            className="rounded-[12px] border border-[#e0e0e0] bg-white p-6"
+            className="rounded-none border border-[#e0e0e0] bg-white p-6"
           >
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1565c0] text-lg font-semibold text-white">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-none bg-[#1565c0] text-lg font-semibold text-white">
                 {f.name
                   .split(" ")
                   .map((p) => p[0])
@@ -39,7 +39,7 @@ export default function FacultiesPage() {
                   {f.subjects.map((s) => (
                     <span
                       key={s}
-                      className="rounded-[4px] bg-[#e3f2fd] px-2 py-0.5 text-xs text-[#1565c0]"
+                      className="rounded-none bg-[#e3f2fd] px-2 py-0.5 text-xs text-[#1565c0]"
                     >
                       {s}
                     </span>
@@ -47,7 +47,7 @@ export default function FacultiesPage() {
                 </div>
                 <p className="mt-2 text-sm text-[#757575]">{f.phone}</p>
                 <p className="text-sm text-[#757575]">{f.email}</p>
-                <span className="mt-2 inline-block rounded-[4px] bg-[#e8f5e9] px-2 py-0.5 text-xs text-[#2e7d32]">
+                <span className="mt-2 inline-block rounded-none bg-[#e8f5e9] px-2 py-0.5 text-xs text-[#2e7d32]">
                   {f.active ? "Active" : "Inactive"}
                 </span>
                 <div className="mt-4 flex gap-3 text-sm">
@@ -106,14 +106,14 @@ export default function FacultiesPage() {
               <Field label="Joining Date" type="date" />
               <label>
                 <span className="text-[#757575]">Status</span>
-                <select className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2">
+                <select className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2">
                   <option>Active</option>
                   <option>Inactive</option>
                 </select>
               </label>
               <button
                 type="submit"
-                className="w-full rounded-[6px] bg-[#2e7d32] py-3 font-medium text-white"
+                className="w-full rounded-none bg-[#2e7d32] py-3 font-medium text-white"
               >
                 Save
               </button>
@@ -137,7 +137,7 @@ function Field({
       <span className="text-[#757575]">{label}</span>
       <input
         type={type}
-        className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2"
+        className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2"
       />
     </label>
   );

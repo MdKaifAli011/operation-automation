@@ -16,7 +16,7 @@ type Props = {
 };
 
 const inputClass =
-  "mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[13px] text-slate-800 shadow-sm shadow-slate-900/[0.03] transition-colors placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
+  "mt-1.5 w-full rounded-none border border-slate-200 bg-white px-3 py-2.5 text-[13px] text-slate-800 shadow-sm shadow-slate-900/[0.03] transition-colors placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
 const labelClass = "text-[12px] font-medium text-slate-600";
 
@@ -35,6 +35,17 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdropMouseDown = (e: MouseEvent) => {
+      if (e.target === dlg) onClose();
+    };
+    dlg.addEventListener("mousedown", onBackdropMouseDown);
+    return () => dlg.removeEventListener("mousedown", onBackdropMouseDown);
+  }, [open, onClose]);
+
   const close = () => {
     ref.current?.close();
   };
@@ -44,8 +55,8 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
       ref={ref}
       className={cn(
         "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-1.5rem,26rem)] max-h-[min(90vh,720px)] -translate-x-1/2 -translate-y-1/2",
-        "overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-0",
-        "shadow-2xl shadow-slate-900/15 ring-1 ring-slate-900/[0.06]",
+        "overflow-hidden rounded-none border border-slate-200/90 bg-white p-0",
+        "shadow-2xl shadow-slate-900/15",
         "backdrop:bg-slate-900/45 backdrop:backdrop-blur-[3px]",
         "open:flex open:flex-col",
       )}
@@ -71,7 +82,7 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
         <div className="shrink-0 border-b border-slate-100 bg-gradient-to-br from-sky-50/90 via-white to-white px-6 pb-4 pt-5">
           <div className="flex items-start gap-3">
             <span
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary"
               aria-hidden
             >
               <svg
@@ -145,14 +156,14 @@ export function FollowUpDialog({ open, onClose, onSubmit }: Props) {
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-6 py-4">
           <button
             type="button"
-            className="rounded-lg px-4 py-2.5 text-[13px] font-medium text-slate-600 transition-colors hover:bg-slate-200/80 hover:text-slate-900"
+            className="rounded-none px-4 py-2.5 text-[13px] font-medium text-slate-600 transition-colors hover:bg-slate-200/80 hover:text-slate-900"
             onClick={close}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-success px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm shadow-emerald-900/15 transition-colors hover:bg-[#27692a]"
+            className="rounded-none bg-success px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm shadow-emerald-900/15 transition-colors hover:bg-[#27692a]"
           >
             Save follow-up
           </button>

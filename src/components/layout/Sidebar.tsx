@@ -50,9 +50,9 @@ export function Sidebar() {
               href={item.href}
               title={item.label}
               className={cn(
-                "relative flex min-h-[44px] items-center gap-3 rounded-r-md px-2.5 text-[13px] font-medium transition-colors duration-150",
+                "relative flex min-h-[44px] items-center gap-3 rounded-none px-2.5 text-[13px] font-medium transition-colors duration-150",
                 active
-                  ? "bg-sky-50 text-primary before:absolute before:left-0 before:top-1/2 before:h-[32px] before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-primary"
+                  ? "bg-sky-50 text-primary before:absolute before:left-0 before:top-1/2 before:h-[32px] before:w-[3px] before:-translate-y-1/2 before:rounded-none before:bg-primary"
                   : "text-slate-700 hover:bg-slate-50 max-md:text-slate-500",
               )}
             >

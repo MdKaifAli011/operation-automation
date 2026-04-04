@@ -20,13 +20,13 @@ export default function SubjectsPage() {
         <button
           type="button"
           onClick={() => setDrawer(true)}
-          className="rounded-[6px] bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
+          className="rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white"
         >
           + Add Subject
         </button>
       </div>
 
-      <div className="overflow-auto rounded-[6px] border border-[#e0e0e0]">
+      <div className="overflow-auto rounded-none border border-[#e0e0e0]">
         <table className="w-full min-w-[640px] border-collapse text-sm">
           <thead>
             <tr className="bg-[#f8f9fa] text-left text-xs uppercase">
@@ -75,7 +75,7 @@ export default function SubjectsPage() {
             >
               <label className="block">
                 Subject Name
-                <input className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2" />
+                <input className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2" />
               </label>
               <label className="block">
                 Linked courses
@@ -89,7 +89,7 @@ export default function SubjectsPage() {
               </label>
               <label className="block">
                 Faculty
-                <select className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2">
+                <select className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2">
                   <option>Dr. Meena Singh</option>
                   <option>Mr. Ravi Kumar</option>
                 </select>
@@ -99,11 +99,11 @@ export default function SubjectsPage() {
               </label>
               <label className="block">
                 Description
-                <textarea rows={3} className="mt-1 w-full rounded-[6px] border border-[#e0e0e0] px-3 py-2" />
+                <textarea rows={3} className="mt-1 w-full rounded-none border border-[#e0e0e0] px-3 py-2" />
               </label>
               <button
                 type="submit"
-                className="w-full rounded-[6px] bg-[#2e7d32] py-3 text-white"
+                className="w-full rounded-none bg-[#2e7d32] py-3 text-white"
               >
                 Save Subject
               </button>

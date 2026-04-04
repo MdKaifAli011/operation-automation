@@ -14,7 +14,9 @@ export default function DashboardLayout({
         style={{ marginLeft: 0 }}
       >
         <Header />
-        <main className="flex-1 overflow-auto bg-slate-50/80 p-3 md:p-5">{children}</main>
+        <main className="flex-1 overflow-auto bg-slate-50/80 p-3 md:p-5">
+          {children}
+        </main>
       </div>
     </div>
   );

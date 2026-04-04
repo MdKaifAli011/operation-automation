@@ -44,7 +44,7 @@ export default function BankDetailsPage() {
           <span className="hidden sm:inline text-[#bdbdbd]" aria-hidden>
             |
           </span>
-          <span className="rounded-[2px] bg-[#e8f5e9] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success">
+          <span className="rounded-none bg-[#e8f5e9] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success">
             Active profile
           </span>
         </div>
