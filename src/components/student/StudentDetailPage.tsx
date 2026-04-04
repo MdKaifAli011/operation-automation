@@ -113,41 +113,6 @@ function buildPastSlotWarning(slot: Date, studentTz: string): string {
   );
 }
 
-/** Allowed student-facing local clock (same moment as IST; blocks e.g. 3:30 am Pacific for a 4 pm IST slot). */
-const STUDENT_DEMO_LOCAL_START_MINS = 6 * 60;
-const STUDENT_DEMO_LOCAL_END_MINS = 21 * 60 + 59;
-
-function getLocalMinutesFromMidnightInZone(d: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour: "numeric",
-    minute: "numeric",
-    hour12: false,
-  }).formatToParts(d);
-  const h = Number(parts.find((p) => p.type === "hour")?.value ?? NaN);
-  const m = Number(parts.find((p) => p.type === "minute")?.value ?? NaN);
-  if (Number.isNaN(h) || Number.isNaN(m)) return -1;
-  return h * 60 + m;
-}
-
-function isStudentLocalTimeOutsideContactWindow(slot: Date, studentTz: string): boolean {
-  const mins = getLocalMinutesFromMidnightInZone(slot, studentTz);
-  if (mins < 0) return false;
-  return mins < STUDENT_DEMO_LOCAL_START_MINS || mins > STUDENT_DEMO_LOCAL_END_MINS;
-}
-
-function buildStudentLocalWindowWarning(slot: Date, studentTz: string): string {
-  const stLine = `${formatDateInZone(slot, studentTz)}, ${formatTime12hInZone(slot, studentTz)} ${zoneShortLabel(studentTz)}`;
-  const istLine = `${formatDateInZone(slot, "Asia/Kolkata")}, ${formatTime12hInZone(slot, "Asia/Kolkata")} IST`;
-  return (
-    "The student's local time for this demo is outside allowed hours (6:00 am – 9:59 pm in their timezone). " +
-    "The demo was not created. " +
-    `Student (${studentTimeZoneMenuLabel(studentTz)}): ${stLine}. ` +
-    `Same moment in India: ${istLine}. ` +
-    "Choose a different IST time so their local time falls in that window, or confirm the student timezone."
-  );
-}
-
 function validateScheduledDemoSlot(
   isoDate: string,
   timeHmIST: string,
@@ -156,8 +121,6 @@ function validateScheduledDemoSlot(
   const slot = parseIstSlot(isoDate, timeHmIST);
   if (!slot) return "Enter a valid date and time.";
   if (slot.getTime() < Date.now()) return buildPastSlotWarning(slot, studentTimeZone);
-  if (isStudentLocalTimeOutsideContactWindow(slot, studentTimeZone))
-    return buildStudentLocalWindowWarning(slot, studentTimeZone);
   return null;
 }
 
@@ -1873,10 +1836,8 @@ function DemoForm({
                           {studentLocalPreview}
                         </p>
                         <p className="text-[10px] leading-snug text-[#9e9e9e]">
-                          Demos are only saved if student local time is between{" "}
-                          <span className="font-medium text-[#757575]">6:00 am</span> and{" "}
-                          <span className="font-medium text-[#757575]">9:59 pm</span> in
-                          that timezone (and the slot is still in the future).
+                          You can schedule for any local time. The slot must still be in
+                          the future (checked in IST and the student timezone above).
                         </p>
                       </div>
                     ) : null}
@@ -1905,12 +1866,6 @@ function DemoForm({
               const now = new Date();
               if (slot.getTime() < now.getTime()) {
                 setScheduleWarnMsg(buildPastSlotWarning(slot, studentTimeZone));
-                return;
-              }
-              if (isStudentLocalTimeOutsideContactWindow(slot, studentTimeZone)) {
-                setScheduleWarnMsg(
-                  buildStudentLocalWindowWarning(slot, studentTimeZone),
-                );
                 return;
               }
               onSchedule({
