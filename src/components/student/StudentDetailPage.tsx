@@ -1,6 +1,6 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
+import { addMonths, format, parseISO } from "date-fns";
 import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
 import type { Lead } from "@/lib/types";
@@ -950,13 +950,72 @@ function BrochureSection() {
   );
 }
 
+const INSTALLMENT_COUNT_OPTIONS = [2, 3, 4, 5, 6] as const;
+
+function splitFeeEvenly(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const base = Math.floor(total / n);
+  const out = Array.from({ length: n }, () => base);
+  let rem = total - base * n;
+  for (let i = 0; i < n && rem > 0; i++) {
+    out[i] += 1;
+    rem -= 1;
+  }
+  return out;
+}
+
+function padInstallmentDates(prev: string[], n: number): string[] {
+  const out = prev.slice(0, n);
+  while (out.length < n) {
+    if (out.length === 0) {
+      out.push(format(new Date(), "yyyy-MM-dd"));
+      continue;
+    }
+    const anchor = parseISO(out[out.length - 1]!);
+    out.push(format(addMonths(anchor, 1), "yyyy-MM-dd"));
+  }
+  return out;
+}
+
+/** After editing one installment, split the remainder across the others (whole rupees). */
+function redistributeAfterAmountEdit(
+  finalFee: number,
+  amounts: number[],
+  editedIndex: number,
+  newAmount: number,
+): number[] {
+  const n = amounts.length;
+  if (n <= 0) return [];
+  const raw = Number.isFinite(newAmount) ? Math.round(newAmount) : 0;
+  const clamped = Math.max(0, Math.min(raw, finalFee));
+  const next = [...amounts];
+  next[editedIndex] = clamped;
+  const rest = finalFee - clamped;
+  const others = Array.from({ length: n }, (_, i) => i).filter((i) => i !== editedIndex);
+  if (others.length === 0) return next;
+  const base = Math.floor(rest / others.length);
+  let leftover = rest - base * others.length;
+  for (const idx of others) {
+    next[idx] = base + (leftover > 0 ? 1 : 0);
+    if (leftover > 0) leftover -= 1;
+  }
+  return next;
+}
+
 function FeeSection({ lead }: { lead: Lead }) {
-  const [discount, setDiscount] = useState(10);
-  const [emiEnabled, setEmiEnabled] = useState(false);
-  const [emi, setEmi] = useState(12);
+  const [scholarshipPct, setScholarshipPct] = useState(0);
+  const [installmentEnabled, setInstallmentEnabled] = useState(false);
+  const [installmentCount, setInstallmentCount] =
+    useState<(typeof INSTALLMENT_COUNT_OPTIONS)[number]>(2);
+  const [installmentAmounts, setInstallmentAmounts] = useState<number[]>([]);
+  const [installmentDates, setInstallmentDates] = useState<string[]>([]);
+
   const total = 85000;
-  const finalFee = Math.round(total * (1 - discount / 100));
-  const monthly = emiEnabled ? Math.round(finalFee / emi) : 0;
+  const finalFee = useMemo(
+    () => Math.round(total * (1 - scholarshipPct / 100)),
+    [total, scholarshipPct],
+  );
+
   const [currency, setCurrency] = useState("INR");
   const rates: Record<string, number> = {
     INR: 1,
@@ -968,27 +1027,73 @@ function FeeSection({ lead }: { lead: Lead }) {
   };
   const converted = finalFee * (rates[currency] ?? 1);
 
+  const installmentSum = useMemo(
+    () => installmentAmounts.reduce((a, b) => a + b, 0),
+    [installmentAmounts],
+  );
+
+  const enableInstallments = () => {
+    setInstallmentEnabled(true);
+    const n = installmentCount;
+    setInstallmentDates(padInstallmentDates([], n));
+    setInstallmentAmounts(splitFeeEvenly(finalFee, n));
+  };
+
+  const onInstallmentCountChange = (n: (typeof INSTALLMENT_COUNT_OPTIONS)[number]) => {
+    setInstallmentCount(n);
+    setInstallmentDates((d) => padInstallmentDates(d, n));
+    setInstallmentAmounts(splitFeeEvenly(finalFee, n));
+  };
+
+  const onScholarshipChange = (pct: number) => {
+    const v = Math.max(0, Math.min(100, pct));
+    setScholarshipPct(v);
+    const nextFinal = Math.round(total * (1 - v / 100));
+    if (installmentEnabled) {
+      setInstallmentAmounts(splitFeeEvenly(nextFinal, installmentCount));
+    }
+  };
+
+  const onInstallmentAmountChange = (index: number, value: string) => {
+    const num = Number(value.replace(/,/g, ""));
+    setInstallmentAmounts((prev) =>
+      redistributeAfterAmountEdit(finalFee, prev, index, num),
+    );
+  };
+
   return (
     <section className={SX.section}>
       <div className={SX.sectionHead}>
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className={SX.sectionTitle}>Step 3 · Fee structure</h2>
-          <p className="mt-0.5 max-w-[520px] text-[11px] text-slate-500">
-            Adjust discount; enable EMI when the family wants a payment plan. Totals
-            update live.
+          <p className="mt-0.5 max-w-[520px] text-[11px] text-[#757575]">
+            Scholarship and payment split for this student.
           </p>
         </div>
+        {!installmentEnabled && (
+          <button
+            type="button"
+            className={cn(
+              SX.btnSecondary,
+              "shrink-0 text-[13px] font-medium text-primary ring-1 ring-primary/25",
+            )}
+            title="Split the final fee into dated payments"
+            onClick={enableInstallments}
+          >
+            Set up installment plan
+          </button>
+        )}
       </div>
       <div className={SX.sectionBody}>
-        <div className="overflow-auto rounded-none border border-slate-200">
+        <div className="overflow-auto rounded-none border border-[#d0d0d0] bg-white">
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
               <tr>
                 <th className={SX.dataTh}>Target (exams)</th>
                 <th className={SX.dataTh}>Total fee</th>
-                <th className={SX.dataTh}>Discount (%)</th>
+                <th className={SX.dataTh}>Scholarship (%)</th>
                 <th className={SX.dataTh}>Final fee</th>
-                <th className={SX.dataTh}>EMI plan</th>
+                <th className={SX.dataTh}>Installment</th>
               </tr>
             </thead>
             <tbody>
@@ -1001,28 +1106,36 @@ function FeeSection({ lead }: { lead: Lead }) {
                     min={0}
                     max={100}
                     className={cn(SX.input, "w-20")}
-                    value={discount}
-                    onChange={(e) => setDiscount(Number(e.target.value))}
-                    aria-label="Discount percent"
+                    value={scholarshipPct}
+                    onChange={(e) =>
+                      onScholarshipChange(Number(e.target.value) || 0)
+                    }
+                    aria-label="Scholarship percent"
                   />
                 </td>
                 <td className={cn(SX.dataTd, "font-semibold tabular-nums")}>
                   ₹{finalFee.toLocaleString("en-IN")}
                 </td>
                 <td className={SX.dataTd}>
-                  {emiEnabled ? (
+                  {installmentEnabled ? (
                     <select
-                      className={cn(SX.select, "w-full min-w-[120px]")}
-                      value={emi}
-                      onChange={(e) => setEmi(Number(e.target.value))}
-                      aria-label="EMI months"
+                      className={cn(SX.select, "w-full min-w-[100px]")}
+                      value={installmentCount}
+                      onChange={(e) =>
+                        onInstallmentCountChange(
+                          Number(e.target.value) as (typeof INSTALLMENT_COUNT_OPTIONS)[number],
+                        )
+                      }
+                      aria-label="Number of installments"
                     >
-                      <option value={3}>3 months</option>
-                      <option value={6}>6 months</option>
-                      <option value={12}>12 months</option>
+                      {INSTALLMENT_COUNT_OPTIONS.map((c) => (
+                        <option key={c} value={c}>
+                          {c} payments
+                        </option>
+                      ))}
                     </select>
                   ) : (
-                    <span className="text-[13px] text-slate-400">—</span>
+                    <span className="text-[13px] text-[#9e9e9e]">—</span>
                   )}
                 </td>
               </tr>
@@ -1030,58 +1143,164 @@ function FeeSection({ lead }: { lead: Lead }) {
           </table>
         </div>
 
-        {!emiEnabled && (
-          <div className="mt-3">
-            <button
-              type="button"
-              className={cn(
-                SX.btnSecondary,
-                "text-[13px] font-medium text-primary ring-1 ring-primary/25",
-              )}
-              onClick={() => setEmiEnabled(true)}
-            >
-              Enable EMI options
-            </button>
-            <p className="mt-1.5 text-[12px] text-slate-500">
-              Off by default. Turn on to choose tenure and show monthly estimates.
-            </p>
+        {installmentEnabled && (
+          <div className="mt-3 overflow-hidden border border-[#d0d0d0] bg-white">
+            <div className={SX.sectionHead}>
+              <h3 className={SX.sectionTitle}>Installments</h3>
+              <button
+                type="button"
+                className={SX.btnGhost}
+                onClick={() => {
+                  setInstallmentEnabled(false);
+                  setInstallmentAmounts([]);
+                  setInstallmentDates([]);
+                }}
+              >
+                Remove plan
+              </button>
+            </div>
+            <div className="overflow-x-auto border-t border-[#d0d0d0]">
+              <table className={cn(SX.dataTable, "min-w-[360px]")}>
+                <thead>
+                  <tr>
+                    <th className={SX.dataTh}>#</th>
+                    <th className={SX.dataTh}>Due date</th>
+                    <th className={SX.dataTh}>Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {installmentAmounts.map((amt, i) => (
+                    <tr key={i}>
+                      <td className={cn(SX.dataTd, "tabular-nums text-[#757575]")}>
+                        {i + 1}
+                      </td>
+                      <td className={SX.dataTd}>
+                        <input
+                          type="date"
+                          className={cn(SX.input, "min-w-[140px] max-w-[180px]")}
+                          value={installmentDates[i] ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setInstallmentDates((d) => {
+                              const next = [...d];
+                              next[i] = v;
+                              return next;
+                            });
+                          }}
+                          aria-label={`Payment ${i + 1} due date`}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        <input
+                          type="number"
+                          min={0}
+                          className={cn(SX.input, "min-w-[100px] max-w-[160px] tabular-nums")}
+                          value={amt}
+                          onChange={(e) =>
+                            onInstallmentAmountChange(i, e.target.value)
+                          }
+                          aria-label={`Payment ${i + 1} amount in rupees`}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-[#f5f7fa]">
+                    <td
+                      colSpan={2}
+                      className={cn(SX.dataTd, "font-semibold text-[#424242]")}
+                    >
+                      Total
+                    </td>
+                    <td
+                      className={cn(
+                        SX.dataTd,
+                        "font-semibold tabular-nums text-[#212121]",
+                      )}
+                    >
+                      ₹{installmentSum.toLocaleString("en-IN")}
+                      {installmentSum !== finalFee && (
+                        <span className="ml-2 text-[11px] font-normal text-[#e65100]">
+                          (should be ₹{finalFee.toLocaleString("en-IN")})
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         )}
 
-        {emiEnabled && (
-          <p className="mt-3 text-[13px] tabular-nums text-slate-700">
-            Monthly EMI:{" "}
-            <strong>₹{monthly.toLocaleString("en-IN")}</strong> × {emi} months =
-            ₹{finalFee.toLocaleString("en-IN")}
+        <div className="mt-3 overflow-hidden border border-[#d0d0d0] bg-white">
+          <div className={SX.sectionHead}>
+            <h3 className={SX.sectionTitle}>Currency</h3>
+          </div>
+          <div className="overflow-x-auto border-t border-[#d0d0d0]">
+            <table className={cn(SX.dataTable, "w-full min-w-[480px] table-fixed")}>
+              <colgroup>
+                <col style={{ width: 140 }} />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <th scope="row" className={cn(SX.dataTh, "align-middle")}>
+                    Currency
+                  </th>
+                  <td className={cn(SX.dataTd, "align-middle")}>
+                    <select
+                      className={cn(SX.select, "box-border w-[220px] max-w-full")}
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value)}
+                      aria-label="Fee display currency"
+                    >
+                      <option value="INR">INR</option>
+                      <option value="USD">USD</option>
+                      <option value="AED">AED</option>
+                      <option value="GBP">GBP</option>
+                      <option value="EUR">EUR</option>
+                      <option value="SGD">SGD</option>
+                    </select>
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className={cn(SX.dataTh, "align-middle")}>
+                    Shown as
+                  </th>
+                  <td className={cn(SX.dataTd, "align-middle")}>
+                    <div
+                      className="min-h-[1.5rem] whitespace-nowrap font-semibold tabular-nums text-[#212121]"
+                      aria-live="polite"
+                    >
+                      {currency === "INR" ? (
+                        `₹${finalFee.toLocaleString("en-IN")}`
+                      ) : (
+                        <>
+                          ₹{finalFee.toLocaleString("en-IN")}
+                          <span className="mx-1.5 font-normal text-[#9e9e9e]">
+                            ≈
+                          </span>
+                          {converted.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          {currency}
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t border-[#d0d0d0] bg-[#fafafa] px-2 py-1.5 text-[10px] leading-snug text-[#757575]">
+            Non-INR amounts use approximate rates — always confirm before payment.
           </p>
-        )}
-
-        <div className="mt-5 rounded-none border border-slate-200 bg-slate-50/80 p-4">
-          <label className="text-[13px] font-semibold text-slate-800">
-            Convert to student&apos;s currency
-          </label>
-          <select
-            className={cn(SX.select, "mt-2 max-w-xs")}
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-          >
-            {["INR", "USD", "AED", "GBP", "EUR", "SGD"].map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <p className="mt-2 font-semibold tabular-nums text-slate-800">
-            ₹{finalFee.toLocaleString("en-IN")} ≈{" "}
-            {currency === "INR"
-              ? `₹${finalFee.toLocaleString("en-IN")}`
-              : `${converted.toFixed(2)} ${currency}`}
-          </p>
-          <p className="text-[12px] text-slate-500">Indicative rate — confirm before payment</p>
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
-          <span className="mr-1 text-[13px] font-semibold text-slate-700">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#d0d0d0] pt-3">
+          <span className="mr-1 text-[13px] font-semibold text-[#424242]">
             Send fee structure
           </span>
           <button

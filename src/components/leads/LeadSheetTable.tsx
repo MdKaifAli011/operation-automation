@@ -13,7 +13,6 @@ import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 
 type ColKey =
-  | "idx"
   | "date"
   | "studentName"
   | "parentName"
@@ -21,9 +20,7 @@ type ColKey =
   | "grade"
   | "targetExams"
   | "country"
-  | "phone"
-  | "pipeline"
-  | "followUp";
+  | "phone";
 
 type TextColKey =
   | "parentName"
