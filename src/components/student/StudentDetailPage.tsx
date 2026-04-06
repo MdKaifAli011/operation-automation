@@ -35,6 +35,7 @@ import {
   canGoToNextPipelineStep,
   mergePipelineMeta,
 } from "@/lib/pipeline";
+import { primaryExamForFee } from "@/lib/examFeeDefaults";
 import { extrasForLead } from "@/lib/student-detail";
 import { SX } from "@/components/student/student-excel-ui";
 import {
@@ -2790,9 +2791,12 @@ function FeeSection({
   const feesSkipAutosave = useRef(true);
   const leadFeesRef = useRef(lead);
   leadFeesRef.current = lead;
+  /** After we resolve exam default or see a saved base fee, skip re-fetching. */
+  const examDefaultFillResolvedRef = useRef(false);
 
   useEffect(() => {
     feesSkipAutosave.current = true;
+    examDefaultFillResolvedRef.current = false;
   }, [lead.id]);
 
   const finalFee = useMemo(
@@ -2887,6 +2891,52 @@ function FeeSection({
     }
   }, [lead.id, lead.pipelineMeta]);
 
+  useEffect(() => {
+    const fees = leadFeesRef.current.pipelineMeta?.fees as
+      | { baseTotal?: number }
+      | undefined;
+    const saved =
+      typeof fees?.baseTotal === "number" && Number.isFinite(fees.baseTotal)
+        ? fees.baseTotal
+        : 0;
+    if (saved > 0) {
+      examDefaultFillResolvedRef.current = true;
+      return;
+    }
+    if (examDefaultFillResolvedRef.current) return;
+
+    const exam = primaryExamForFee(lead.targetExams);
+    if (!exam) {
+      examDefaultFillResolvedRef.current = true;
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/exam-fee-structures", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const rows = (await res.json()) as { exam: string; baseFee: number }[];
+        const hit = rows.find((r) => r.exam === exam);
+        const def = hit?.baseFee;
+        if (cancelled) return;
+        if (typeof def !== "number" || def <= 0) {
+          examDefaultFillResolvedRef.current = true;
+          return;
+        }
+        setBaseTotal((prev) => (prev > 0 ? prev : Math.round(def)));
+        examDefaultFillResolvedRef.current = true;
+      } catch {
+        examDefaultFillResolvedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lead.id, lead.targetExams]);
+
   const buildFeesMeta = useCallback(() => {
     const prev = leadFeesRef.current.pipelineMeta?.fees as
       | Record<string, unknown>
@@ -2956,7 +3006,8 @@ function FeeSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Scholarship, final fee, and installments.
+            Base fee can load from Fee Management defaults by target exam (e.g. NEET).
+            Scholarship, final fee, and installments save automatically.
           </p>
         </div>
         {!installmentEnabled && (

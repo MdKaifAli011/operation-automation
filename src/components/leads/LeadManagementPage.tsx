@@ -600,16 +600,7 @@ export function LeadManagementPage() {
               <section aria-label="New and other ongoing leads">
                 <div className={SX.leadSectionHead}>
                   <h2 className={SX.leadSectionTitle}>New &amp; other ongoing</h2>
-                  <p className={SX.leadSectionMeta}>
-                    <span className="font-medium">CSV / Excel imports</span> and new intakes
-                    appear here (status <span className="font-medium">New</span>, etc.).
-                    Mark <span className="font-medium">Interested</span> from the row menu to
-                    move someone into the pipeline below.{" "}
-                    <span className="tabular-nums">
-                      {ongoingOtherLeads.length}{" "}
-                      {ongoingOtherLeads.length === 1 ? "row" : "rows"}
-                    </span>
-                  </p>
+                  
                 </div>
                 {ongoingOtherLeads.length === 0 ? (
                   <div
