@@ -20,6 +20,9 @@
 # production
 /build
 
+# uploaded brochure files (per-lead PDFs/images)
+/public/uploads/
+
 # misc
 .DS_Store
 *.pem

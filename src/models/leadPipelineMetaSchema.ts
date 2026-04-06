@@ -35,6 +35,10 @@ const BrochureBlockSchema = new Schema(
   {
     notes: { type: String, default: "" },
     fileName: { type: String, default: null },
+    /** Public URL path under /uploads/brochures/{leadId}/… (saved file on server) */
+    storedFileUrl: { type: String, default: null },
+    /** User-pasted PDF/image URL (optional) */
+    documentUrl: { type: String, default: "" },
     generated: { type: Boolean, default: false },
     sentWhatsApp: { type: Boolean, default: false },
     sentEmail: { type: Boolean, default: false },

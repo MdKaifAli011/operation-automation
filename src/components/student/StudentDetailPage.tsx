@@ -117,9 +117,7 @@ function zoneShortLabel(tz: string): string {
 }
 
 function studentTimeZoneMenuLabel(tz: string): string {
-  return (
-    STUDENT_TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz
-  );
+  return STUDENT_TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz;
 }
 
 /** One instant; message spells out IST + student zone so ops trust both were considered. */
@@ -141,7 +139,8 @@ function validateScheduledDemoSlot(
 ): string | null {
   const slot = parseIstSlot(isoDate, timeHmIST);
   if (!slot) return "Enter a valid date and time.";
-  if (slot.getTime() < Date.now()) return buildPastSlotWarning(slot, studentTimeZone);
+  if (slot.getTime() < Date.now())
+    return buildPastSlotWarning(slot, studentTimeZone);
   return null;
 }
 
@@ -194,10 +193,7 @@ function pickDefaultTeacher(subj: string, faculties: Faculty[]): string {
       if (m) return m.name;
     }
     const m =
-      bySub("english") ??
-      bySub("reason") ??
-      bySub("cuet") ??
-      faculties[0];
+      bySub("english") ?? bySub("reason") ?? bySub("cuet") ?? faculties[0];
     return m.name;
   }
   return "";
@@ -332,13 +328,15 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   }, [notes, lead.id, patchLead]);
   const [callOpen, setCallOpen] = useState(false);
   const [scheduleView, setScheduleView] = useState<"table" | "calendar">(() => {
-    const v = (initialLead.pipelineMeta?.schedule as { view?: string } | undefined)
-      ?.view;
+    const v = (
+      initialLead.pipelineMeta?.schedule as { view?: string } | undefined
+    )?.view;
     return v === "calendar" ? "calendar" : "table";
   });
   const [faculties, setFaculties] = useState<Faculty[]>([]);
 
-  const maxAccessibleStep = completed >= PIPELINE_TOTAL ? PIPELINE_TOTAL : completed + 1;
+  const maxAccessibleStep =
+    completed >= PIPELINE_TOTAL ? PIPELINE_TOTAL : completed + 1;
 
   useEffect(() => {
     if (activeStep > maxAccessibleStep) {
@@ -347,7 +345,8 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   }, [maxAccessibleStep, activeStep]);
 
   useEffect(() => {
-    const v = (lead.pipelineMeta?.schedule as { view?: string } | undefined)?.view;
+    const v = (lead.pipelineMeta?.schedule as { view?: string } | undefined)
+      ?.view;
     if (v === "calendar" || v === "table") setScheduleView(v);
   }, [lead.id, lead.pipelineMeta]);
 
@@ -397,7 +396,8 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
               |
             </span>
             <span className={SX.studentHeroMetaTop}>
-              Lead workspace · <span className="tabular-nums">ID {lead.id}</span>
+              Lead workspace ·{" "}
+              <span className="tabular-nums">ID {lead.id}</span>
             </span>
           </div>
 
@@ -472,12 +472,18 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                     {lead.parentName || "—"}
                   </span>
                 </span>
-                <span className="hidden h-3 w-px bg-slate-200 sm:inline-block" aria-hidden />
+                <span
+                  className="hidden h-3 w-px bg-slate-200 sm:inline-block"
+                  aria-hidden
+                />
                 <span>
                   <span className={SX.studentHeroSubLabel}>Sheet</span>{" "}
                   <span className={SX.studentHeroSubVal}>{sheetTabLabel}</span>
                 </span>
-                <span className="hidden h-3 w-px bg-slate-200 sm:inline-block" aria-hidden />
+                <span
+                  className="hidden h-3 w-px bg-slate-200 sm:inline-block"
+                  aria-hidden
+                />
                 <span>
                   <span className={SX.studentHeroSubLabel}>Pipeline</span>{" "}
                   <span className={SX.studentHeroSubVal}>
@@ -631,7 +637,10 @@ function CallHistoryPanel({
                 when = c.at;
               }
               return (
-                <li key={`${c.at}-${i}`} className="flex flex-col gap-1 py-3 first:pt-0">
+                <li
+                  key={`${c.at}-${i}`}
+                  className="flex flex-col gap-1 py-3 first:pt-0"
+                >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="tabular-nums text-slate-600">{when}</span>
                     <span
@@ -648,7 +657,9 @@ function CallHistoryPanel({
                     </span>
                   </div>
                   {c.duration ? (
-                    <p className="text-[11px] text-slate-500">Duration: {c.duration}</p>
+                    <p className="text-[11px] text-slate-500">
+                      Duration: {c.duration}
+                    </p>
                   ) : null}
                   {c.notes ? (
                     <p className="text-[12px] text-slate-600">{c.notes}</p>
@@ -760,8 +771,8 @@ function ActivityAside({
       <div className={SX.sideBody}>
         {list.length === 0 ? (
           <p className="text-[13px] leading-relaxed text-slate-500">
-            No activity yet. Completing pipeline steps and saving notes will appear
-            here.
+            No activity yet. Completing pipeline steps and saving notes will
+            appear here.
           </p>
         ) : (
           <>
@@ -820,8 +831,7 @@ function Stepper({
 }) {
   const doneCount = Math.min(Math.max(completed, 0), PIPELINE_TOTAL);
   const pct = (doneCount / PIPELINE_TOTAL) * 100;
-  const activeLabel =
-    STEPS.find((s) => s.n === activeStep)?.label ?? "—";
+  const activeLabel = STEPS.find((s) => s.n === activeStep)?.label ?? "—";
 
   return (
     <div className="border-b border-slate-100 bg-white">
@@ -836,9 +846,7 @@ function Stepper({
             const isActive = activeStep === s.n;
             const unlocked = canAccessPipelineStep(completed, s.n);
             const lockHint =
-              s.n >= 2
-                ? `Complete ${PIPELINE_STEP_LABELS[s.n - 2]} first`
-                : "";
+              s.n >= 2 ? `Complete ${PIPELINE_STEP_LABELS[s.n - 2]} first` : "";
             return (
               <button
                 key={s.id}
@@ -1007,7 +1015,10 @@ function DemoSection({
     Array.isArray(demoRowsFromMeta) ? demoRowsFromMeta : [],
   );
   const [scheduleSuccessOpen, setScheduleSuccessOpen] = useState(false);
-  const dismissScheduleSuccess = useCallback(() => setScheduleSuccessOpen(false), []);
+  const dismissScheduleSuccess = useCallback(
+    () => setScheduleSuccessOpen(false),
+    [],
+  );
   const [shareSuccessOpen, setShareSuccessOpen] = useState(false);
   const dismissShareSuccess = useCallback(() => setShareSuccessOpen(false), []);
 
@@ -1071,12 +1082,18 @@ function DemoSection({
         ),
       });
     }
-  }, [rowAction, rows, closeRowModal, onPatchLead, lead.pipelineMeta, lead.activityLog]);
+  }, [
+    rowAction,
+    rows,
+    closeRowModal,
+    onPatchLead,
+    lead.pipelineMeta,
+    lead.activityLog,
+  ]);
 
   useEffect(() => {
-    const r = (
-      lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined
-    )?.rows;
+    const r = (lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined)
+      ?.rows;
     if (Array.isArray(r)) setRows(r);
   }, [lead.id, lead.pipelineMeta]);
 
@@ -1105,313 +1122,328 @@ function DemoSection({
 
   return (
     <>
-    <section className={SX.section}>
-      <div className={SX.sectionHead}>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
-            {lead.pipelineSteps >= 1 ? (
-              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
-                Done
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-0.5 max-w-xl text-xs leading-snug text-slate-500">
-            Schedule in <span className="font-medium text-slate-600">IST</span>.{" "}
-            <span className="font-medium text-slate-600">Student time</span> is their
-            local date &amp; time on the invite.
-          </p>
-        </div>
-        {showAddInHeader ? (
-          <button
-            type="button"
-            className={cn(
-              SX.btnPrimary,
-              "inline-flex shrink-0 items-center gap-1.5",
-            )}
-            onClick={() => setExpanded(true)}
-          >
-            <IconPlus className="h-3.5 w-3.5" />
-            Add another demo
-          </button>
-        ) : null}
-      </div>
-      <div className={SX.sectionBody}>
-      {rows.length === 0 && !expanded ? (
-        <div className="flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/60 px-3 py-5 text-center">
-          <IconCalendarLarge className="h-10 w-10 text-slate-300" />
-          <div className="space-y-0.5">
-            <p className="text-[13px] font-semibold text-slate-800">
-              No demo scheduled yet
-            </p>
-            <p className="mx-auto max-w-[280px] text-[12px] leading-snug text-slate-500">
-              Use Create demo to add date, time, and teacher. Everything stays in
-              the table below.
+      <section className={SX.section}>
+        <div className={SX.sectionHead}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
+              {lead.pipelineSteps >= 1 ? (
+                <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
+                  Done
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 max-w-xl text-xs leading-snug text-slate-500">
+              Schedule in{" "}
+              <span className="font-medium text-slate-600">IST</span>.{" "}
+              <span className="font-medium text-slate-600">Student time</span>{" "}
+              is their local date &amp; time on the invite.
             </p>
           </div>
-          <button
-            type="button"
-            className={cn(
-              SX.btnSecondary,
-              "border-[#1565c0] text-[#1565c0] hover:bg-[#e3f2fd]",
-            )}
-            onClick={() => setExpanded(true)}
-          >
-            + Create demo
-          </button>
+          {showAddInHeader ? (
+            <button
+              type="button"
+              className={cn(
+                SX.btnPrimary,
+                "inline-flex shrink-0 items-center gap-1.5",
+              )}
+              onClick={() => setExpanded(true)}
+            >
+              <IconPlus className="h-3.5 w-3.5" />
+              Add another demo
+            </button>
+          ) : null}
         </div>
-      ) : rows.length === 0 && expanded ? (
-        <DemoForm
-          lead={lead}
-          faculties={faculties}
-          onCancel={() => setExpanded(false)}
-          onSchedule={(r) => {
-            const nextRows = [r];
-            setRows(nextRows);
-            setExpanded(false);
-            setScheduleSuccessOpen(true);
-            void onPatchLead({
-              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                demo: { rows: nextRows },
-              }),
-              activityLog: appendActivity(
-                lead.activityLog,
-                "demo",
-                `Demo created & saved on lead — ${r.subject} with ${r.teacher} · ${format(parseISO(r.isoDate), "d MMM yyyy")} IST`,
-              ),
-            });
-          }}
-        />
-      ) : (
-        <div className="overflow-auto">
-          <table className={cn(SX.dataTable, "min-w-[520px]")}>
-            <thead>
-              <tr>
-                <th className={SX.dataTh}>#</th>
-                <th className={SX.dataTh}>Subject</th>
-                <th className={SX.dataTh}>Teacher</th>
-                <th className={SX.dataTh}>When (India)</th>
-                <th className={SX.dataTh}>Student time</th>
-                <th className={SX.dataTh}>Status</th>
-                <th className={SX.dataTh}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const slot = parseIstSlot(r.isoDate, r.timeHmIST);
-                return (
-                  <tr key={i} className="min-h-[44px]">
-                    <td
-                      className={cn(
-                        SX.dataTd,
-                        "py-2.5 align-top tabular-nums",
-                        i % 2 === 1 && SX.zebraRow,
-                      )}
-                    >
-                      {i + 1}
-                    </td>
-                    <td
-                      className={cn(
-                        SX.dataTd,
-                        "max-w-[120px] py-2.5 align-top font-medium",
-                        i % 2 === 1 && SX.zebraRow,
-                      )}
-                    >
-                      {r.subject}
-                    </td>
-                    <td
-                      className={cn(
-                        SX.dataTd,
-                        "max-w-[min(200px,28vw)] py-2.5 align-top text-[12px] leading-snug",
-                        i % 2 === 1 && SX.zebraRow,
-                      )}
-                    >
-                      {r.teacher}
-                    </td>
-                    <td
-                      className={cn(
-                        SX.dataTd,
-                        "min-w-[128px] py-2.5 align-top",
-                        i % 2 === 1 && SX.zebraRow,
-                      )}
-                    >
-                      {slot ? (
-                        <>
-                          <div className="text-[13px] font-medium leading-tight text-[#212121]">
-                            {format(parseISO(r.isoDate), "d MMM yyyy")}
-                          </div>
-                          <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
-                            {formatTime12hInZone(slot, "Asia/Kolkata")} IST
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-[12px] text-[#b71c1c]">—</span>
-                      )}
-                    </td>
-                    <td
-                      className={cn(
-                        SX.dataTdMuted,
-                        "min-w-[148px] py-2.5 align-top",
-                        i % 2 === 1 && SX.zebraRow,
-                      )}
-                    >
-                      {slot ? (
-                        <>
-                          <div className="text-[13px] font-medium leading-tight text-[#424242]">
-                            {formatDateInZone(slot, r.studentTimeZone)}
-                          </div>
-                          <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
-                            {formatTime12hInZone(slot, r.studentTimeZone)}{" "}
-                            {zoneShortLabel(r.studentTimeZone)}
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-[12px]">—</span>
-                      )}
-                    </td>
-                    <td
-                      className={cn(SX.dataTd, "py-2.5 align-top", i % 2 === 1 && SX.zebraRow)}
-                    >
-                      <select
-                        className={cn(
-                          SX.select,
-                          "h-7 w-full min-w-[104px] max-w-[128px] text-[12px]",
-                        )}
-                        value={r.status}
-                        onChange={(e) =>
-                          setRows((prev) =>
-                            prev.map((row, j) =>
-                              j === i ? { ...row, status: e.target.value } : row,
-                            ),
-                          )
-                        }
-                        aria-label={`Status for ${r.subject} demo`}
-                      >
-                        <option value="Scheduled">Scheduled</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-                    </td>
-                    <td
-                      className={cn(SX.dataTd, "py-2.5 align-top", i % 2 === 1 && SX.zebraRow)}
-                    >
-                      <div className="flex flex-wrap items-center gap-1">
-                        <button
-                          type="button"
-                          className={demoActionBtn}
-                          aria-label="Edit demo"
-                          onClick={() => {
-                            setEditDraft({ ...r });
-                            setEditError(null);
-                            setRowAction({ type: "edit", index: i });
-                          }}
-                        >
-                          <IconPencil />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className={cn(
-                            demoActionBtn,
-                            r.inviteSent
-                              ? "border-2 border-emerald-600 bg-emerald-50 font-semibold text-emerald-900 shadow-sm"
-                              : "text-[#1565c0] hover:border-[#90caf9] hover:bg-[#e3f2fd]",
-                          )}
-                          aria-label={
-                            r.inviteSent
-                              ? "Invite marked sent — tap to open again"
-                              : "Share demo invite"
-                          }
-                          onClick={() => setRowAction({ type: "send", index: i })}
-                        >
-                          {r.inviteSent ? (
-                            <>
-                              <IconCheck className="h-3.5 w-3.5" />
-                              Sent
-                            </>
-                          ) : (
-                            <>
-                              <IconLink />
-                              Share
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <p className="mt-2 text-xs text-slate-500">
-            {!expanded
-              ? "More demos: use Add another demo in the header."
-              : "Complete the form below to add a row."}
-          </p>
-          {expanded && (
+        <div className={SX.sectionBody}>
+          {rows.length === 0 && !expanded ? (
+            <div className="flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/60 px-3 py-5 text-center">
+              <IconCalendarLarge className="h-10 w-10 text-slate-300" />
+              <div className="space-y-0.5">
+                <p className="text-[13px] font-semibold text-slate-800">
+                  No demo scheduled yet
+                </p>
+                <p className="mx-auto max-w-[280px] text-[12px] leading-snug text-slate-500">
+                  Use Create demo to add date, time, and teacher. Everything
+                  stays in the table below.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={cn(
+                  SX.btnSecondary,
+                  "border-[#1565c0] text-[#1565c0] hover:bg-[#e3f2fd]",
+                )}
+                onClick={() => setExpanded(true)}
+              >
+                + Create demo
+              </button>
+            </div>
+          ) : rows.length === 0 && expanded ? (
             <DemoForm
               lead={lead}
               faculties={faculties}
               onCancel={() => setExpanded(false)}
               onSchedule={(r) => {
-                setRows((prev) => {
-                  const nextRows = [...prev, r];
-                  queueMicrotask(() => {
-                    const L = leadRef.current;
-                    void onPatchLead({
-                      pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
-                        demo: { rows: nextRows },
-                      }),
-                      activityLog: appendActivity(
-                        L.activityLog,
-                        "demo",
-                        `Demo created & saved on lead — ${r.subject} with ${r.teacher} · ${format(parseISO(r.isoDate), "d MMM yyyy")} IST`,
-                      ),
-                    });
-                  });
-                  return nextRows;
-                });
+                const nextRows = [r];
+                setRows(nextRows);
                 setExpanded(false);
                 setScheduleSuccessOpen(true);
+                void onPatchLead({
+                  pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                    demo: { rows: nextRows },
+                  }),
+                  activityLog: appendActivity(
+                    lead.activityLog,
+                    "demo",
+                    `Demo created & saved on lead — ${r.subject} with ${r.teacher} · ${format(parseISO(r.isoDate), "d MMM yyyy")} IST`,
+                  ),
+                });
               }}
             />
+          ) : (
+            <div className="overflow-auto">
+              <table className={cn(SX.dataTable, "min-w-[520px]")}>
+                <thead>
+                  <tr>
+                    <th className={SX.dataTh}>#</th>
+                    <th className={SX.dataTh}>Subject</th>
+                    <th className={SX.dataTh}>Teacher</th>
+                    <th className={SX.dataTh}>When (India)</th>
+                    <th className={SX.dataTh}>Student time</th>
+                    <th className={SX.dataTh}>Status</th>
+                    <th className={SX.dataTh}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => {
+                    const slot = parseIstSlot(r.isoDate, r.timeHmIST);
+                    return (
+                      <tr key={i} className="min-h-[44px]">
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "py-2.5 align-top tabular-nums",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {i + 1}
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "max-w-[120px] py-2.5 align-top font-medium",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {r.subject}
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "max-w-[min(200px,28vw)] py-2.5 align-top text-[12px] leading-snug",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {r.teacher}
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "min-w-[128px] py-2.5 align-top",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {slot ? (
+                            <>
+                              <div className="text-[13px] font-medium leading-tight text-[#212121]">
+                                {format(parseISO(r.isoDate), "d MMM yyyy")}
+                              </div>
+                              <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
+                                {formatTime12hInZone(slot, "Asia/Kolkata")} IST
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-[12px] text-[#b71c1c]">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTdMuted,
+                            "min-w-[148px] py-2.5 align-top",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {slot ? (
+                            <>
+                              <div className="text-[13px] font-medium leading-tight text-[#424242]">
+                                {formatDateInZone(slot, r.studentTimeZone)}
+                              </div>
+                              <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
+                                {formatTime12hInZone(slot, r.studentTimeZone)}{" "}
+                                {zoneShortLabel(r.studentTimeZone)}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-[12px]">—</span>
+                          )}
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "py-2.5 align-top",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          <select
+                            className={cn(
+                              SX.select,
+                              "h-7 w-full min-w-[104px] max-w-[128px] text-[12px]",
+                            )}
+                            value={r.status}
+                            onChange={(e) =>
+                              setRows((prev) =>
+                                prev.map((row, j) =>
+                                  j === i
+                                    ? { ...row, status: e.target.value }
+                                    : row,
+                                ),
+                              )
+                            }
+                            aria-label={`Status for ${r.subject} demo`}
+                          >
+                            <option value="Scheduled">Scheduled</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "py-2.5 align-top",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center gap-1">
+                            <button
+                              type="button"
+                              className={demoActionBtn}
+                              aria-label="Edit demo"
+                              onClick={() => {
+                                setEditDraft({ ...r });
+                                setEditError(null);
+                                setRowAction({ type: "edit", index: i });
+                              }}
+                            >
+                              <IconPencil />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                demoActionBtn,
+                                r.inviteSent
+                                  ? "border-2 border-emerald-600 bg-emerald-50 font-semibold text-emerald-900 shadow-sm"
+                                  : "text-[#1565c0] hover:border-[#90caf9] hover:bg-[#e3f2fd]",
+                              )}
+                              aria-label={
+                                r.inviteSent
+                                  ? "Invite marked sent — tap to open again"
+                                  : "Share demo invite"
+                              }
+                              onClick={() =>
+                                setRowAction({ type: "send", index: i })
+                              }
+                            >
+                              {r.inviteSent ? (
+                                <>
+                                  <IconCheck className="h-3.5 w-3.5" />
+                                  Sent
+                                </>
+                              ) : (
+                                <>
+                                  <IconLink />
+                                  Share
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-2 text-xs text-slate-500">
+                {!expanded
+                  ? "More demos: use Add another demo in the header."
+                  : "Complete the form below to add a row."}
+              </p>
+              {expanded && (
+                <DemoForm
+                  lead={lead}
+                  faculties={faculties}
+                  onCancel={() => setExpanded(false)}
+                  onSchedule={(r) => {
+                    setRows((prev) => {
+                      const nextRows = [...prev, r];
+                      queueMicrotask(() => {
+                        const L = leadRef.current;
+                        void onPatchLead({
+                          pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+                            demo: { rows: nextRows },
+                          }),
+                          activityLog: appendActivity(
+                            L.activityLog,
+                            "demo",
+                            `Demo created & saved on lead — ${r.subject} with ${r.teacher} · ${format(parseISO(r.isoDate), "d MMM yyyy")} IST`,
+                          ),
+                        });
+                      });
+                      return nextRows;
+                    });
+                    setExpanded(false);
+                    setScheduleSuccessOpen(true);
+                  }}
+                />
+              )}
+            </div>
           )}
+          <p className="mt-3 text-[11px] leading-snug text-slate-500">
+            Demos save automatically. Set status to Completed or Cancelled when
+            done; rows stay on the lead for your records.
+          </p>
         </div>
-      )}
-      <p className="mt-3 text-[11px] leading-snug text-slate-500">
-        Demos save automatically. Set status to Completed or Cancelled when done;
-        rows stay on the lead for your records.
-      </p>
-      </div>
-    </section>
-    <DemoEditRowDialog
-      open={rowAction?.type === "edit"}
-      draft={editDraft}
-      faculties={faculties}
-      onDraftChange={patchEditDraft}
-      onClose={closeRowModal}
-      onSave={saveEditRow}
-      error={editError}
-    />
-    <DemoSendRowDialog
-      open={rowAction?.type === "send"}
-      lead={lead}
-      summary={activeRow ? demoRowSummaryLine(activeRow) : ""}
-      onClose={closeRowModal}
-      onConfirm={confirmSendRow}
-    />
-    <DemoScheduleSuccessDialog
-      open={scheduleSuccessOpen}
-      onDismiss={dismissScheduleSuccess}
-    />
-    <DemoScheduleSuccessDialog
-      open={shareSuccessOpen}
-      onDismiss={dismissShareSuccess}
-      headerTitle="Sent"
-      headline="Invite queued"
-      body="The demo join link will be sent to the parent using your usual channel (SMS / WhatsApp / email)."
-      autoCloseMs={DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS}
-    />
+      </section>
+      <DemoEditRowDialog
+        open={rowAction?.type === "edit"}
+        draft={editDraft}
+        faculties={faculties}
+        onDraftChange={patchEditDraft}
+        onClose={closeRowModal}
+        onSave={saveEditRow}
+        error={editError}
+      />
+      <DemoSendRowDialog
+        open={rowAction?.type === "send"}
+        lead={lead}
+        summary={activeRow ? demoRowSummaryLine(activeRow) : ""}
+        onClose={closeRowModal}
+        onConfirm={confirmSendRow}
+      />
+      <DemoScheduleSuccessDialog
+        open={scheduleSuccessOpen}
+        onDismiss={dismissScheduleSuccess}
+      />
+      <DemoScheduleSuccessDialog
+        open={shareSuccessOpen}
+        onDismiss={dismissShareSuccess}
+        headerTitle="Sent"
+        headline="Invite queued"
+        body="The demo join link will be sent to the parent using your usual channel (SMS / WhatsApp / email)."
+        autoCloseMs={DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS}
+      />
     </>
   );
 }
@@ -1575,7 +1607,9 @@ function DemoEditRowDialog({
               <select
                 className={cn(SX.select, "w-full")}
                 value={draft.studentTimeZone}
-                onChange={(e) => onDraftChange({ studentTimeZone: e.target.value })}
+                onChange={(e) =>
+                  onDraftChange({ studentTimeZone: e.target.value })
+                }
               >
                 {STUDENT_TIMEZONE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -1610,7 +1644,11 @@ function DemoEditRowDialog({
         </div>
       ) : null}
       <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
-        <button type="button" className={SX.btnSecondary} onClick={() => ref.current?.close()}>
+        <button
+          type="button"
+          className={SX.btnSecondary}
+          onClick={() => ref.current?.close()}
+        >
           Cancel
         </button>
         <button type="button" className={SX.btnPrimary} onClick={onSave}>
@@ -1698,13 +1736,19 @@ function DemoSendRowDialog({
           </p>
         ) : null}
         <p className="mt-3 text-[12px] text-[#757575]">
-          <span className="font-semibold text-[#546e7a]">{lead.parentName}</span>
+          <span className="font-semibold text-[#546e7a]">
+            {lead.parentName}
+          </span>
           {" · "}
           <span className="tabular-nums">{formatLeadPhone(lead)}</span>
         </p>
       </div>
       <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
-        <button type="button" className={SX.btnSecondary} onClick={() => ref.current?.close()}>
+        <button
+          type="button"
+          className={SX.btnSecondary}
+          onClick={() => ref.current?.close()}
+        >
           Cancel
         </button>
         <button type="button" className={SX.btnPrimary} onClick={onConfirm}>
@@ -1946,7 +1990,9 @@ function DemoScheduleWarningDialog({
         </h2>
       </div>
       <div className="max-h-[min(60vh,320px)] overflow-y-auto px-3 py-3">
-        <p className="text-[13px] leading-relaxed text-[#37474f]">{message ?? ""}</p>
+        <p className="text-[13px] leading-relaxed text-[#37474f]">
+          {message ?? ""}
+        </p>
       </div>
       <div className="flex justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2">
         <button
@@ -2004,7 +2050,10 @@ function DemoForm({
     return `${formatDateInZone(slot, studentTimeZone)} · ${formatTime12hInZone(slot, studentTimeZone)} ${zoneShortLabel(studentTimeZone)}`;
   }, [effectiveDemoDate, demoTime, studentTimeZone]);
 
-  const teacherNameOptions = useMemo(() => faculties.map((f) => f.name), [faculties]);
+  const teacherNameOptions = useMemo(
+    () => faculties.map((f) => f.name),
+    [faculties],
+  );
 
   const effectiveTeacher = useMemo(() => {
     if (teacherNameOptions.includes(teacher)) return teacher;
@@ -2019,246 +2068,265 @@ function DemoForm({
 
   return (
     <>
-    <div
-      className="mt-2 overflow-hidden border-t border-slate-100 pt-2"
-      role="form"
-      aria-label="Schedule demo class"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
-        <div className="min-w-0 flex-1">
-          <h3 className={SX.sectionTitle}>Schedule a trial class</h3>
-          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-            Schedule in <span className="font-medium text-slate-700">IST</span> (left).
-            Set the student&apos;s timezone (right) so invites show the right local time
-            — default follows country ({lead.country}).
-          </p>
+      <div
+        className="mt-2 overflow-hidden border-t border-slate-100 pt-2"
+        role="form"
+        aria-label="Schedule demo class"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
+          <div className="min-w-0 flex-1">
+            <h3 className={SX.sectionTitle}>Schedule a trial class</h3>
+            <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+              Schedule in{" "}
+              <span className="font-medium text-slate-700">IST</span> (left).
+              Set the student&apos;s timezone (right) so invites show the right
+              local time — default follows country ({lead.country}).
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div className="overflow-hidden rounded-sm border border-slate-200">
-        <div className="overflow-x-auto">
-        <table className={cn(SX.dataTable, "w-full min-w-[280px]")}>
-          <tbody>
-            <tr>
-              <th
-                scope="row"
-                className={cn(SX.dataTh, "w-[min(36%,180px)] align-top")}
-              >
-                Exam &amp; subject
-              </th>
-              <td className={SX.dataTd}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                  <select
-                    className={cn(SX.select, "w-full min-w-[140px] max-w-[200px]")}
-                    value={course}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setCourse(v);
-                      const next =
-                        v === "NEET"
-                          ? "Biology"
-                          : v === "JEE"
-                            ? "Physics"
-                            : "English";
-                      pickSubject(next);
-                    }}
-                    aria-label="Target exam"
+        <div className="overflow-hidden rounded-sm border border-slate-200">
+          <div className="overflow-x-auto">
+            <table className={cn(SX.dataTable, "w-full min-w-[280px]")}>
+              <tbody>
+                <tr>
+                  <th
+                    scope="row"
+                    className={cn(SX.dataTh, "w-[min(36%,180px)] align-top")}
                   >
-                    {demoTargetOptions.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <div
-                    className="flex flex-wrap gap-1.5"
-                    role="group"
-                    aria-label="Subject for this demo"
-                  >
-                    {subs.map((s) => (
-                      <label
-                        key={s}
+                    Exam &amp; subject
+                  </th>
+                  <td className={SX.dataTd}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                      <select
                         className={cn(
-                          "inline-flex cursor-pointer items-center border px-2.5 py-1.5 text-[13px]",
-                          subj === s
-                            ? "border-[#1565c0] bg-[#e3f2fd] font-medium text-[#1565c0]"
-                            : "border-[#d0d0d0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
+                          SX.select,
+                          "w-full min-w-[140px] max-w-[200px]",
                         )}
-                      >
-                        <input
-                          type="radio"
-                          name="demo-subj"
-                          className="sr-only"
-                          checked={subj === s}
-                          onChange={() => pickSubject(s)}
-                        />
-                        {s}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <th scope="row" className={cn(SX.dataTh, "align-middle")}>
-                Teacher
-              </th>
-              <td className={SX.dataTd}>
-                <select
-                  className={cn(SX.select, "w-full max-w-[320px]")}
-                  value={effectiveTeacher}
-                  onChange={(e) => {
-                    setScheduleWarnMsg(null);
-                    setTeacher(e.target.value);
-                  }}
-                  aria-label="Teacher"
-                  disabled={teacherNameOptions.length === 0}
-                >
-                  {teacherNameOptions.length === 0 ? (
-                    <option value="">— Add faculty under Faculties first —</option>
-                  ) : (
-                    teacherNameOptions.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))
-                  )}
-                </select>
-                {teacherNameOptions.length === 0 ? (
-                  <p className="mt-1.5 text-[12px] text-amber-800">
-                    No teachers in the system yet. Add faculty so demos can be assigned.
-                  </p>
-                ) : null}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row" className={cn(SX.dataTh, "align-top")}>
-                When
-              </th>
-              <td className={SX.dataTd}>
-                <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
-                  <div className="min-w-0 space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-[#757575]">
-                      India (IST)
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="date"
-                        min={todayStr}
-                        value={effectiveDemoDate}
+                        value={course}
                         onChange={(e) => {
-                          setScheduleWarnMsg(null);
                           const v = e.target.value;
-                          if (v >= todayStr) setDemoDate(v);
+                          setCourse(v);
+                          const next =
+                            v === "NEET"
+                              ? "Biology"
+                              : v === "JEE"
+                                ? "Physics"
+                                : "English";
+                          pickSubject(next);
                         }}
-                        className={cn(SX.input, "w-[148px]")}
-                        aria-invalid={!!scheduleWarnMsg}
-                        aria-label="Demo date (IST)"
-                      />
-                      <span className="text-[12px] text-[#9e9e9e]" aria-hidden={true}>
-                        at
-                      </span>
-                      <input
-                        type="time"
-                        value={demoTime}
-                        onChange={(e) => {
-                          setScheduleWarnMsg(null);
-                          setDemoTime(e.target.value);
-                        }}
-                        className={cn(SX.input, "w-[112px]")}
-                        aria-label="Start time India Standard Time"
-                      />
-                      <span className="text-[11px] font-medium text-[#616161]">
-                        IST
-                      </span>
+                        aria-label="Target exam"
+                      >
+                        {demoTargetOptions.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      <div
+                        className="flex flex-wrap gap-1.5"
+                        role="group"
+                        aria-label="Subject for this demo"
+                      >
+                        {subs.map((s) => (
+                          <label
+                            key={s}
+                            className={cn(
+                              "inline-flex cursor-pointer items-center border px-2.5 py-1.5 text-[13px]",
+                              subj === s
+                                ? "border-[#1565c0] bg-[#e3f2fd] font-medium text-[#1565c0]"
+                                : "border-[#d0d0d0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="demo-subj"
+                              className="sr-only"
+                              checked={subj === s}
+                              onChange={() => pickSubject(s)}
+                            />
+                            {s}
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="min-w-0 space-y-2 border-t border-[#e0e0e0] pt-4 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
-                    <label
-                      htmlFor="demo-student-tz"
-                      className="block text-[10px] font-semibold uppercase tracking-wide text-[#757575]"
-                    >
-                      Student timezone
-                    </label>
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className={cn(SX.dataTh, "align-middle")}>
+                    Teacher
+                  </th>
+                  <td className={SX.dataTd}>
                     <select
-                      id="demo-student-tz"
                       className={cn(SX.select, "w-full max-w-[320px]")}
-                      value={studentTimeZone}
+                      value={effectiveTeacher}
                       onChange={(e) => {
                         setScheduleWarnMsg(null);
-                        setStudentTimeZone(e.target.value);
+                        setTeacher(e.target.value);
                       }}
-                      aria-label="Student timezone for invite preview"
+                      aria-label="Teacher"
+                      disabled={teacherNameOptions.length === 0}
                     >
-                      {STUDENT_TIMEZONE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
+                      {teacherNameOptions.length === 0 ? (
+                        <option value="">
+                          — Add faculty under Faculties first —
                         </option>
-                      ))}
+                      ) : (
+                        teacherNameOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))
+                      )}
                     </select>
-                    {studentLocalPreview ? (
-                      <div className="space-y-1">
-                        <p className="text-[12px] leading-snug text-[#424242]">
-                          <span className="text-[#757575]">Preview: </span>
-                          {studentLocalPreview}
-                        </p>
-                        <p className="text-[10px] leading-snug text-[#9e9e9e]">
-                          You can schedule for any local time. The slot must still be in
-                          the future (checked in IST and the student timezone above).
-                        </p>
-                      </div>
+                    {teacherNameOptions.length === 0 ? (
+                      <p className="mt-1.5 text-[12px] text-amber-800">
+                        No teachers in the system yet. Add faculty so demos can
+                        be assigned.
+                      </p>
                     ) : null}
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className={cn(SX.dataTh, "align-top")}>
+                    When
+                  </th>
+                  <td className={SX.dataTd}>
+                    <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
+                      <div className="min-w-0 space-y-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-[#757575]">
+                          India (IST)
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="date"
+                            min={todayStr}
+                            value={effectiveDemoDate}
+                            onChange={(e) => {
+                              setScheduleWarnMsg(null);
+                              const v = e.target.value;
+                              if (v >= todayStr) setDemoDate(v);
+                            }}
+                            className={cn(SX.input, "w-[148px]")}
+                            aria-invalid={!!scheduleWarnMsg}
+                            aria-label="Demo date (IST)"
+                          />
+                          <span
+                            className="text-[12px] text-[#9e9e9e]"
+                            aria-hidden={true}
+                          >
+                            at
+                          </span>
+                          <input
+                            type="time"
+                            value={demoTime}
+                            onChange={(e) => {
+                              setScheduleWarnMsg(null);
+                              setDemoTime(e.target.value);
+                            }}
+                            className={cn(SX.input, "w-[112px]")}
+                            aria-label="Start time India Standard Time"
+                          />
+                          <span className="text-[11px] font-medium text-[#616161]">
+                            IST
+                          </span>
+                        </div>
+                      </div>
+                      <div className="min-w-0 space-y-2 border-t border-[#e0e0e0] pt-4 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+                        <label
+                          htmlFor="demo-student-tz"
+                          className="block text-[10px] font-semibold uppercase tracking-wide text-[#757575]"
+                        >
+                          Student timezone
+                        </label>
+                        <select
+                          id="demo-student-tz"
+                          className={cn(SX.select, "w-full max-w-[320px]")}
+                          value={studentTimeZone}
+                          onChange={(e) => {
+                            setScheduleWarnMsg(null);
+                            setStudentTimeZone(e.target.value);
+                          }}
+                          aria-label="Student timezone for invite preview"
+                        >
+                          {STUDENT_TIMEZONE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {studentLocalPreview ? (
+                          <div className="space-y-1">
+                            <p className="text-[12px] leading-snug text-[#424242]">
+                              <span className="text-[#757575]">Preview: </span>
+                              {studentLocalPreview}
+                            </p>
+                            <p className="text-[10px] leading-snug text-[#9e9e9e]">
+                              You can schedule for any local time. The slot must
+                              still be in the future (checked in IST and the
+                              student timezone above).
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
-          <button type="button" className={SX.btnSecondary} onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className={SX.btnPrimary}
-            disabled={!effectiveTeacher.trim()}
-            onClick={() => {
-              setScheduleWarnMsg(null);
-              if (!effectiveTeacher.trim()) {
-                setScheduleWarnMsg("Choose a teacher from your faculty list.");
-                return;
-              }
-              const slot = parseIstSlot(effectiveDemoDate, demoTime);
-              if (!slot) {
-                setScheduleWarnMsg("Enter a valid date and time.");
-                return;
-              }
-              const now = new Date();
-              if (slot.getTime() < now.getTime()) {
-                setScheduleWarnMsg(buildPastSlotWarning(slot, studentTimeZone));
-                return;
-              }
-              onSchedule({
-                subject: subj,
-                teacher: effectiveTeacher,
-                studentTimeZone,
-                status: "Scheduled",
-                isoDate: effectiveDemoDate,
-                timeHmIST: demoTime,
-              });
-            }}
-          >
-            Schedule demo
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={SX.btnPrimary}
+              disabled={!effectiveTeacher.trim()}
+              onClick={() => {
+                setScheduleWarnMsg(null);
+                if (!effectiveTeacher.trim()) {
+                  setScheduleWarnMsg(
+                    "Choose a teacher from your faculty list.",
+                  );
+                  return;
+                }
+                const slot = parseIstSlot(effectiveDemoDate, demoTime);
+                if (!slot) {
+                  setScheduleWarnMsg("Enter a valid date and time.");
+                  return;
+                }
+                const now = new Date();
+                if (slot.getTime() < now.getTime()) {
+                  setScheduleWarnMsg(
+                    buildPastSlotWarning(slot, studentTimeZone),
+                  );
+                  return;
+                }
+                onSchedule({
+                  subject: subj,
+                  teacher: effectiveTeacher,
+                  studentTimeZone,
+                  status: "Scheduled",
+                  isoDate: effectiveDemoDate,
+                  timeHmIST: demoTime,
+                });
+              }}
+            >
+              Schedule demo
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-    <DemoScheduleWarningDialog
-      message={scheduleWarnMsg}
-      onDismiss={dismissScheduleWarn}
-    />
+      <DemoScheduleWarningDialog
+        message={scheduleWarnMsg}
+        onDismiss={dismissScheduleWarn}
+      />
     </>
   );
 }
@@ -2271,6 +2339,125 @@ type ExamBrochureCatalogRow = {
   linkLabel: string;
 };
 
+type BrochurePreviewState =
+  | null
+  | {
+      kind: "blob";
+      url: string;
+      mime: string;
+      fileName: string;
+    }
+  | {
+      kind: "remote";
+      url: string;
+      title: string;
+    }
+  | {
+      kind: "hint";
+      message: string;
+    };
+
+function BrochurePreviewModal({
+  state,
+  onClose,
+}: {
+  state: BrochurePreviewState;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!state) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state, onClose]);
+
+  if (!state) return null;
+
+  const title =
+    state.kind === "blob"
+      ? state.fileName
+      : state.kind === "remote"
+        ? state.title
+        : "Preview";
+
+  return (
+    <div
+      className="fixed inset-0 z-[210] flex items-center justify-center p-3 md:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="brochure-preview-title"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/55 backdrop-blur-[1px]"
+        onClick={onClose}
+        aria-label="Close preview"
+      />
+      <div
+        className="relative z-10 flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl shadow-black/25"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <h2
+            id="brochure-preview-title"
+            className="min-w-0 truncate text-sm font-semibold text-slate-900"
+          >
+            {title}
+          </h2>
+          <button
+            type="button"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-lg leading-none text-slate-600 hover:bg-slate-100"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-2 md:p-3">
+          {state.kind === "blob" && state.mime.startsWith("image/") ? (
+            <img
+              src={state.url}
+              alt=""
+              className="mx-auto max-h-[calc(92vh-7rem)] w-full max-w-full object-contain"
+            />
+          ) : state.kind === "blob" ? (
+            <iframe
+              title={state.fileName}
+              src={state.url}
+              className="h-[min(75vh,820px)] w-full rounded border-0 bg-white shadow-inner"
+            />
+          ) : state.kind === "remote" ? (
+            <iframe
+              title={state.title}
+              src={state.url}
+              className="h-[min(75vh,820px)] w-full rounded border-0 bg-white shadow-inner"
+            />
+          ) : (
+            <p className="px-4 py-8 text-center text-[13px] leading-relaxed text-slate-600">
+              {state.message}
+            </p>
+          )}
+        </div>
+        {state.kind === "remote" ? (
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-2.5 text-center text-[12px] text-slate-600">
+            If the preview is blank (some hosts block embedding),{" "}
+            <a
+              href={state.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary underline"
+            >
+              open in a new tab
+            </a>
+            .
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function BrochureSection({
   lead,
   onPatchLead,
@@ -2282,6 +2469,8 @@ function BrochureSection({
     | {
         notes?: string;
         fileName?: string | null;
+        storedFileUrl?: string | null;
+        documentUrl?: string | null;
         generated?: boolean;
         sentWhatsApp?: boolean;
         sentEmail?: boolean;
@@ -2292,12 +2481,26 @@ function BrochureSection({
   const [file, setFile] = useState<File | null>(null);
   const [genPreview, setGenPreview] = useState(br?.generated ?? false);
   const [notes, setNotes] = useState(br?.notes ?? "");
-  const [savedName, setSavedName] = useState<string | null>(br?.fileName ?? null);
+  const [savedName, setSavedName] = useState<string | null>(
+    br?.fileName ?? null,
+  );
+  const [storedFileUrl, setStoredFileUrl] = useState<string | null>(
+    br?.storedFileUrl ?? null,
+  );
+  const [documentUrl, setDocumentUrl] = useState(br?.documentUrl ?? "");
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const brochureFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
+  const [brochurePreview, setBrochurePreview] =
+    useState<BrochurePreviewState>(null);
+  const brochurePreviewExtraBlobRef = useRef<string | null>(null);
   const [examBrochureCatalog, setExamBrochureCatalog] =
     useState<ExamBrochureCatalogRow | null>(null);
   const [examBrochureCatalogLoading, setExamBrochureCatalogLoading] =
     useState(true);
   const brochureSkipAutosave = useRef(true);
+  const documentUrlSkipAutosave = useRef(true);
   const leadBrRef = useRef(lead);
   leadBrRef.current = lead;
 
@@ -2308,7 +2511,23 @@ function BrochureSection({
 
   useEffect(() => {
     brochureSkipAutosave.current = true;
+    documentUrlSkipAutosave.current = true;
   }, [lead.id]);
+
+  useEffect(() => {
+    if (!file) {
+      setBlobPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setBlobPreviewUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
 
   useEffect(() => {
     const exam = brochurePrimaryExam;
@@ -2350,17 +2569,24 @@ function BrochureSection({
       | {
           notes?: string;
           fileName?: string | null;
+          storedFileUrl?: string | null;
+          documentUrl?: string | null;
           generated?: boolean;
         }
       | undefined;
     if (b) {
       setNotes(b.notes ?? "");
       setSavedName(b.fileName ?? null);
+      setStoredFileUrl(b.storedFileUrl ?? null);
+      setDocumentUrl(b.documentUrl ?? "");
       setGenPreview(b.generated ?? false);
     }
   }, [lead.id, lead.pipelineMeta]);
 
-  const brochureFileLabel = file?.name ?? savedName ?? "";
+  const brochureFileLabel =
+    file?.name ??
+    savedName ??
+    (documentUrl.trim() ? "Linked document" : "");
   const formatSentAt = (iso?: string) => {
     if (!iso) return "";
     try {
@@ -2374,11 +2600,76 @@ function BrochureSection({
     (patch: Record<string, unknown> = {}) => ({
       notes,
       fileName: file?.name ?? savedName,
+      storedFileUrl,
+      documentUrl: documentUrl.trim(),
       generated: genPreview,
       ...patch,
     }),
-    [notes, file, savedName, genPreview],
+    [notes, file, savedName, storedFileUrl, documentUrl, genPreview],
   );
+
+  const closeBrochurePreview = useCallback(() => {
+    if (brochurePreviewExtraBlobRef.current) {
+      URL.revokeObjectURL(brochurePreviewExtraBlobRef.current);
+      brochurePreviewExtraBlobRef.current = null;
+    }
+    setBrochurePreview(null);
+  }, []);
+
+  const openBrochurePreview = useCallback(() => {
+    if (file) {
+      let url = blobPreviewUrl;
+      if (!url) {
+        url = URL.createObjectURL(file);
+        brochurePreviewExtraBlobRef.current = url;
+      }
+      setBrochurePreview({
+        kind: "blob",
+        url,
+        mime: file.type || "application/octet-stream",
+        fileName: file.name,
+      });
+      return;
+    }
+    if (storedFileUrl?.trim()) {
+      setBrochurePreview({
+        kind: "remote",
+        url: storedFileUrl.trim(),
+        title: savedName?.trim() || "Uploaded brochure",
+      });
+      return;
+    }
+    const doc = documentUrl.trim();
+    if (doc) {
+      const normalized = /^https?:\/\//i.test(doc) ? doc : `https://${doc}`;
+      setBrochurePreview({
+        kind: "remote",
+        url: normalized,
+        title: "Document link",
+      });
+      return;
+    }
+    if (savedName?.trim() && examBrochureCatalog?.linkUrl?.trim()) {
+      setBrochurePreview({
+        kind: "remote",
+        url: examBrochureCatalog.linkUrl.trim(),
+        title: savedName.trim(),
+      });
+      return;
+    }
+    setBrochurePreview({
+      kind: "hint",
+      message:
+        "Upload a PDF or image, paste a document URL, or use the exam brochure link from Course Brochures to preview here.",
+    });
+  }, [
+    file,
+    blobPreviewUrl,
+    storedFileUrl,
+    savedName,
+    documentUrl,
+    examBrochureCatalog,
+  ]);
 
   useEffect(() => {
     if (brochureSkipAutosave.current) {
@@ -2399,6 +2690,26 @@ function BrochureSection({
     return () => window.clearTimeout(t);
   }, [notes, brochurePayload, onPatchLead]);
 
+  useEffect(() => {
+    if (documentUrlSkipAutosave.current) {
+      documentUrlSkipAutosave.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const L = leadBrRef.current;
+      const prev = (
+        L.pipelineMeta?.brochure as { documentUrl?: string } | undefined
+      )?.documentUrl;
+      if ((prev ?? "").trim() === documentUrl.trim()) return;
+      void onPatchLead({
+        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+          brochure: brochurePayload(),
+        }),
+      });
+    }, 650);
+    return () => window.clearTimeout(t);
+  }, [documentUrl, brochurePayload, onPatchLead]);
+
   return (
     <section className={SX.section}>
       <div className={SX.sectionHead}>
@@ -2412,295 +2723,429 @@ function BrochureSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            The brochure for this student&apos;s target exam loads from Course
-            Brochures. Upload or generate here; everything is stored on this lead.
+            Uploads are saved on the server for this lead. You can also paste a
+            PDF or image URL—both are stored and preview anytime.
           </p>
         </div>
       </div>
       <div className={SX.sectionBody}>
-      {!brochurePrimaryExam ? (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-3 text-[13px] text-amber-950">
-          <p className="font-semibold">No target exam selected</p>
-          <p className="mt-1 text-[12px] leading-snug text-amber-900/90">
-            Add target exams (e.g. NEET) on the lead row so the matching brochure
-            template can appear here.
-          </p>
-        </div>
-      ) : examBrochureCatalogLoading ? (
-        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-600">
-          Loading brochure template for{" "}
-          <span className="font-semibold">{brochurePrimaryExam}</span>…
-        </div>
-      ) : examBrochureCatalog &&
-        (examBrochureCatalog.title.trim() ||
-          examBrochureCatalog.summary.trim() ||
-          examBrochureCatalog.linkUrl.trim()) ? (
-        <div className="mb-4 rounded-lg border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-slate-50/80 px-4 py-4 shadow-sm shadow-slate-900/5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-sky-900">
-              Brochure · {brochurePrimaryExam}
+        {!brochurePrimaryExam ? (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-3 text-[13px] text-amber-950">
+            <p className="font-semibold">No target exam selected</p>
+            <p className="mt-1 text-[12px] leading-snug text-amber-900/90">
+              Add target exams (e.g. NEET) on the lead row so the matching
+              brochure template can appear here.
             </p>
-            <Link
-              href="/course-brochure"
-              className="text-[11px] font-medium text-primary hover:underline"
-            >
-              Edit templates
-            </Link>
           </div>
-          {examBrochureCatalog.title.trim() ? (
-            <h3 className="mt-2 text-lg font-semibold leading-snug text-slate-900">
-              {examBrochureCatalog.title}
-            </h3>
-          ) : null}
-          {examBrochureCatalog.summary.trim() ? (
-            <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
-              {examBrochureCatalog.summary}
-            </p>
-          ) : null}
-          {examBrochureCatalog.linkUrl.trim() ? (
-            <p className="mt-3">
-              <a
-                href={examBrochureCatalog.linkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
+        ) : examBrochureCatalogLoading ? (
+          <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-600">
+            Loading brochure template for{" "}
+            <span className="font-semibold">{brochurePrimaryExam}</span>…
+          </div>
+        ) : examBrochureCatalog &&
+          (examBrochureCatalog.title.trim() ||
+            examBrochureCatalog.summary.trim() ||
+            examBrochureCatalog.linkUrl.trim()) ? (
+          <div className="mb-4 rounded-lg border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-slate-50/80 px-4 py-4 shadow-sm shadow-slate-900/5">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-sky-900">
+                Brochure · {brochurePrimaryExam}
+              </p>
+              <Link
+                href="/course-brochure"
+                className="text-[11px] font-medium text-primary hover:underline"
               >
-                <IconLink className="h-4 w-4 shrink-0" />
-                {examBrochureCatalog.linkLabel.trim()
-                  ? examBrochureCatalog.linkLabel
-                  : "Open brochure document"}
-              </a>
-            </p>
-          ) : null}
-          {examBrochureCatalog.summary.trim() ? (
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-sky-100/80 pt-3">
-              <button
-                type="button"
-                className={cn(SX.btnSecondary, "text-[12px]")}
-                onClick={() => {
-                  const s = examBrochureCatalog.summary.trim();
-                  if (!s) return;
-                  setNotes((prev) => (prev.trim() ? `${prev}\n\n${s}` : s));
-                }}
-              >
-                Insert summary into notes below
-              </button>
+                Edit templates
+              </Link>
             </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-700">
-          <p className="font-semibold text-slate-800">
-            No brochure template for {brochurePrimaryExam} yet
-          </p>
-          <p className="mt-1 text-[12px] leading-snug text-slate-600">
-            Add title, summary, or a PDF link under{" "}
-            <Link href="/course-brochure" className="font-medium text-primary underline">
-              Course Brochures
-            </Link>{" "}
-            — it will show here for all {brochurePrimaryExam} students.
-          </p>
-        </div>
-      )}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600">
-            <input
-              type="file"
-              accept=".pdf,image/*"
-              className="hidden"
-              onChange={(e) => {
-                const nextFile = e.target.files?.[0] ?? null;
-                setFile(nextFile);
-                const name = nextFile?.name ?? null;
-                setSavedName(name);
-                const patch: Partial<Lead> = {
-                  pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                    brochure: {
-                      notes,
-                      fileName: name,
-                      generated: genPreview,
-                    },
-                  }),
-                };
-                if (nextFile) {
-                  patch.activityLog = appendActivity(
-                    lead.activityLog,
-                    "brochure",
-                    `Brochure file attached: ${nextFile.name}`,
-                  );
-                }
-                void onPatchLead(patch);
-              }}
+            {examBrochureCatalog.title.trim() ? (
+              <h3 className="mt-2 text-lg font-semibold leading-snug text-slate-900">
+                {examBrochureCatalog.title}
+              </h3>
+            ) : null}
+            {examBrochureCatalog.summary.trim() ? (
+              <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
+                {examBrochureCatalog.summary}
+              </p>
+            ) : null}
+            {examBrochureCatalog.linkUrl.trim() ? (
+              <p className="mt-3 flex flex-wrap items-center gap-3">
+                <a
+                  href={examBrochureCatalog.linkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
+                >
+                  <IconLink className="h-4 w-4 shrink-0" />
+                  {examBrochureCatalog.linkLabel.trim()
+                    ? examBrochureCatalog.linkLabel
+                    : "Open brochure document"}
+                </a>
+                <button
+                  type="button"
+                  className={cn(SX.btnSecondary, "text-[12px]")}
+                  onClick={() =>
+                    setBrochurePreview({
+                      kind: "remote",
+                      url: examBrochureCatalog.linkUrl.trim(),
+                      title:
+                        examBrochureCatalog.linkLabel.trim() ||
+                        `${brochurePrimaryExam} brochure`,
+                    })
+                  }
+                >
+                  Preview in window
+                </button>
+              </p>
+            ) : null}
+            {examBrochureCatalog.summary.trim() ? (
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-sky-100/80 pt-3">
+                <button
+                  type="button"
+                  className={cn(SX.btnSecondary, "text-[12px]")}
+                  onClick={() => {
+                    const s = examBrochureCatalog.summary.trim();
+                    if (!s) return;
+                    setNotes((prev) => (prev.trim() ? `${prev}\n\n${s}` : s));
+                  }}
+                >
+                  Insert summary into notes below
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-700">
+            <p className="font-semibold text-slate-800">
+              No brochure template for {brochurePrimaryExam} yet
+            </p>
+            <p className="mt-1 text-[12px] leading-snug text-slate-600">
+              Add title, summary, or a PDF link under{" "}
+              <Link
+                href="/course-brochure"
+                className="font-medium text-primary underline"
+              >
+                Course Brochures
+              </Link>{" "}
+              — it will show here for all {brochurePrimaryExam} students.
+            </p>
+          </div>
+        )}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600">
+              <input
+                ref={brochureFileInputRef}
+                type="file"
+                accept=".pdf,image/*"
+                className="hidden"
+                disabled={uploadBusy}
+                onChange={(e) => {
+                  const nextFile = e.target.files?.[0] ?? null;
+                  if (!nextFile) {
+                    setFile(null);
+                    return;
+                  }
+                  setUploadError(null);
+                  setFile(nextFile);
+                  setUploadBusy(true);
+                  void (async () => {
+                    try {
+                      const fd = new FormData();
+                      fd.set("file", nextFile);
+                      const res = await fetch(
+                        `/api/leads/${lead.id}/brochure-upload`,
+                        { method: "POST", body: fd },
+                      );
+                      const data = (await res.json().catch(() => ({}))) as {
+                        storedFileUrl?: string;
+                        fileName?: string;
+                        error?: string;
+                      };
+                      if (!res.ok) {
+                        throw new Error(data.error || "Upload failed");
+                      }
+                      if (!data.storedFileUrl || !data.fileName) {
+                        throw new Error("Invalid upload response");
+                      }
+                      setStoredFileUrl(data.storedFileUrl);
+                      setSavedName(data.fileName);
+                      setFile(null);
+                      if (brochureFileInputRef.current) {
+                        brochureFileInputRef.current.value = "";
+                      }
+                      const L = leadBrRef.current;
+                      await onPatchLead({
+                        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+                          brochure: brochurePayload({
+                            storedFileUrl: data.storedFileUrl,
+                            fileName: data.fileName,
+                          }),
+                        }),
+                        activityLog: appendActivity(
+                          L.activityLog,
+                          "brochure",
+                          `Brochure saved on server: ${data.fileName}`,
+                        ),
+                      });
+                    } catch (err) {
+                      setUploadError(
+                        err instanceof Error ? err.message : "Upload failed",
+                      );
+                      setFile(null);
+                      const L = leadBrRef.current;
+                      const prevBr = L.pipelineMeta?.brochure as
+                        | {
+                            storedFileUrl?: string | null;
+                            fileName?: string | null;
+                          }
+                        | undefined;
+                      setStoredFileUrl(prevBr?.storedFileUrl ?? null);
+                      setSavedName(prevBr?.fileName ?? null);
+                      if (brochureFileInputRef.current) {
+                        brochureFileInputRef.current.value = "";
+                      }
+                    } finally {
+                      setUploadBusy(false);
+                    }
+                  })();
+                }}
+              />
+              <IconCloudUpload />
+              <span>
+                {uploadBusy ? "Uploading…" : "Upload PDF or image"}
+              </span>
+              <span className="text-[12px] text-slate-400">PDF, JPG, PNG</span>
+            </label>
+            {uploadError ? (
+              <p className="mt-2 text-[12px] text-[#c62828]">{uploadError}</p>
+            ) : null}
+            {file && uploadBusy && (
+              <p className="mt-2 text-[13px] text-slate-600">
+                Uploading {file.name}…
+              </p>
+            )}
+            {file && !uploadBusy && (
+              <p className="mt-2 text-[13px]">
+                {file.name} ({Math.round(file.size / 1024)} KB) ·{" "}
+                <button
+                  type="button"
+                  className="font-medium text-primary underline hover:no-underline"
+                  onClick={openBrochurePreview}
+                >
+                  Preview
+                </button>{" "}
+                ·{" "}
+                <button
+                  type="button"
+                  className="text-[#c62828] underline"
+                  onClick={() => {
+                    setFile(null);
+                    closeBrochurePreview();
+                    if (brochureFileInputRef.current) {
+                      brochureFileInputRef.current.value = "";
+                    }
+                  }}
+                >
+                  Cancel
+                </button>
+              </p>
+            )}
+            {!file && !uploadBusy && (savedName || storedFileUrl) ? (
+              <p className="mt-2 text-[13px] text-slate-600">
+                Saved file:{" "}
+                <span className="font-medium">
+                  {savedName ?? "Uploaded file"}
+                </span>
+                {" · "}
+                <button
+                  type="button"
+                  className="font-medium text-primary underline hover:no-underline"
+                  onClick={openBrochurePreview}
+                >
+                  Preview
+                </button>
+                {" · "}
+                <button
+                  type="button"
+                  className="text-[#c62828] underline"
+                  onClick={() => {
+                    closeBrochurePreview();
+                    void (async () => {
+                      try {
+                        await fetch(
+                          `/api/leads/${lead.id}/brochure-upload`,
+                          { method: "DELETE" },
+                        );
+                        setStoredFileUrl(null);
+                        setSavedName(null);
+                        const L = leadBrRef.current;
+                        await onPatchLead({
+                          pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+                            brochure: brochurePayload({
+                              storedFileUrl: null,
+                              fileName: null,
+                            }),
+                          }),
+                        });
+                      } catch {
+                        setUploadError("Could not remove file");
+                      }
+                    })();
+                  }}
+                >
+                  Remove
+                </button>
+              </p>
+            ) : null}
+            <div className="mt-4">
+              <label className="text-[13px] font-semibold text-slate-900">
+                Document URL (optional)
+              </label>
+              <input
+                type="url"
+                className={cn(SX.input, "mt-1.5 w-full")}
+                placeholder="https://… (PDF or image link)"
+                value={documentUrl}
+                onChange={(e) => setDocumentUrl(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Saves automatically. Used for preview when no upload is set.
+              </p>
+            </div>
+          </div>
+          <div>
+            <label className="text-[13px] font-semibold text-slate-900">
+              Generate from performance notes
+            </label>
+            <textarea
+              rows={4}
+              className={cn(SX.textarea, "mt-2")}
+              placeholder="Demo performance notes, strengths, areas to improve…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
             />
-            <IconCloudUpload />
-            <span>Upload PDF or image</span>
-            <span className="text-[12px] text-slate-400">PDF, JPG, PNG</span>
-          </label>
-          {file && (
-            <p className="mt-2 text-[13px]">
-              {file.name} ({Math.round(file.size / 1024)} KB) ·{" "}
-              <button type="button" className="text-[#1565c0] underline">
-                Preview
-              </button>{" "}
-              ·{" "}
-              <button
-                type="button"
-                className="text-[#c62828] underline"
-                onClick={() => {
-                  setFile(null);
+            <button
+              type="button"
+              className={cn(SX.btnPrimary, "mt-2 gap-2")}
+              onClick={() => {
+                window.setTimeout(() => {
+                  setGenPreview(true);
                   void onPatchLead({
                     pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                      brochure: {
-                        notes,
-                        fileName: null,
-                        generated: genPreview,
-                      },
+                      brochure: brochurePayload({ generated: true }),
                     }),
+                    activityLog: appendActivity(
+                      lead.activityLog,
+                      "brochure",
+                      `Brochure generated from notes — saved on this lead${(file?.name ?? savedName) ? ` (file: ${file?.name ?? savedName})` : ""}.`,
+                    ),
                   });
-                }}
-              >
-                Remove
-              </button>
-            </p>
-          )}
-          {!file && savedName ? (
-            <p className="mt-2 text-[13px] text-slate-600">
-              Saved file: <span className="font-medium">{savedName}</span>
-            </p>
-          ) : null}
+                }, 400);
+              }}
+            >
+              <IconSparkles className="h-4 w-4 text-white" />
+              Generate brochure
+            </button>
+            {genPreview && (
+              <p className="mt-2 text-[13px] text-[#2e7d32]">Preview ready</p>
+            )}
+          </div>
         </div>
-        <div>
-          <label className="text-[13px] font-semibold text-slate-900">
-            Generate from performance notes
-          </label>
-          <textarea
-            rows={4}
-            className={cn(SX.textarea, "mt-2")}
-            placeholder="Demo performance notes, strengths, areas to improve…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
           <button
             type="button"
-            className={cn(SX.btnPrimary, "mt-2 gap-2")}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold shadow-sm transition-colors",
+              br?.sentWhatsApp
+                ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
+                : "bg-[#25d366] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]",
+            )}
             onClick={() => {
-              window.setTimeout(() => {
-                setGenPreview(true);
-                void onPatchLead({
-                  pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                    brochure: {
-                      notes,
-                      fileName: file?.name ?? savedName,
-                      generated: true,
-                    },
-                  }),
-                  activityLog: appendActivity(
-                    lead.activityLog,
-                    "brochure",
-                    `Brochure generated from notes — saved on this lead${(file?.name ?? savedName) ? ` (file: ${file?.name ?? savedName})` : ""}.`,
-                  ),
-                });
-              }, 400);
+              const label = brochureFileLabel || "Course brochure";
+              const now = new Date().toISOString();
+              void onPatchLead({
+                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                  brochure: {
+                    ...brochurePayload(),
+                    sentWhatsApp: true,
+                    sentWhatsAppAt: now,
+                  },
+                }),
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "brochure",
+                  `Brochure "${label}" marked sent via WhatsApp (saved on this lead).`,
+                ),
+              });
             }}
           >
-            <IconSparkles className="h-4 w-4 text-white" />
-            Generate brochure
+            {br?.sentWhatsApp ? (
+              <>
+                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                Sent · WhatsApp
+                {br?.sentWhatsAppAt ? (
+                  <span className="font-normal opacity-90">
+                    · {formatSentAt(br.sentWhatsAppAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Send via WhatsApp"
+            )}
           </button>
-          {genPreview && (
-            <p className="mt-2 text-[13px] text-[#2e7d32]">Preview ready</p>
-          )}
+          <button
+            type="button"
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold transition-colors",
+              br?.sentEmail
+                ? "border-2 border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+                : SX.btnPrimary,
+            )}
+            onClick={() => {
+              const label = brochureFileLabel || "Course brochure";
+              const now = new Date().toISOString();
+              void onPatchLead({
+                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                  brochure: {
+                    ...brochurePayload(),
+                    sentEmail: true,
+                    sentEmailAt: now,
+                  },
+                }),
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "brochure",
+                  `Brochure "${label}" marked sent via email (saved on this lead).`,
+                ),
+              });
+            }}
+          >
+            {br?.sentEmail ? (
+              <>
+                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                Sent · Email
+                {br?.sentEmailAt ? (
+                  <span className="font-normal opacity-90">
+                    · {formatSentAt(br.sentEmailAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Send via email"
+            )}
+          </button>
         </div>
+        <p className="mt-2 text-[11px] leading-snug text-slate-500">
+          Notes save automatically. Generate, upload, or send via WhatsApp /
+          email to advance the pipeline.
+        </p>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold shadow-sm transition-colors",
-            br?.sentWhatsApp
-              ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
-              : "bg-[#25d366] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]",
-          )}
-          onClick={() => {
-            const label = brochureFileLabel || "Course brochure";
-            const now = new Date().toISOString();
-            void onPatchLead({
-              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                brochure: {
-                  ...brochurePayload(),
-                  sentWhatsApp: true,
-                  sentWhatsAppAt: now,
-                },
-              }),
-              activityLog: appendActivity(
-                lead.activityLog,
-                "brochure",
-                `Brochure "${label}" marked sent via WhatsApp (saved on this lead).`,
-              ),
-            });
-          }}
-        >
-          {br?.sentWhatsApp ? (
-            <>
-              <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
-              Sent · WhatsApp
-              {br?.sentWhatsAppAt ? (
-                <span className="font-normal opacity-90">
-                  · {formatSentAt(br.sentWhatsAppAt)}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            "Send via WhatsApp"
-          )}
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold transition-colors",
-            br?.sentEmail
-              ? "border-2 border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
-              : SX.btnPrimary,
-          )}
-          onClick={() => {
-            const label = brochureFileLabel || "Course brochure";
-            const now = new Date().toISOString();
-            void onPatchLead({
-              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                brochure: {
-                  ...brochurePayload(),
-                  sentEmail: true,
-                  sentEmailAt: now,
-                },
-              }),
-              activityLog: appendActivity(
-                lead.activityLog,
-                "brochure",
-                `Brochure "${label}" marked sent via email (saved on this lead).`,
-              ),
-            });
-          }}
-        >
-          {br?.sentEmail ? (
-            <>
-              <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
-              Sent · Email
-              {br?.sentEmailAt ? (
-                <span className="font-normal opacity-90">
-                  · {formatSentAt(br.sentEmailAt)}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            "Send via email"
-          )}
-        </button>
-      </div>
-      <p className="mt-2 text-[11px] leading-snug text-slate-500">
-        Notes save automatically. Generate, upload, or send via WhatsApp / email to
-        advance the pipeline.
-      </p>
-      </div>
+      <BrochurePreviewModal
+        state={brochurePreview}
+        onClose={closeBrochurePreview}
+      />
     </section>
   );
 }
@@ -2746,7 +3191,9 @@ function redistributeAfterAmountEdit(
   const next = [...amounts];
   next[editedIndex] = clamped;
   const rest = finalFee - clamped;
-  const others = Array.from({ length: n }, (_, i) => i).filter((i) => i !== editedIndex);
+  const others = Array.from({ length: n }, (_, i) => i).filter(
+    (i) => i !== editedIndex,
+  );
   if (others.length === 0) return next;
   const base = Math.floor(rest / others.length);
   let leftover = rest - base * others.length;
@@ -2810,7 +3257,9 @@ function FeeSection({
     setInstallmentAmounts(splitFeeEvenly(finalFee, n));
   };
 
-  const onInstallmentCountChange = (n: (typeof INSTALLMENT_COUNT_OPTIONS)[number]) => {
+  const onInstallmentCountChange = (
+    n: (typeof INSTALLMENT_COUNT_OPTIONS)[number],
+  ) => {
     setInstallmentCount(n);
     setInstallmentDates((d) => padInstallmentDates(d, n));
     setInstallmentAmounts(splitFeeEvenly(finalFee, n));
@@ -2855,21 +3304,30 @@ function FeeSection({
         }
       | undefined;
     if (!f || typeof f !== "object") return;
-    if (typeof f.scholarshipPct === "number") setScholarshipPct(f.scholarshipPct);
+    if (typeof f.scholarshipPct === "number")
+      setScholarshipPct(f.scholarshipPct);
     if (typeof f.installmentEnabled === "boolean")
       setInstallmentEnabled(f.installmentEnabled);
     if (
       typeof f.installmentCount === "number" &&
-      (INSTALLMENT_COUNT_OPTIONS as readonly number[]).includes(f.installmentCount)
+      (INSTALLMENT_COUNT_OPTIONS as readonly number[]).includes(
+        f.installmentCount,
+      )
     ) {
       setInstallmentCount(
         f.installmentCount as (typeof INSTALLMENT_COUNT_OPTIONS)[number],
       );
     }
-    if (Array.isArray(f.installmentAmounts)) setInstallmentAmounts(f.installmentAmounts);
-    if (Array.isArray(f.installmentDates)) setInstallmentDates(f.installmentDates);
+    if (Array.isArray(f.installmentAmounts))
+      setInstallmentAmounts(f.installmentAmounts);
+    if (Array.isArray(f.installmentDates))
+      setInstallmentDates(f.installmentDates);
     if (typeof f.currency === "string") setCurrency(f.currency);
-    if (typeof f.baseTotal === "number" && Number.isFinite(f.baseTotal) && f.baseTotal >= 0) {
+    if (
+      typeof f.baseTotal === "number" &&
+      Number.isFinite(f.baseTotal) &&
+      f.baseTotal >= 0
+    ) {
       setBaseTotal(Math.round(f.baseTotal));
     }
   }, [lead.id, lead.pipelineMeta]);
@@ -3008,8 +3466,8 @@ function FeeSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Base fee can load from Fee Management defaults by target exam (e.g. NEET).
-            Scholarship, final fee, and installments save automatically.
+            Base fee can load from Fee Management defaults by target exam (e.g.
+            NEET). Scholarship, final fee, and installments save automatically.
           </p>
         </div>
         {!installmentEnabled && (
@@ -3040,7 +3498,9 @@ function FeeSection({
             </thead>
             <tbody>
               <tr>
-                <td className={SX.dataTd}>{formatTargetExams(lead.targetExams)}</td>
+                <td className={SX.dataTd}>
+                  {formatTargetExams(lead.targetExams)}
+                </td>
                 <td className={SX.dataTd}>
                   <label className="sr-only" htmlFor={`base-fee-${lead.id}`}>
                     Base course fee (INR)
@@ -3049,7 +3509,10 @@ function FeeSection({
                     id={`base-fee-${lead.id}`}
                     type="number"
                     min={0}
-                    className={cn(SX.input, "w-full min-w-[120px] max-w-[180px] tabular-nums")}
+                    className={cn(
+                      SX.input,
+                      "w-full min-w-[120px] max-w-[180px] tabular-nums",
+                    )}
                     value={baseTotal}
                     onChange={(e) => onBaseTotalChange(e.target.value)}
                     aria-label="Base course fee in Indian rupees"
@@ -3078,7 +3541,9 @@ function FeeSection({
                       value={installmentCount}
                       onChange={(e) =>
                         onInstallmentCountChange(
-                          Number(e.target.value) as (typeof INSTALLMENT_COUNT_OPTIONS)[number],
+                          Number(
+                            e.target.value,
+                          ) as (typeof INSTALLMENT_COUNT_OPTIONS)[number],
                         )
                       }
                       aria-label="Number of installments"
@@ -3126,13 +3591,18 @@ function FeeSection({
                 <tbody>
                   {installmentAmounts.map((amt, i) => (
                     <tr key={i}>
-                      <td className={cn(SX.dataTd, "tabular-nums text-[#757575]")}>
+                      <td
+                        className={cn(SX.dataTd, "tabular-nums text-[#757575]")}
+                      >
                         {i + 1}
                       </td>
                       <td className={SX.dataTd}>
                         <input
                           type="date"
-                          className={cn(SX.input, "min-w-[140px] max-w-[180px]")}
+                          className={cn(
+                            SX.input,
+                            "min-w-[140px] max-w-[180px]",
+                          )}
                           value={installmentDates[i] ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -3149,7 +3619,10 @@ function FeeSection({
                         <input
                           type="number"
                           min={0}
-                          className={cn(SX.input, "min-w-[100px] max-w-[160px] tabular-nums")}
+                          className={cn(
+                            SX.input,
+                            "min-w-[100px] max-w-[160px] tabular-nums",
+                          )}
                           value={amt}
                           onChange={(e) =>
                             onInstallmentAmountChange(i, e.target.value)
@@ -3193,7 +3666,9 @@ function FeeSection({
             <h3 className={SX.sectionTitle}>Currency</h3>
           </div>
           <div className="overflow-x-auto border-t border-[#d0d0d0]">
-            <table className={cn(SX.dataTable, "w-full min-w-[480px] table-fixed")}>
+            <table
+              className={cn(SX.dataTable, "w-full min-w-[480px] table-fixed")}
+            >
               <colgroup>
                 <col style={{ width: 140 }} />
                 <col />
@@ -3205,7 +3680,10 @@ function FeeSection({
                   </th>
                   <td className={cn(SX.dataTd, "align-middle")}>
                     <select
-                      className={cn(SX.select, "box-border w-[220px] max-w-full")}
+                      className={cn(
+                        SX.select,
+                        "box-border w-[220px] max-w-full",
+                      )}
                       value={currency}
                       onChange={(e) => setCurrency(e.target.value)}
                       aria-label="Fee display currency"
@@ -3250,7 +3728,8 @@ function FeeSection({
             </table>
           </div>
           <p className="border-t border-[#d0d0d0] bg-[#fafafa] px-2 py-1.5 text-[10px] leading-snug text-[#757575]">
-            Non-INR amounts use approximate rates — always confirm before payment.
+            Non-INR amounts use approximate rates — always confirm before
+            payment.
           </p>
         </div>
 
@@ -3383,8 +3862,8 @@ function FeeSection({
           </button>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Scholarship and installments save automatically. Use send actions to advance
-          the pipeline.
+          Scholarship and installments save automatically. Use send actions to
+          advance the pipeline.
         </p>
       </div>
     </section>
@@ -3530,8 +4009,8 @@ function ScheduleSection({
           scheduleDayToIndex(c.day) === null &&
           Boolean(
             (c.subject && c.subject.trim()) ||
-              (c.timeIST && c.timeIST.trim()) ||
-              (c.teacher && c.teacher.trim()),
+            (c.timeIST && c.timeIST.trim()) ||
+            (c.teacher && c.teacher.trim()),
           ),
       ),
     [classes],
@@ -3608,307 +4087,326 @@ function ScheduleSection({
         </div>
       </div>
       <div className={SX.sectionBody}>
-      {view === "table" ? (
-        <div className="overflow-auto">
-          <table className={cn(SX.dataTable, "min-w-[720px]")}>
-            <thead>
-              <tr>
-                <th className={SX.dataTh}>Day</th>
-                <th className={SX.dataTh}>Subject</th>
-                <th className={SX.dataTh}>Time (IST)</th>
-                <th className={SX.dataTh}>Local</th>
-                <th className={SX.dataTh}>Teacher</th>
-                <th className={SX.dataTh}>Duration</th>
-                <th className={SX.dataTh}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {classes.length === 0 ? (
+        {view === "table" ? (
+          <div className="overflow-auto">
+            <table className={cn(SX.dataTable, "min-w-[720px]")}>
+              <thead>
                 <tr>
-                  <td
-                    className={cn(SX.dataTd, "text-[13px] text-slate-500")}
-                    colSpan={7}
-                  >
-                    No classes yet. Use &quot;Add class&quot; to build the weekly
-                    schedule (saved on this lead).
-                  </td>
+                  <th className={SX.dataTh}>Day</th>
+                  <th className={SX.dataTh}>Subject</th>
+                  <th className={SX.dataTh}>Time (IST)</th>
+                  <th className={SX.dataTh}>Local</th>
+                  <th className={SX.dataTh}>Teacher</th>
+                  <th className={SX.dataTh}>Duration</th>
+                  <th className={SX.dataTh}>Actions</th>
                 </tr>
-              ) : (
-                classes.map((row, i) => (
-                  <tr key={i}>
-                    <td className={SX.dataTd}>
-                      <input
-                        className={cn(SX.input, "w-full min-w-[100px] max-w-[140px]")}
-                        value={row.day ?? ""}
-                        placeholder="e.g. Monday"
-                        onChange={(e) => updateClass(i, { day: e.target.value })}
-                        aria-label={`Class ${i + 1} day`}
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <input
-                        className={cn(SX.input, "w-full min-w-[100px]")}
-                        value={row.subject ?? ""}
-                        onChange={(e) =>
-                          updateClass(i, { subject: e.target.value })
-                        }
-                        aria-label={`Class ${i + 1} subject`}
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <input
-                        className={cn(SX.input, "w-full min-w-[88px]")}
-                        value={row.timeIST ?? ""}
-                        placeholder="9:00"
-                        onChange={(e) =>
-                          updateClass(i, { timeIST: e.target.value })
-                        }
-                        aria-label={`Class ${i + 1} time IST`}
-                      />
-                    </td>
-                    <td className={SX.dataTdMuted}>
-                      <input
-                        className={cn(SX.input, "w-full min-w-[88px]")}
-                        value={row.timeLocal ?? ""}
-                        onChange={(e) =>
-                          updateClass(i, { timeLocal: e.target.value })
-                        }
-                        aria-label={`Class ${i + 1} local time`}
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <input
-                        className={cn(SX.input, "w-full min-w-[120px]")}
-                        value={row.teacher ?? ""}
-                        onChange={(e) =>
-                          updateClass(i, { teacher: e.target.value })
-                        }
-                        aria-label={`Class ${i + 1} teacher`}
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <input
-                        className={cn(SX.input, "w-full min-w-[72px] max-w-[100px]")}
-                        value={row.duration ?? ""}
-                        placeholder="90 min"
-                        onChange={(e) =>
-                          updateClass(i, { duration: e.target.value })
-                        }
-                        aria-label={`Class ${i + 1} duration`}
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 text-[13px] font-medium text-red-700 hover:underline"
-                        onClick={() => removeClass(i)}
-                      >
-                        <IconTrash className="h-3.5 w-3.5" aria-hidden />
-                        Remove
-                      </button>
+              </thead>
+              <tbody>
+                {classes.length === 0 ? (
+                  <tr>
+                    <td
+                      className={cn(SX.dataTd, "text-[13px] text-slate-500")}
+                      colSpan={7}
+                    >
+                      No classes yet. Use &quot;Add class&quot; to build the
+                      weekly schedule (saved on this lead).
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-          <button
-            type="button"
-            className={cn(SX.btnGhost, "mt-3")}
-            onClick={() =>
-              setClasses((rows) => [...rows, emptyScheduleClassRow()])
-            }
-          >
-            + Add class
-          </button>
-        </div>
-      ) : (
-        <div className="overflow-auto">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px]">
+                ) : (
+                  classes.map((row, i) => (
+                    <tr key={i}>
+                      <td className={SX.dataTd}>
+                        <input
+                          className={cn(
+                            SX.input,
+                            "w-full min-w-[100px] max-w-[140px]",
+                          )}
+                          value={row.day ?? ""}
+                          placeholder="e.g. Monday"
+                          onChange={(e) =>
+                            updateClass(i, { day: e.target.value })
+                          }
+                          aria-label={`Class ${i + 1} day`}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        <input
+                          className={cn(SX.input, "w-full min-w-[100px]")}
+                          value={row.subject ?? ""}
+                          onChange={(e) =>
+                            updateClass(i, { subject: e.target.value })
+                          }
+                          aria-label={`Class ${i + 1} subject`}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        <input
+                          className={cn(SX.input, "w-full min-w-[88px]")}
+                          value={row.timeIST ?? ""}
+                          placeholder="9:00"
+                          onChange={(e) =>
+                            updateClass(i, { timeIST: e.target.value })
+                          }
+                          aria-label={`Class ${i + 1} time IST`}
+                        />
+                      </td>
+                      <td className={SX.dataTdMuted}>
+                        <input
+                          className={cn(SX.input, "w-full min-w-[88px]")}
+                          value={row.timeLocal ?? ""}
+                          onChange={(e) =>
+                            updateClass(i, { timeLocal: e.target.value })
+                          }
+                          aria-label={`Class ${i + 1} local time`}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        <input
+                          className={cn(SX.input, "w-full min-w-[120px]")}
+                          value={row.teacher ?? ""}
+                          onChange={(e) =>
+                            updateClass(i, { teacher: e.target.value })
+                          }
+                          aria-label={`Class ${i + 1} teacher`}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        <input
+                          className={cn(
+                            SX.input,
+                            "w-full min-w-[72px] max-w-[100px]",
+                          )}
+                          value={row.duration ?? ""}
+                          placeholder="90 min"
+                          onChange={(e) =>
+                            updateClass(i, { duration: e.target.value })
+                          }
+                          aria-label={`Class ${i + 1} duration`}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-[13px] font-medium text-red-700 hover:underline"
+                          onClick={() => removeClass(i)}
+                        >
+                          <IconTrash className="h-3.5 w-3.5" aria-hidden />
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
             <button
               type="button"
-              className="font-medium text-primary hover:underline"
+              className={cn(SX.btnGhost, "mt-3")}
               onClick={() =>
-                setWeekStart((w) => startOfWeek(addWeeks(w, -1), { weekStartsOn: 1 }))
+                setClasses((rows) => [...rows, emptyScheduleClassRow()])
               }
             >
-              ← Prev week
-            </button>
-            <span className="font-semibold text-[#212121]">{weekRangeLabel}</span>
-            <button
-              type="button"
-              className="font-medium text-primary hover:underline"
-              onClick={() =>
-                setWeekStart((w) => startOfWeek(addWeeks(w, 1), { weekStartsOn: 1 }))
-              }
-            >
-              Next week →
+              + Add class
             </button>
           </div>
-          <p className="mb-3 text-[12px] text-slate-500">
-            Classes are grouped by weekday name (e.g. Monday). Edit the table view
-            for full detail; this week grid updates from the same saved rows.
-          </p>
-          <div className="grid min-w-[640px] grid-cols-7 gap-2 sm:min-w-[800px]">
-            {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
-              const dayDate = addDays(weekStart, dayIndex);
-              const dayClasses = classes.filter(
-                (c) => scheduleDayToIndex(c.day) === dayIndex,
-              );
-              return (
-                <div
-                  key={dayIndex}
-                  className="flex min-h-[140px] flex-col border border-slate-200 bg-white p-2 text-[11px] shadow-sm"
-                >
-                  <div className="border-b border-slate-100 pb-1.5 text-center font-semibold text-slate-800">
-                    {format(dayDate, "EEE")}
-                    <div className="text-[10px] font-normal text-slate-500">
-                      {format(dayDate, "MMM d")}
+        ) : (
+          <div className="overflow-auto">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px]">
+              <button
+                type="button"
+                className="font-medium text-primary hover:underline"
+                onClick={() =>
+                  setWeekStart((w) =>
+                    startOfWeek(addWeeks(w, -1), { weekStartsOn: 1 }),
+                  )
+                }
+              >
+                ← Prev week
+              </button>
+              <span className="font-semibold text-[#212121]">
+                {weekRangeLabel}
+              </span>
+              <button
+                type="button"
+                className="font-medium text-primary hover:underline"
+                onClick={() =>
+                  setWeekStart((w) =>
+                    startOfWeek(addWeeks(w, 1), { weekStartsOn: 1 }),
+                  )
+                }
+              >
+                Next week →
+              </button>
+            </div>
+            <p className="mb-3 text-[12px] text-slate-500">
+              Classes are grouped by weekday name (e.g. Monday). Edit the table
+              view for full detail; this week grid updates from the same saved
+              rows.
+            </p>
+            <div className="grid min-w-[640px] grid-cols-7 gap-2 sm:min-w-[800px]">
+              {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
+                const dayDate = addDays(weekStart, dayIndex);
+                const dayClasses = classes.filter(
+                  (c) => scheduleDayToIndex(c.day) === dayIndex,
+                );
+                return (
+                  <div
+                    key={dayIndex}
+                    className="flex min-h-[140px] flex-col border border-slate-200 bg-white p-2 text-[11px] shadow-sm"
+                  >
+                    <div className="border-b border-slate-100 pb-1.5 text-center font-semibold text-slate-800">
+                      {format(dayDate, "EEE")}
+                      <div className="text-[10px] font-normal text-slate-500">
+                        {format(dayDate, "MMM d")}
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-1 flex-col gap-1.5">
+                      {dayClasses.length === 0 ? (
+                        <p className="text-[10px] text-slate-400">No classes</p>
+                      ) : (
+                        dayClasses.map((c, idx) => (
+                          <div
+                            key={`${c.subject}-${idx}`}
+                            className="rounded border border-emerald-200 bg-emerald-50/80 px-1.5 py-1 text-left text-[10px] text-emerald-950"
+                          >
+                            <div className="font-semibold leading-tight">
+                              {c.subject?.trim() || "—"}
+                            </div>
+                            {c.timeIST?.trim() ? (
+                              <div className="text-emerald-900/90">
+                                IST {c.timeIST}
+                              </div>
+                            ) : null}
+                            {c.teacher?.trim() ? (
+                              <div className="text-emerald-800/80">
+                                {c.teacher}
+                              </div>
+                            ) : null}
+                            {c.duration?.trim() ? (
+                              <div className="text-emerald-800/70">
+                                {c.duration}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
-                  <div className="mt-2 flex flex-1 flex-col gap-1.5">
-                    {dayClasses.length === 0 ? (
-                      <p className="text-[10px] text-slate-400">No classes</p>
-                    ) : (
-                      dayClasses.map((c, idx) => (
-                        <div
-                          key={`${c.subject}-${idx}`}
-                          className="rounded border border-emerald-200 bg-emerald-50/80 px-1.5 py-1 text-left text-[10px] text-emerald-950"
-                        >
-                          <div className="font-semibold leading-tight">
-                            {c.subject?.trim() || "—"}
-                          </div>
-                          {c.timeIST?.trim() ? (
-                            <div className="text-emerald-900/90">
-                              IST {c.timeIST}
-                            </div>
-                          ) : null}
-                          {c.teacher?.trim() ? (
-                            <div className="text-emerald-800/80">{c.teacher}</div>
-                          ) : null}
-                          {c.duration?.trim() ? (
-                            <div className="text-emerald-800/70">{c.duration}</div>
-                          ) : null}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            {unassignedDayClasses.length > 0 ? (
+              <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
+                Set the <strong>Day</strong> field (e.g. Monday) so rows appear
+                in a column:{" "}
+                {unassignedDayClasses
+                  .map((c) => c.subject?.trim() || "Class")
+                  .join(", ")}
+              </p>
+            ) : null}
           </div>
-          {unassignedDayClasses.length > 0 ? (
-            <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
-              Set the <strong>Day</strong> field (e.g. Monday) so rows appear in a
-              column:{" "}
-              {unassignedDayClasses
-                .map((c) => c.subject?.trim() || "Class")
-                .join(", ")}
-            </p>
-          ) : null}
+        )}
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#e8e8e8] pt-3">
+          <span className="text-[13px] font-semibold">Send schedule</span>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
+              schedSend?.scheduleSentWhatsApp
+                ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
+                : "bg-[#25d366] text-white hover:bg-[#1fb855]",
+            )}
+            onClick={() => {
+              const now = new Date().toISOString();
+              const prev =
+                lead.pipelineMeta?.schedule &&
+                typeof lead.pipelineMeta.schedule === "object" &&
+                !Array.isArray(lead.pipelineMeta.schedule)
+                  ? (lead.pipelineMeta.schedule as Record<string, unknown>)
+                  : {};
+              void onPatchLead({
+                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                  schedule: {
+                    ...prev,
+                    view,
+                    scheduleSentWhatsApp: true,
+                    scheduleSentWhatsAppAt: now,
+                  },
+                }),
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "schedule",
+                  "Class schedule sent via WhatsApp.",
+                ),
+              });
+            }}
+          >
+            {schedSend?.scheduleSentWhatsApp ? (
+              <>
+                <IconCheck className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+                Sent · WhatsApp
+                {schedSend.scheduleSentWhatsAppAt ? (
+                  <span className="font-normal opacity-90">
+                    · {schedSentAtLabel(schedSend.scheduleSentWhatsAppAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "WhatsApp"
+            )}
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
+              schedSend?.scheduleSentEmail
+                ? "border-2 border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+                : SX.btnPrimary,
+            )}
+            onClick={() => {
+              const now = new Date().toISOString();
+              const prev =
+                lead.pipelineMeta?.schedule &&
+                typeof lead.pipelineMeta.schedule === "object" &&
+                !Array.isArray(lead.pipelineMeta.schedule)
+                  ? (lead.pipelineMeta.schedule as Record<string, unknown>)
+                  : {};
+              void onPatchLead({
+                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                  schedule: {
+                    ...prev,
+                    view,
+                    scheduleSentEmail: true,
+                    scheduleSentEmailAt: now,
+                  },
+                }),
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "schedule",
+                  "Class schedule sent via email.",
+                ),
+              });
+            }}
+          >
+            {schedSend?.scheduleSentEmail ? (
+              <>
+                <IconCheck className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+                Sent · Email
+                {schedSend.scheduleSentEmailAt ? (
+                  <span className="font-normal opacity-90">
+                    · {schedSentAtLabel(schedSend.scheduleSentEmailAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Email"
+            )}
+          </button>
         </div>
-      )}
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#e8e8e8] pt-3">
-        <span className="text-[13px] font-semibold">Send schedule</span>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
-            schedSend?.scheduleSentWhatsApp
-              ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
-              : "bg-[#25d366] text-white hover:bg-[#1fb855]",
-          )}
-          onClick={() => {
-            const now = new Date().toISOString();
-            const prev =
-              lead.pipelineMeta?.schedule &&
-              typeof lead.pipelineMeta.schedule === "object" &&
-              !Array.isArray(lead.pipelineMeta.schedule)
-                ? (lead.pipelineMeta.schedule as Record<string, unknown>)
-                : {};
-            void onPatchLead({
-              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                schedule: {
-                  ...prev,
-                  view,
-                  scheduleSentWhatsApp: true,
-                  scheduleSentWhatsAppAt: now,
-                },
-              }),
-              activityLog: appendActivity(
-                lead.activityLog,
-                "schedule",
-                "Class schedule sent via WhatsApp.",
-              ),
-            });
-          }}
-        >
-          {schedSend?.scheduleSentWhatsApp ? (
-            <>
-              <IconCheck className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
-              Sent · WhatsApp
-              {schedSend.scheduleSentWhatsAppAt ? (
-                <span className="font-normal opacity-90">
-                  · {schedSentAtLabel(schedSend.scheduleSentWhatsAppAt)}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            "WhatsApp"
-          )}
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
-            schedSend?.scheduleSentEmail
-              ? "border-2 border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
-              : SX.btnPrimary,
-          )}
-          onClick={() => {
-            const now = new Date().toISOString();
-            const prev =
-              lead.pipelineMeta?.schedule &&
-              typeof lead.pipelineMeta.schedule === "object" &&
-              !Array.isArray(lead.pipelineMeta.schedule)
-                ? (lead.pipelineMeta.schedule as Record<string, unknown>)
-                : {};
-            void onPatchLead({
-              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                schedule: {
-                  ...prev,
-                  view,
-                  scheduleSentEmail: true,
-                  scheduleSentEmailAt: now,
-                },
-              }),
-              activityLog: appendActivity(
-                lead.activityLog,
-                "schedule",
-                "Class schedule sent via email.",
-              ),
-            });
-          }}
-        >
-          {schedSend?.scheduleSentEmail ? (
-            <>
-              <IconCheck className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
-              Sent · Email
-              {schedSend.scheduleSentEmailAt ? (
-                <span className="font-normal opacity-90">
-                  · {schedSentAtLabel(schedSend.scheduleSentEmailAt)}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            "Email"
-          )}
-        </button>
-      </div>
-      <p className="mt-2 text-[11px] leading-snug text-slate-500">
-        Table / Calendar choice saves automatically. Send via WhatsApp or email to
-        complete the pipeline.
-      </p>
+        <p className="mt-2 text-[11px] leading-snug text-slate-500">
+          Table / Calendar choice saves automatically. Send via WhatsApp or
+          email to complete the pipeline.
+        </p>
       </div>
     </section>
   );

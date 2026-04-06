@@ -23,6 +23,10 @@ export type LeadPipelineDemo = {
 export type LeadPipelineBrochure = {
   notes?: string;
   fileName?: string | null;
+  /** e.g. `/uploads/brochures/{leadId}/{uuid}.pdf` */
+  storedFileUrl?: string | null;
+  /** Pasted link to a brochure PDF or image */
+  documentUrl?: string | null;
   generated?: boolean;
   sentWhatsApp?: boolean;
   sentEmail?: boolean;

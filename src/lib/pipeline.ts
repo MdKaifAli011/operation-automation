@@ -26,12 +26,16 @@ export function computePipelineStepsFromMeta(
     sentWhatsApp?: boolean;
     sentEmail?: boolean;
     fileName?: string | null;
+    storedFileUrl?: string | null;
+    documentUrl?: string | null;
   } | undefined;
   const brochureDone =
     !!br?.generated ||
     !!br?.sentWhatsApp ||
     !!br?.sentEmail ||
-    (!!br?.fileName && String(br.fileName).trim().length > 0);
+    (!!br?.fileName && String(br.fileName).trim().length > 0) ||
+    (!!br?.storedFileUrl && String(br.storedFileUrl).trim().length > 0) ||
+    (!!br?.documentUrl && String(br.documentUrl).trim().length > 0);
   if (!brochureDone) return 1;
 
   const fees = m.fees as {
