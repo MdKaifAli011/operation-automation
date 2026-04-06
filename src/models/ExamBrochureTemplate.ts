@@ -14,6 +14,9 @@ const ExamBrochureTemplateSchema = new Schema(
     linkUrl: { type: String, default: "", trim: true },
     /** Display name for the linked document */
     linkLabel: { type: String, default: "", trim: true },
+    /** Server-stored file under /uploads/exam-brochures/{exam}/… (takes precedence over linkUrl in UI) */
+    storedFileUrl: { type: String, default: null },
+    storedFileName: { type: String, default: null },
   },
   { timestamps: true },
 );

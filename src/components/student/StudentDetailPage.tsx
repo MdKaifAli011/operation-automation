@@ -52,6 +52,8 @@ import {
   IconSparkles,
   IconTrash,
 } from "@/components/icons/CrmIcons";
+import { BrochureInlinePreviewFrame } from "@/components/brochure/BrochureInlinePreviewFrame";
+import { normalizeBrochurePreviewUrl } from "@/lib/brochurePreview";
 import { cn } from "@/lib/cn";
 
 const STEPS = [
@@ -2337,126 +2339,9 @@ type ExamBrochureCatalogRow = {
   summary: string;
   linkUrl: string;
   linkLabel: string;
+  storedFileUrl?: string | null;
+  storedFileName?: string | null;
 };
-
-type BrochurePreviewState =
-  | null
-  | {
-      kind: "blob";
-      url: string;
-      mime: string;
-      fileName: string;
-    }
-  | {
-      kind: "remote";
-      url: string;
-      title: string;
-    }
-  | {
-      kind: "hint";
-      message: string;
-    };
-
-function BrochurePreviewModal({
-  state,
-  onClose,
-}: {
-  state: BrochurePreviewState;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    if (!state) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, onClose]);
-
-  if (!state) return null;
-
-  const title =
-    state.kind === "blob"
-      ? state.fileName
-      : state.kind === "remote"
-        ? state.title
-        : "Preview";
-
-  return (
-    <div
-      className="fixed inset-0 z-[210] flex items-center justify-center p-3 md:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="brochure-preview-title"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/55 backdrop-blur-[1px]"
-        onClick={onClose}
-        aria-label="Close preview"
-      />
-      <div
-        className="relative z-10 flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl shadow-black/25"
-      >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-          <h2
-            id="brochure-preview-title"
-            className="min-w-0 truncate text-sm font-semibold text-slate-900"
-          >
-            {title}
-          </h2>
-          <button
-            type="button"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-lg leading-none text-slate-600 hover:bg-slate-100"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-2 md:p-3">
-          {state.kind === "blob" && state.mime.startsWith("image/") ? (
-            <img
-              src={state.url}
-              alt=""
-              className="mx-auto max-h-[calc(92vh-7rem)] w-full max-w-full object-contain"
-            />
-          ) : state.kind === "blob" ? (
-            <iframe
-              title={state.fileName}
-              src={state.url}
-              className="h-[min(75vh,820px)] w-full rounded border-0 bg-white shadow-inner"
-            />
-          ) : state.kind === "remote" ? (
-            <iframe
-              title={state.title}
-              src={state.url}
-              className="h-[min(75vh,820px)] w-full rounded border-0 bg-white shadow-inner"
-            />
-          ) : (
-            <p className="px-4 py-8 text-center text-[13px] leading-relaxed text-slate-600">
-              {state.message}
-            </p>
-          )}
-        </div>
-        {state.kind === "remote" ? (
-          <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-2.5 text-center text-[12px] text-slate-600">
-            If the preview is blank (some hosts block embedding),{" "}
-            <a
-              href={state.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-primary underline"
-            >
-              open in a new tab
-            </a>
-            .
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
 
 function BrochureSection({
   lead,
@@ -2478,7 +2363,6 @@ function BrochureSection({
         sentEmailAt?: string;
       }
     | undefined;
-  const [file, setFile] = useState<File | null>(null);
   const [genPreview, setGenPreview] = useState(br?.generated ?? false);
   const [notes, setNotes] = useState(br?.notes ?? "");
   const [savedName, setSavedName] = useState<string | null>(
@@ -2491,10 +2375,6 @@ function BrochureSection({
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
-  const [brochurePreview, setBrochurePreview] =
-    useState<BrochurePreviewState>(null);
-  const brochurePreviewExtraBlobRef = useRef<string | null>(null);
   const [examBrochureCatalog, setExamBrochureCatalog] =
     useState<ExamBrochureCatalogRow | null>(null);
   const [examBrochureCatalogLoading, setExamBrochureCatalogLoading] =
@@ -2513,21 +2393,6 @@ function BrochureSection({
     brochureSkipAutosave.current = true;
     documentUrlSkipAutosave.current = true;
   }, [lead.id]);
-
-  useEffect(() => {
-    if (!file) {
-      setBlobPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setBlobPreviewUrl(url);
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [file]);
 
   useEffect(() => {
     const exam = brochurePrimaryExam;
@@ -2584,9 +2449,56 @@ function BrochureSection({
   }, [lead.id, lead.pipelineMeta]);
 
   const brochureFileLabel =
-    file?.name ??
-    savedName ??
-    (documentUrl.trim() ? "Linked document" : "");
+    savedName ?? (documentUrl.trim() ? "Linked document" : "");
+  const hasUploadedBrochure = Boolean(storedFileUrl?.trim());
+  const documentPreviewSrc =
+    !hasUploadedBrochure && documentUrl.trim()
+      ? normalizeBrochurePreviewUrl(documentUrl)
+      : "";
+  const catalogBrochureSrc = useMemo(() => {
+    const stored = examBrochureCatalog?.storedFileUrl?.trim();
+    const link = examBrochureCatalog?.linkUrl?.trim();
+    const u = stored || link;
+    if (!u) return "";
+    return normalizeBrochurePreviewUrl(u);
+  }, [
+    examBrochureCatalog?.storedFileUrl,
+    examBrochureCatalog?.linkUrl,
+  ]);
+  /** No per-student upload: lead document URL overrides course default. */
+  const defaultOrLeadPreviewSrc = hasUploadedBrochure
+    ? ""
+    : documentPreviewSrc || catalogBrochureSrc;
+  const defaultOrLeadPreviewLabel = hasUploadedBrochure
+    ? ""
+    : documentPreviewSrc
+      ? "Document link"
+      : catalogBrochureSrc
+        ? examBrochureCatalog?.storedFileUrl?.trim()
+          ? examBrochureCatalog?.storedFileName?.trim() ||
+            examBrochureCatalog?.title?.trim() ||
+            (brochurePrimaryExam
+              ? `${brochurePrimaryExam} brochure`
+              : "Course brochure")
+          : examBrochureCatalog?.title?.trim() ||
+            (brochurePrimaryExam
+              ? `${brochurePrimaryExam} brochure`
+              : "Course brochure")
+        : "";
+  const showCatalogTextOnly =
+    !hasUploadedBrochure &&
+    !examBrochureCatalogLoading &&
+    !defaultOrLeadPreviewSrc &&
+    Boolean(brochurePrimaryExam) &&
+    Boolean(
+      examBrochureCatalog?.title?.trim() || examBrochureCatalog?.summary?.trim(),
+    );
+  const showNoDefaultBrochureHint =
+    !hasUploadedBrochure &&
+    Boolean(brochurePrimaryExam) &&
+    !examBrochureCatalogLoading &&
+    !defaultOrLeadPreviewSrc &&
+    !showCatalogTextOnly;
   const formatSentAt = (iso?: string) => {
     if (!iso) return "";
     try {
@@ -2599,77 +2511,14 @@ function BrochureSection({
   const brochurePayload = useCallback(
     (patch: Record<string, unknown> = {}) => ({
       notes,
-      fileName: file?.name ?? savedName,
+      fileName: savedName,
       storedFileUrl,
       documentUrl: documentUrl.trim(),
       generated: genPreview,
       ...patch,
     }),
-    [notes, file, savedName, storedFileUrl, documentUrl, genPreview],
+    [notes, savedName, storedFileUrl, documentUrl, genPreview],
   );
-
-  const closeBrochurePreview = useCallback(() => {
-    if (brochurePreviewExtraBlobRef.current) {
-      URL.revokeObjectURL(brochurePreviewExtraBlobRef.current);
-      brochurePreviewExtraBlobRef.current = null;
-    }
-    setBrochurePreview(null);
-  }, []);
-
-  const openBrochurePreview = useCallback(() => {
-    if (file) {
-      let url = blobPreviewUrl;
-      if (!url) {
-        url = URL.createObjectURL(file);
-        brochurePreviewExtraBlobRef.current = url;
-      }
-      setBrochurePreview({
-        kind: "blob",
-        url,
-        mime: file.type || "application/octet-stream",
-        fileName: file.name,
-      });
-      return;
-    }
-    if (storedFileUrl?.trim()) {
-      setBrochurePreview({
-        kind: "remote",
-        url: storedFileUrl.trim(),
-        title: savedName?.trim() || "Uploaded brochure",
-      });
-      return;
-    }
-    const doc = documentUrl.trim();
-    if (doc) {
-      const normalized = /^https?:\/\//i.test(doc) ? doc : `https://${doc}`;
-      setBrochurePreview({
-        kind: "remote",
-        url: normalized,
-        title: "Document link",
-      });
-      return;
-    }
-    if (savedName?.trim() && examBrochureCatalog?.linkUrl?.trim()) {
-      setBrochurePreview({
-        kind: "remote",
-        url: examBrochureCatalog.linkUrl.trim(),
-        title: savedName.trim(),
-      });
-      return;
-    }
-    setBrochurePreview({
-      kind: "hint",
-      message:
-        "Upload a PDF or image, paste a document URL, or use the exam brochure link from Course Brochures to preview here.",
-    });
-  }, [
-    file,
-    blobPreviewUrl,
-    storedFileUrl,
-    savedName,
-    documentUrl,
-    examBrochureCatalog,
-  ]);
 
   useEffect(() => {
     if (brochureSkipAutosave.current) {
@@ -2723,8 +2572,12 @@ function BrochureSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Uploads are saved on the server for this lead. You can also paste a
-            PDF or image URL—both are stored and preview anytime.
+            The exam brochure from{" "}
+            <Link href="/course-brochure" className="font-medium text-primary underline">
+              Course Brochures
+            </Link>{" "}
+            previews here by default. Upload a file for this student to replace
+            it, or remove the upload to use the default again.
           </p>
         </div>
       </div>
@@ -2733,287 +2586,288 @@ function BrochureSection({
           <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-3 text-[13px] text-amber-950">
             <p className="font-semibold">No target exam selected</p>
             <p className="mt-1 text-[12px] leading-snug text-amber-900/90">
-              Add target exams (e.g. NEET) on the lead row so the matching
-              brochure template can appear here.
+              Add target exams (e.g. NEET) on the lead row so the default
+              brochure from Course Brochures can load for this student.
             </p>
           </div>
-        ) : examBrochureCatalogLoading ? (
-          <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-600">
-            Loading brochure template for{" "}
-            <span className="font-semibold">{brochurePrimaryExam}</span>…
-          </div>
-        ) : examBrochureCatalog &&
-          (examBrochureCatalog.title.trim() ||
-            examBrochureCatalog.summary.trim() ||
-            examBrochureCatalog.linkUrl.trim()) ? (
-          <div className="mb-4 rounded-lg border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-slate-50/80 px-4 py-4 shadow-sm shadow-slate-900/5">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-sky-900">
-                Brochure · {brochurePrimaryExam}
-              </p>
-              <Link
-                href="/course-brochure"
-                className="text-[11px] font-medium text-primary hover:underline"
-              >
-                Edit templates
-              </Link>
-            </div>
-            {examBrochureCatalog.title.trim() ? (
-              <h3 className="mt-2 text-lg font-semibold leading-snug text-slate-900">
-                {examBrochureCatalog.title}
-              </h3>
-            ) : null}
-            {examBrochureCatalog.summary.trim() ? (
-              <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
-                {examBrochureCatalog.summary}
-              </p>
-            ) : null}
-            {examBrochureCatalog.linkUrl.trim() ? (
-              <p className="mt-3 flex flex-wrap items-center gap-3">
-                <a
-                  href={examBrochureCatalog.linkUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
-                >
-                  <IconLink className="h-4 w-4 shrink-0" />
-                  {examBrochureCatalog.linkLabel.trim()
-                    ? examBrochureCatalog.linkLabel
-                    : "Open brochure document"}
-                </a>
-                <button
-                  type="button"
-                  className={cn(SX.btnSecondary, "text-[12px]")}
-                  onClick={() =>
-                    setBrochurePreview({
-                      kind: "remote",
-                      url: examBrochureCatalog.linkUrl.trim(),
-                      title:
-                        examBrochureCatalog.linkLabel.trim() ||
-                        `${brochurePrimaryExam} brochure`,
-                    })
-                  }
-                >
-                  Preview in window
-                </button>
-              </p>
-            ) : null}
-            {examBrochureCatalog.summary.trim() ? (
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-sky-100/80 pt-3">
-                <button
-                  type="button"
-                  className={cn(SX.btnSecondary, "text-[12px]")}
-                  onClick={() => {
-                    const s = examBrochureCatalog.summary.trim();
-                    if (!s) return;
-                    setNotes((prev) => (prev.trim() ? `${prev}\n\n${s}` : s));
-                  }}
-                >
-                  Insert summary into notes below
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-700">
-            <p className="font-semibold text-slate-800">
-              No brochure template for {brochurePrimaryExam} yet
-            </p>
-            <p className="mt-1 text-[12px] leading-snug text-slate-600">
-              Add title, summary, or a PDF link under{" "}
-              <Link
-                href="/course-brochure"
-                className="font-medium text-primary underline"
-              >
-                Course Brochures
-              </Link>{" "}
-              — it will show here for all {brochurePrimaryExam} students.
-            </p>
-          </div>
-        )}
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600">
-              <input
-                ref={brochureFileInputRef}
-                type="file"
-                accept=".pdf,image/*"
-                className="hidden"
-                disabled={uploadBusy}
-                onChange={(e) => {
-                  const nextFile = e.target.files?.[0] ?? null;
-                  if (!nextFile) {
-                    setFile(null);
-                    return;
-                  }
-                  setUploadError(null);
-                  setFile(nextFile);
-                  setUploadBusy(true);
-                  void (async () => {
-                    try {
-                      const fd = new FormData();
-                      fd.set("file", nextFile);
-                      const res = await fetch(
-                        `/api/leads/${lead.id}/brochure-upload`,
-                        { method: "POST", body: fd },
-                      );
-                      const data = (await res.json().catch(() => ({}))) as {
-                        storedFileUrl?: string;
-                        fileName?: string;
-                        error?: string;
-                      };
-                      if (!res.ok) {
-                        throw new Error(data.error || "Upload failed");
-                      }
-                      if (!data.storedFileUrl || !data.fileName) {
-                        throw new Error("Invalid upload response");
-                      }
-                      setStoredFileUrl(data.storedFileUrl);
-                      setSavedName(data.fileName);
-                      setFile(null);
-                      if (brochureFileInputRef.current) {
-                        brochureFileInputRef.current.value = "";
-                      }
-                      const L = leadBrRef.current;
-                      await onPatchLead({
-                        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
-                          brochure: brochurePayload({
-                            storedFileUrl: data.storedFileUrl,
-                            fileName: data.fileName,
-                          }),
-                        }),
-                        activityLog: appendActivity(
-                          L.activityLog,
-                          "brochure",
-                          `Brochure saved on server: ${data.fileName}`,
-                        ),
-                      });
-                    } catch (err) {
-                      setUploadError(
-                        err instanceof Error ? err.message : "Upload failed",
-                      );
-                      setFile(null);
-                      const L = leadBrRef.current;
-                      const prevBr = L.pipelineMeta?.brochure as
-                        | {
-                            storedFileUrl?: string | null;
-                            fileName?: string | null;
-                          }
-                        | undefined;
-                      setStoredFileUrl(prevBr?.storedFileUrl ?? null);
-                      setSavedName(prevBr?.fileName ?? null);
-                      if (brochureFileInputRef.current) {
-                        brochureFileInputRef.current.value = "";
-                      }
-                    } finally {
-                      setUploadBusy(false);
-                    }
-                  })();
-                }}
-              />
-              <IconCloudUpload />
-              <span>
-                {uploadBusy ? "Uploading…" : "Upload PDF or image"}
-              </span>
-              <span className="text-[12px] text-slate-400">PDF, JPG, PNG</span>
-            </label>
-            {uploadError ? (
-              <p className="mt-2 text-[12px] text-[#c62828]">{uploadError}</p>
-            ) : null}
-            {file && uploadBusy && (
-              <p className="mt-2 text-[13px] text-slate-600">
-                Uploading {file.name}…
-              </p>
-            )}
-            {file && !uploadBusy && (
-              <p className="mt-2 text-[13px]">
-                {file.name} ({Math.round(file.size / 1024)} KB) ·{" "}
-                <button
-                  type="button"
-                  className="font-medium text-primary underline hover:no-underline"
-                  onClick={openBrochurePreview}
-                >
-                  Preview
-                </button>{" "}
-                ·{" "}
-                <button
-                  type="button"
-                  className="text-[#c62828] underline"
-                  onClick={() => {
-                    setFile(null);
-                    closeBrochurePreview();
-                    if (brochureFileInputRef.current) {
-                      brochureFileInputRef.current.value = "";
-                    }
-                  }}
-                >
-                  Cancel
-                </button>
-              </p>
-            )}
-            {!file && !uploadBusy && (savedName || storedFileUrl) ? (
-              <p className="mt-2 text-[13px] text-slate-600">
-                Saved file:{" "}
-                <span className="font-medium">
-                  {savedName ?? "Uploaded file"}
-                </span>
-                {" · "}
-                <button
-                  type="button"
-                  className="font-medium text-primary underline hover:no-underline"
-                  onClick={openBrochurePreview}
-                >
-                  Preview
-                </button>
-                {" · "}
-                <button
-                  type="button"
-                  className="text-[#c62828] underline"
-                  onClick={() => {
-                    closeBrochurePreview();
-                    void (async () => {
-                      try {
-                        await fetch(
-                          `/api/leads/${lead.id}/brochure-upload`,
-                          { method: "DELETE" },
-                        );
-                        setStoredFileUrl(null);
-                        setSavedName(null);
-                        const L = leadBrRef.current;
-                        await onPatchLead({
-                          pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
-                            brochure: brochurePayload({
-                              storedFileUrl: null,
-                              fileName: null,
+            {hasUploadedBrochure ? (
+              <div className="space-y-3">
+                <BrochureInlinePreviewFrame
+                  src={storedFileUrl!.trim()}
+                  fileLabel={savedName ?? "Uploaded brochure"}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="min-w-0 flex-1 truncate text-[12px] text-slate-500">
+                    This student&apos;s file — remove to show the course
+                    default again.
+                  </p>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[12px] font-semibold text-red-800 transition-colors hover:bg-red-100"
+                    onClick={() => {
+                      setUploadError(null);
+                      void (async () => {
+                        try {
+                          await fetch(
+                            `/api/leads/${lead.id}/brochure-upload`,
+                            { method: "DELETE" },
+                          );
+                          setStoredFileUrl(null);
+                          setSavedName(null);
+                          const L = leadBrRef.current;
+                          await onPatchLead({
+                            pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+                              brochure: brochurePayload({
+                                storedFileUrl: null,
+                                fileName: null,
+                              }),
                             }),
-                          }),
-                        });
-                      } catch {
-                        setUploadError("Could not remove file");
-                      }
-                    })();
-                  }}
+                          });
+                        } catch {
+                          setUploadError("Could not remove file");
+                        }
+                      })();
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                {uploadError ? (
+                  <p className="text-[12px] text-[#c62828]">{uploadError}</p>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                {brochurePrimaryExam && examBrochureCatalogLoading ? (
+                  <div
+                    className="mb-3 h-[min(280px,40vh)] min-h-[200px] animate-pulse rounded-2xl bg-slate-200/80 ring-1 ring-slate-200/60"
+                    aria-hidden
+                  />
+                ) : null}
+                {!examBrochureCatalogLoading && defaultOrLeadPreviewSrc ? (
+                  <div className="mb-3 space-y-2">
+                    <BrochureInlinePreviewFrame
+                      src={defaultOrLeadPreviewSrc}
+                      fileLabel={defaultOrLeadPreviewLabel}
+                    />
+                    {documentPreviewSrc ? (
+                      <p className="text-[11px] text-slate-500">
+                        From the document URL on this lead (overrides the course
+                        default).
+                      </p>
+                    ) : catalogBrochureSrc ? (
+                      <p className="text-[11px] text-slate-500">
+                        Default from{" "}
+                        <Link
+                          href="/course-brochure"
+                          className="font-medium text-primary underline"
+                        >
+                          Course Brochures
+                        </Link>{" "}
+                        for this exam. Upload below to attach this
+                        student&apos;s own file.
+                      </p>
+                    ) : null}
+                    {examBrochureCatalog?.summary?.trim() &&
+                    catalogBrochureSrc &&
+                    !documentPreviewSrc ? (
+                      <button
+                        type="button"
+                        className={cn(SX.btnSecondary, "text-[12px]")}
+                        onClick={() => {
+                          const s = examBrochureCatalog!.summary.trim();
+                          if (!s) return;
+                          setNotes((prev) =>
+                            prev.trim() ? `${prev}\n\n${s}` : s,
+                          );
+                        }}
+                      >
+                        Insert template summary into notes
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {showCatalogTextOnly ? (
+                  <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-3 text-[13px] shadow-sm ring-1 ring-slate-900/5">
+                    {examBrochureCatalog?.title?.trim() ? (
+                      <p className="font-semibold text-slate-900">
+                        {examBrochureCatalog.title.trim()}
+                      </p>
+                    ) : null}
+                    {examBrochureCatalog?.summary?.trim() ? (
+                      <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">
+                        {examBrochureCatalog.summary}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {examBrochureCatalog?.summary?.trim() ? (
+                        <button
+                          type="button"
+                          className={cn(SX.btnSecondary, "text-[12px]")}
+                          onClick={() => {
+                            const s = examBrochureCatalog!.summary.trim();
+                            if (!s) return;
+                            setNotes((prev) =>
+                              prev.trim() ? `${prev}\n\n${s}` : s,
+                            );
+                          }}
+                        >
+                          Insert summary into notes
+                        </button>
+                      ) : null}
+                      <Link
+                        href="/course-brochure"
+                        className="text-[12px] font-medium text-primary hover:underline"
+                      >
+                        Edit in Course Brochures
+                      </Link>
+                    </div>
+                  </div>
+                ) : null}
+                {showNoDefaultBrochureHint ? (
+                  <p className="mb-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2.5 text-[12px] leading-snug text-slate-600">
+                    No PDF link for{" "}
+                    <span className="font-semibold">{brochurePrimaryExam}</span>{" "}
+                    in{" "}
+                    <Link
+                      href="/course-brochure"
+                      className="font-medium text-primary underline"
+                    >
+                      Course Brochures
+                    </Link>
+                    . Add a link there to preview the default here, or upload for
+                    this student.
+                  </p>
+                ) : null}
+                <label
+                  className={cn(
+                    "flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600",
+                    uploadBusy && "pointer-events-none opacity-70",
+                  )}
                 >
-                  Remove
-                </button>
-              </p>
+                  <input
+                    ref={brochureFileInputRef}
+                    type="file"
+                    accept=".pdf,image/*"
+                    className="hidden"
+                    disabled={uploadBusy}
+                    onChange={(e) => {
+                      const nextFile = e.target.files?.[0] ?? null;
+                      if (!nextFile) {
+                        return;
+                      }
+                      setUploadError(null);
+                      setUploadBusy(true);
+                      void (async () => {
+                        try {
+                          const fd = new FormData();
+                          fd.set("file", nextFile);
+                          const res = await fetch(
+                            `/api/leads/${lead.id}/brochure-upload`,
+                            { method: "POST", body: fd },
+                          );
+                          const data = (await res.json().catch(() => ({}))) as {
+                            storedFileUrl?: string;
+                            fileName?: string;
+                            error?: string;
+                          };
+                          if (!res.ok) {
+                            throw new Error(data.error || "Upload failed");
+                          }
+                          if (!data.storedFileUrl || !data.fileName) {
+                            throw new Error("Invalid upload response");
+                          }
+                          setStoredFileUrl(data.storedFileUrl);
+                          setSavedName(data.fileName);
+                          if (brochureFileInputRef.current) {
+                            brochureFileInputRef.current.value = "";
+                          }
+                          const L = leadBrRef.current;
+                          await onPatchLead({
+                            pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+                              brochure: brochurePayload({
+                                storedFileUrl: data.storedFileUrl,
+                                fileName: data.fileName,
+                              }),
+                            }),
+                            activityLog: appendActivity(
+                              L.activityLog,
+                              "brochure",
+                              `Brochure saved on server: ${data.fileName}`,
+                            ),
+                          });
+                        } catch (err) {
+                          setUploadError(
+                            err instanceof Error
+                              ? err.message
+                              : "Upload failed",
+                          );
+                          const L = leadBrRef.current;
+                          const prevBr = L.pipelineMeta?.brochure as
+                            | {
+                                storedFileUrl?: string | null;
+                                fileName?: string | null;
+                              }
+                            | undefined;
+                          setStoredFileUrl(prevBr?.storedFileUrl ?? null);
+                          setSavedName(prevBr?.fileName ?? null);
+                          if (brochureFileInputRef.current) {
+                            brochureFileInputRef.current.value = "";
+                          }
+                        } finally {
+                          setUploadBusy(false);
+                        }
+                      })();
+                    }}
+                  />
+                  <IconCloudUpload />
+                  <span>
+                    {uploadBusy ? "Uploading…" : "Upload PDF or image"}
+                  </span>
+                  <span className="text-[12px] text-slate-400">
+                    PDF, JPG, PNG · max 12 MB
+                  </span>
+                </label>
+                {uploadError ? (
+                  <p className="mt-2 text-[12px] text-[#c62828]">
+                    {uploadError}
+                  </p>
+                ) : null}
+                {uploadBusy ? (
+                  <p className="mt-3 flex items-center justify-center gap-2.5 text-[13px] text-slate-600">
+                    <span
+                      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                      aria-hidden
+                    />
+                    Uploading your brochure…
+                  </p>
+                ) : null}
+              </>
+            )}
+            {!hasUploadedBrochure ? (
+              <>
+                <div className="mt-4">
+                  <label className="text-[13px] font-semibold text-slate-900">
+                    Document URL (optional)
+                  </label>
+                  <input
+                    type="url"
+                    className={cn(SX.input, "mt-1.5 w-full")}
+                    placeholder="https://… (PDF or image link)"
+                    value={documentUrl}
+                    onChange={(e) => setDocumentUrl(e.target.value)}
+                    autoComplete="off"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Saves on this lead and replaces the course default in the
+                    preview above.
+                  </p>
+                </div>
+              </>
             ) : null}
-            <div className="mt-4">
-              <label className="text-[13px] font-semibold text-slate-900">
-                Document URL (optional)
-              </label>
-              <input
-                type="url"
-                className={cn(SX.input, "mt-1.5 w-full")}
-                placeholder="https://… (PDF or image link)"
-                value={documentUrl}
-                onChange={(e) => setDocumentUrl(e.target.value)}
-                autoComplete="off"
-              />
-              <p className="mt-1 text-[11px] text-slate-500">
-                Saves automatically. Used for preview when no upload is set.
-              </p>
-            </div>
           </div>
           <div>
             <label className="text-[13px] font-semibold text-slate-900">
@@ -3039,7 +2893,7 @@ function BrochureSection({
                     activityLog: appendActivity(
                       lead.activityLog,
                       "brochure",
-                      `Brochure generated from notes — saved on this lead${(file?.name ?? savedName) ? ` (file: ${file?.name ?? savedName})` : ""}.`,
+                      `Brochure generated from notes — saved on this lead${savedName ? ` (file: ${savedName})` : ""}.`,
                     ),
                   });
                 }, 400);
@@ -3142,10 +2996,6 @@ function BrochureSection({
           email to advance the pipeline.
         </p>
       </div>
-      <BrochurePreviewModal
-        state={brochurePreview}
-        onClose={closeBrochurePreview}
-      />
     </section>
   );
 }

@@ -72,6 +72,7 @@ Loaded from `.env.local` (preferred) or `.env` at the project root. The Mongo he
 
 ```
 operation-automation/
+├── AGENTS.md                  ← Guidance for AI coding agents (Cursor)
 ├── PROJECT.md                 ← This file
 ├── package.json
 ├── next.config.ts
