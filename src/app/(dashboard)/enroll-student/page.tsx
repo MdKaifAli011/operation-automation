@@ -1,36 +1,91 @@
 "use client";
 
+import { format, isSameMonth, parseISO } from "date-fns";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
+import { formatTargetExams } from "@/lib/lead-display";
+import type { FeeRecord, Lead } from "@/lib/types";
 
-const ENROLLED = [
-  {
-    id: "Testprepkart-2026-0341",
-    name: "Rahul Sharma",
-    course: "NEET",
-    batch: "2026-27",
-    date: "03/04/2026",
-    fee: "Paid",
-  },
-  {
-    id: "Testprepkart-2026-0288",
-    name: "Sneha Patel",
-    course: "JEE",
-    batch: "2026-27",
-    date: "28/03/2026",
-    fee: "Partial",
-  },
-  {
-    id: "Testprepkart-2026-0192",
-    name: "Aryan Mehta",
-    course: "CUET",
-    batch: "2025-26",
-    date: "15/02/2026",
-    fee: "Paid",
-  },
-];
+function safeFormatLeadDate(iso: string): string {
+  try {
+    return format(parseISO(iso), "dd/MM/yyyy");
+  } catch {
+    return iso;
+  }
+}
 
 export default function EnrollStudentPage() {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [fees, setFees] = useState<FeeRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [lr, fr] = await Promise.all([
+        fetch("/api/leads"),
+        fetch("/api/fees"),
+      ]);
+      if (!lr.ok) throw new Error("Could not load leads.");
+      if (!fr.ok) throw new Error("Could not load fee records.");
+      const leadData = (await lr.json()) as Lead[];
+      const feeData = (await fr.json()) as FeeRecord[];
+      setLeads(Array.isArray(leadData) ? leadData : []);
+      setFees(Array.isArray(feeData) ? feeData : []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load.");
+      setLeads([]);
+      setFees([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const enrolled = useMemo(
+    () => leads.filter((l) => l.sheetTab === "converted"),
+    [leads],
+  );
+
+  const stats = useMemo(() => {
+    const today = new Date();
+    const thisMonth = enrolled.filter((l) => {
+      try {
+        return isSameMonth(parseISO(l.date), today);
+      } catch {
+        return false;
+      }
+    }).length;
+    const countExam = (exam: string) =>
+      enrolled.filter((l) =>
+        (l.targetExams ?? []).some(
+          (t) => t.toLowerCase() === exam.toLowerCase(),
+        ),
+      ).length;
+    return {
+      total: enrolled.length,
+      thisMonth,
+      neet: countExam("NEET"),
+      jee: countExam("JEE"),
+      cuet: countExam("CUET"),
+    };
+  }, [enrolled]);
+
+  const feeByLeadId = useMemo(() => {
+    const m = new Map<string, FeeRecord>();
+    for (const f of fees) {
+      if (f.leadId) m.set(f.leadId, f);
+    }
+    return m;
+  }, [fees]);
+
   return (
     <div className={SX.pageWrap}>
       <div className={SX.outerSheet}>
@@ -38,15 +93,29 @@ export default function EnrollStudentPage() {
           <div className="min-w-0 flex-1">
             <h1 className={SX.toolbarTitle}>Enrolled students</h1>
             <p className={SX.toolbarMeta}>
-              Admissions linked to fee and batches — same workbook style as leads
+              Leads on the Converted tab, with fee status from fee records when
+              linked
             </p>
           </div>
         </div>
 
+        {error ? (
+          <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {error}{" "}
+            <button
+              type="button"
+              className="font-medium underline"
+              onClick={() => void load()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+
         <div className={SX.leadStatBar}>
           <span className="text-slate-600">
             <strong className="font-semibold text-slate-800">
-              {ENROLLED.length}
+              {loading ? "…" : stats.total}
             </strong>{" "}
             enrolled in view
           </span>
@@ -55,11 +124,11 @@ export default function EnrollStudentPage() {
         <div className="grid gap-3 border-b border-slate-200/90 bg-white px-3 py-4 sm:grid-cols-2 lg:grid-cols-5 lg:px-4">
           {(
             [
-              ["Total enrolled", "340", "text-primary"],
-              ["This month", "28", "text-emerald-600"],
-              ["NEET", "180", "text-slate-800"],
-              ["JEE", "120", "text-slate-800"],
-              ["CUET", "40", "text-slate-800"],
+              ["Total enrolled", String(stats.total), "text-primary"],
+              ["This month", String(stats.thisMonth), "text-emerald-600"],
+              ["NEET", String(stats.neet), "text-slate-800"],
+              ["JEE", String(stats.jee), "text-slate-800"],
+              ["CUET", String(stats.cuet), "text-slate-800"],
             ] as const
           ).map(([label, val, accent]) => (
             <div
@@ -70,7 +139,7 @@ export default function EnrollStudentPage() {
                 {label}
               </p>
               <p className={cn("mt-1 text-xl font-bold tabular-nums", accent)}>
-                {val}
+                {loading ? "…" : val}
               </p>
             </div>
           ))}
@@ -79,7 +148,7 @@ export default function EnrollStudentPage() {
         <div className="border-b border-slate-200/90 bg-white px-3 py-3 sm:px-4">
           <h2 className="text-[13px] font-bold text-slate-800">All enrolled</h2>
           <p className="text-[12px] text-slate-500">
-            Enrollment ID, course, batch, and fee status
+            Lead ID, target exams, grade, intake date, and fee record status
           </p>
         </div>
 
@@ -88,7 +157,7 @@ export default function EnrollStudentPage() {
             <thead>
               <tr>
                 <th className={SX.dataTh}>#</th>
-                <th className={SX.dataTh}>Enrollment ID</th>
+                <th className={SX.dataTh}>Lead ID</th>
                 <th className={SX.dataTh}>Student</th>
                 <th className={SX.dataTh}>Course</th>
                 <th className={SX.dataTh}>Batch</th>
@@ -98,75 +167,96 @@ export default function EnrollStudentPage() {
               </tr>
             </thead>
             <tbody>
-              {ENROLLED.map((r, i) => (
-                <tr key={r.id}>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
-                    {i + 1}
-                  </td>
-                  <td
-                    className={cn(
-                      SX.dataTd,
-                      i % 2 === 1 && SX.zebraRow,
-                      "font-mono text-[12px]",
-                    )}
-                  >
-                    {r.id}
-                  </td>
-                  <td
-                    className={cn(
-                      SX.dataTd,
-                      i % 2 === 1 && SX.zebraRow,
-                      "font-medium",
-                    )}
-                  >
-                    {r.name}
-                  </td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
-                    <span className="rounded-none bg-sky-50 px-2 py-0.5 text-[12px] font-medium text-primary">
-                      {r.course}
-                    </span>
-                  </td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
-                    {r.batch}
-                  </td>
-                  <td
-                    className={cn(
-                      SX.dataTd,
-                      i % 2 === 1 && SX.zebraRow,
-                      "tabular-nums",
-                    )}
-                  >
-                    {r.date}
-                  </td>
-                  <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
-                    <span
-                      className={cn(
-                        "rounded-none px-2 py-0.5 text-[11px] font-semibold",
-                        r.fee === "Paid"
-                          ? "bg-emerald-50 text-emerald-800"
-                          : "bg-amber-50 text-amber-900",
-                      )}
-                    >
-                      {r.fee}
-                    </span>
-                  </td>
-                  <td
-                    className={cn(
-                      SX.dataTd,
-                      i % 2 === 1 && SX.zebraRow,
-                      "text-primary",
-                    )}
-                  >
-                    <button type="button" className="font-medium hover:underline">
-                      View
-                    </button>
-                    <span className="text-slate-300"> · </span>
-                    <button type="button" className="font-medium hover:underline">
-                      Edit
-                    </button>
+              {loading ? (
+                <tr>
+                  <td className={SX.dataTd} colSpan={8}>
+                    Loading…
                   </td>
                 </tr>
-              ))}
+              ) : enrolled.length === 0 ? (
+                <tr>
+                  <td className={SX.dataTd} colSpan={8}>
+                    No converted leads yet. Move a lead to the Converted tab on
+                    the main sheet to see them here.
+                  </td>
+                </tr>
+              ) : (
+                enrolled.map((r, i) => {
+                  const fee = feeByLeadId.get(r.id);
+                  const feeLabel = fee?.status ?? "—";
+                  const isPaid = feeLabel === "Paid";
+                  return (
+                    <tr key={r.id}>
+                      <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
+                        {i + 1}
+                      </td>
+                      <td
+                        className={cn(
+                          SX.dataTd,
+                          i % 2 === 1 && SX.zebraRow,
+                          "font-mono text-[12px]",
+                        )}
+                      >
+                        {r.id}
+                      </td>
+                      <td
+                        className={cn(
+                          SX.dataTd,
+                          i % 2 === 1 && SX.zebraRow,
+                          "font-medium",
+                        )}
+                      >
+                        {r.studentName}
+                      </td>
+                      <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
+                        <span className="rounded-none bg-sky-50 px-2 py-0.5 text-[12px] font-medium text-primary">
+                          {formatTargetExams(r.targetExams)}
+                        </span>
+                      </td>
+                      <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
+                        {r.grade || "—"}
+                      </td>
+                      <td
+                        className={cn(
+                          SX.dataTd,
+                          i % 2 === 1 && SX.zebraRow,
+                          "tabular-nums",
+                        )}
+                      >
+                        {safeFormatLeadDate(r.date)}
+                      </td>
+                      <td className={cn(SX.dataTd, i % 2 === 1 && SX.zebraRow)}>
+                        <span
+                          className={cn(
+                            "rounded-none px-2 py-0.5 text-[11px] font-semibold",
+                            feeLabel === "—"
+                              ? "bg-slate-100 text-slate-600"
+                              : isPaid
+                                ? "bg-emerald-50 text-emerald-800"
+                                : "bg-amber-50 text-amber-900",
+                          )}
+                        >
+                          {feeLabel}
+                        </span>
+                      </td>
+                      <td
+                        className={cn(
+                          SX.dataTd,
+                          i % 2 === 1 && SX.zebraRow,
+                          "text-primary",
+                        )}
+                      >
+                        <Link
+                          href={`/students/${encodeURIComponent(r.id)}`}
+                          className="font-medium hover:underline"
+                        >
+                          Open student
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

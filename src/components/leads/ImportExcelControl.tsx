@@ -6,13 +6,22 @@ import {
   matrixToStringGrid,
   parseCsvText,
   parseLeadImportRows,
+  type ParsedImportLead,
 } from "@/lib/lead-csv";
+import { formatTargetExams } from "@/lib/lead-display";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
 type Props = {
   /** Refetch leads after a successful import. */
   onImported: () => void | Promise<void>;
+};
+
+type ParseIssue = { row: number; message: string };
+
+type PreviewState = {
+  leads: ParsedImportLead[];
+  issues: ParseIssue[];
 };
 
 async function fileToGrid(file: File): Promise<string[][]> {
@@ -22,7 +31,6 @@ async function fileToGrid(file: File): Promise<string[][]> {
     return parseCsvText(text);
   }
   const buf = await file.arrayBuffer();
-  /** @e965/xlsx — SheetJS CE 0.20.x with prototype-pollution & ReDoS fixes (not on legacy `xlsx` npm). */
   const XLSX = await import("@e965/xlsx");
   const wb = XLSX.read(buf, { type: "array", cellDates: false, raw: false });
   const sheetName = wb.SheetNames[0];
@@ -44,9 +52,11 @@ export function ImportExcelControl({ onImported }: Props) {
   const [open, setOpen] = useState(false);
   const [pickedName, setPickedName] = useState<string | null>(null);
   const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [issues, setIssues] = useState<{ row: number; message: string }[]>([]);
 
   useEffect(() => {
     const d = ref.current;
@@ -66,11 +76,48 @@ export function ImportExcelControl({ onImported }: Props) {
     return () => dlg.removeEventListener("mousedown", onBackdrop);
   }, [open, busy]);
 
+  useEffect(() => {
+    if (!pickedFile) {
+      setPreview(null);
+      setParseError(null);
+      setParsing(false);
+      return;
+    }
+    let cancelled = false;
+    setParsing(true);
+    setParseError(null);
+    void (async () => {
+      try {
+        const grid = await fileToGrid(pickedFile);
+        const { leads, issues } = parseLeadImportRows(grid);
+        if (!cancelled) {
+          setPreview({ leads, issues });
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setPreview(null);
+          setParseError(
+            e instanceof Error
+              ? e.message
+              : "Could not read this file. Try CSV or Excel.",
+          );
+        }
+      } finally {
+        if (!cancelled) setParsing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pickedFile]);
+
   const resetForm = useCallback(() => {
     setPickedName(null);
     setPickedFile(null);
+    setPreview(null);
+    setParseError(null);
+    setParsing(false);
     setMessage(null);
-    setIssues([]);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -87,54 +134,54 @@ export function ImportExcelControl({ onImported }: Props) {
   };
 
   const runImport = useCallback(async () => {
-    if (!pickedFile) return;
+    if (!preview || preview.leads.length === 0) return;
     setBusy(true);
     setMessage(null);
-    setIssues([]);
     try {
-      const grid = await fileToGrid(pickedFile);
-      const { leads: parsed, issues: parseIssues } = parseLeadImportRows(grid);
-      setIssues(parseIssues);
-      if (parsed.length === 0) {
-        setMessage(
-          "No rows were imported. Fix the issues below or check your headers.",
-        );
-        setBusy(false);
-        return;
-      }
       const res = await fetch("/api/leads/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leads: parsed }),
+        body: JSON.stringify({ leads: preview.leads }),
       });
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
       if (!res.ok) {
         setMessage(
           typeof body?.error === "string"
             ? body.error
-            : "Import failed. Check API and database.",
+            : `Import failed (${res.status}). Check MongoDB connection and try again.`,
         );
         setBusy(false);
         return;
       }
       await onImported();
-      const skipped = parseIssues.length;
+      const skipped = preview.issues.length;
       setMessage(
-        `Imported ${parsed.length} lead${parsed.length === 1 ? "" : "s"}.${skipped ? ` ${skipped} row(s) skipped.` : ""}`,
+        `Imported ${preview.leads.length} lead${preview.leads.length === 1 ? "" : "s"}.${skipped ? ` ${skipped} row(s) had warnings (see above).` : ""}`,
       );
       setPickedName(null);
       setPickedFile(null);
+      setPreview(null);
       if (inputRef.current) inputRef.current.value = "";
     } catch (e) {
       setMessage(
         e instanceof Error
           ? e.message
-          : "Could not read this file. Try CSV or a valid Excel workbook.",
+          : "Import request failed. Try again.",
       );
     } finally {
       setBusy(false);
     }
-  }, [onImported, pickedFile]);
+  }, [onImported, preview]);
+
+  const issues = preview?.issues ?? [];
+  const canImport =
+    !parsing &&
+    !parseError &&
+    preview &&
+    preview.leads.length > 0 &&
+    !busy;
 
   return (
     <>
@@ -145,7 +192,7 @@ export function ImportExcelControl({ onImported }: Props) {
           "h-9 gap-1.5 px-3 text-[13px] font-semibold text-slate-800",
         )}
         onClick={openDialog}
-        title="Upload CSV or Excel — headers must match export format"
+        title="Upload CSV or Excel — preview rows, then confirm import"
       >
         <UploadIcon className="text-slate-500" />
         Import Excel / CSV
@@ -154,7 +201,7 @@ export function ImportExcelControl({ onImported }: Props) {
       <dialog
         ref={ref}
         className={cn(
-          "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-1.5rem,26rem)] max-h-[min(92vh,720px)] -translate-x-1/2 -translate-y-1/2",
+          "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-0.75rem,48rem)] max-h-[min(92vh,760px)] -translate-x-1/2 -translate-y-1/2",
           "overflow-hidden rounded-none border border-slate-200 bg-white p-0 shadow-2xl shadow-slate-900/15",
           "backdrop:bg-slate-900/45 backdrop:backdrop-blur-[2px]",
           "open:flex open:flex-col",
@@ -181,11 +228,14 @@ export function ImportExcelControl({ onImported }: Props) {
                 Import leads
               </h2>
               <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
-                First row = column headers (
+                Choose a file → we show a <span className="font-medium">preview</span> of
+                rows to save. Confirm to write to the database. Use{" "}
+                <span className="font-medium">CSV template</span>; empty cells get defaults.
+                Headers:{" "}
                 <code className="rounded bg-white/80 px-1 text-[11px] ring-1 ring-slate-200/80">
                   {LEAD_CSV_EXPORT_HEADERS.slice(0, 3).join(", ")}
                 </code>
-                …). CSV or Excel (first sheet). Rows are saved to the database.
+                …
               </p>
             </div>
           </div>
@@ -204,7 +254,6 @@ export function ImportExcelControl({ onImported }: Props) {
                 setPickedFile(f);
                 setPickedName(f.name);
                 setMessage(null);
-                setIssues([]);
               }
             }}
           />
@@ -212,7 +261,7 @@ export function ImportExcelControl({ onImported }: Props) {
             type="button"
             className={cn(
               field,
-              "flex min-h-[100px] cursor-pointer flex-col items-center justify-center gap-2 border-dashed py-6 text-center transition-colors hover:border-primary/50 hover:bg-sky-50/40",
+              "flex min-h-[88px] cursor-pointer flex-col items-center justify-center gap-2 border-dashed py-5 text-center transition-colors hover:border-primary/50 hover:bg-sky-50/40",
             )}
             onClick={() => inputRef.current?.click()}
             disabled={busy}
@@ -221,7 +270,7 @@ export function ImportExcelControl({ onImported }: Props) {
               {pickedName ? pickedName : "Click to choose file"}
             </span>
             <span className="text-[11px] text-slate-500">
-              .csv, .xlsx, or .xls · max practical size ~10MB
+              .csv, .xlsx, or .xls
             </span>
           </button>
 
@@ -232,9 +281,10 @@ export function ImportExcelControl({ onImported }: Props) {
               onClick={() => {
                 setPickedName(null);
                 setPickedFile(null);
+                setPreview(null);
                 if (inputRef.current) inputRef.current.value = "";
                 setMessage(null);
-                setIssues([]);
+                setParseError(null);
               }}
               disabled={busy}
             >
@@ -242,34 +292,133 @@ export function ImportExcelControl({ onImported }: Props) {
             </button>
           )}
 
-          {message && (
-            <p
-              className={cn(
-                "mt-4 rounded-none border px-3 py-2 text-[12px]",
-                message.startsWith("Imported")
-                  ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
-                  : "border-slate-200 bg-slate-50 text-slate-800",
-              )}
-              role="status"
-            >
-              {message}
+          {parsing && (
+            <p className="mt-4 text-[13px] text-slate-600" role="status">
+              Reading file…
             </p>
           )}
 
-          {issues.length > 0 && (
-            <div className="mt-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-800">
-                Row issues
-              </p>
-              <ul className="mt-1.5 max-h-[min(28vh,200px)] overflow-y-auto rounded-none border border-rose-100 bg-rose-50/50 px-2 py-2 text-[11px] text-rose-900 [scrollbar-width:thin]">
-                {issues.map((it, i) => (
-                  <li key={i} className="border-b border-rose-100/80 py-1.5 last:border-0">
-                    <span className="font-semibold tabular-nums">Row {it.row}:</span>{" "}
-                    {it.message}
-                  </li>
-                ))}
-              </ul>
+          {parseError && (
+            <p
+              className="mt-4 rounded-none border border-rose-200 bg-rose-50/90 px-3 py-2 text-[12px] text-rose-950"
+              role="alert"
+            >
+              {parseError}
+            </p>
+          )}
+
+          {preview && !parsing && (
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-2">
+                <p className="text-[13px] font-semibold text-slate-900">
+                  Preview — rows to import
+                </p>
+                <p className="text-[12px] tabular-nums text-slate-600">
+                  <span className="font-semibold text-slate-800">
+                    {preview.leads.length}
+                  </span>{" "}
+                  lead{preview.leads.length === 1 ? "" : "s"}
+                  {issues.length > 0 && (
+                    <span className="text-amber-800">
+                      {" "}
+                      · {issues.length} warning{issues.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {preview.leads.length === 0 ? (
+                <p className="text-[13px] text-slate-600" role="status">
+                  No data rows found. Check the header row matches the template and at least
+                  one row has content.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-none border border-slate-200 bg-white">
+                  <table className="w-full min-w-[640px] border-collapse text-left text-[12px]">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                        <th className="px-2 py-2">#</th>
+                        <th className="px-2 py-2">Student</th>
+                        <th className="px-2 py-2">Phone</th>
+                        <th className="px-2 py-2">Date</th>
+                        <th className="px-2 py-2">Grade</th>
+                        <th className="px-2 py-2">Country</th>
+                        <th className="px-2 py-2">Status</th>
+                        <th className="px-2 py-2">Targets</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-800">
+                      {preview.leads.map((row, i) => (
+                        <tr
+                          key={i}
+                          className="border-b border-slate-100 last:border-0"
+                        >
+                          <td className="px-2 py-1.5 tabular-nums text-slate-500">
+                            {i + 1}
+                          </td>
+                          <td className="max-w-[140px] truncate px-2 py-1.5 font-medium">
+                            {row.studentName}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">
+                            {row.phone || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">
+                            {row.date}
+                          </td>
+                          <td className="px-2 py-1.5">{row.grade}</td>
+                          <td className="max-w-[100px] truncate px-2 py-1.5">
+                            {row.country}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-1.5">
+                            {row.rowTone}
+                          </td>
+                          <td className="max-w-[180px] truncate px-2 py-1.5 text-slate-600">
+                            {formatTargetExams(row.targetExams)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {issues.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                    Warnings (row still imported if listed above)
+                  </p>
+                  <ul className="mt-1.5 max-h-28 overflow-y-auto rounded-none border border-amber-100 bg-amber-50/60 px-2 py-2 text-[11px] text-amber-950 [scrollbar-width:thin]">
+                    {issues.map((it, i) => (
+                      <li
+                        key={i}
+                        className="border-b border-amber-100/80 py-1 last:border-0"
+                      >
+                        <span className="font-semibold tabular-nums">
+                          Row {it.row}:
+                        </span>{" "}
+                        {it.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
+          )}
+
+          {message && (
+            <p
+              className={cn(
+                "mt-4 rounded-none border px-3 py-2 text-[12px] leading-snug",
+                message.startsWith("Imported")
+                  ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                  : message.includes("No rows were imported")
+                    ? "border-amber-200 bg-amber-50/90 text-amber-950"
+                    : "border-rose-200 bg-rose-50/90 text-rose-950",
+              )}
+              role={message.startsWith("Imported") ? "status" : "alert"}
+            >
+              {message}
+            </p>
           )}
         </div>
 
@@ -285,10 +434,14 @@ export function ImportExcelControl({ onImported }: Props) {
           <button
             type="button"
             className={cn(SX.leadBtnGreen, "px-4 py-2 text-[13px] font-semibold")}
-            disabled={!pickedFile || busy}
+            disabled={!canImport}
             onClick={() => void runImport()}
           >
-            {busy ? "Importing…" : "Run import"}
+            {busy
+              ? "Saving…"
+              : preview && preview.leads.length > 0
+                ? `Import ${preview.leads.length} lead${preview.leads.length === 1 ? "" : "s"}`
+                : "Import"}
           </button>
         </div>
       </dialog>

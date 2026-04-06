@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
+import { computePipelineStepsFromMeta, mergePipelineMeta } from "@/lib/pipeline";
 import { serializeLead } from "@/lib/serializers";
 export const runtime = "nodejs";
 
@@ -17,6 +18,10 @@ const PATCH_KEYS = new Set([
   "phone",
   "email",
   "pipelineSteps",
+  "pipelineMeta",
+  "activityLog",
+  "workspaceNotes",
+  "callHistory",
   "rowTone",
   "sheetTab",
 ]);
@@ -41,6 +46,22 @@ function buildPatch(body: unknown): Record<string, unknown> | null {
     }
     if (key === "pipelineSteps") {
       if (typeof v === "number" && v >= 0 && v <= 4) out[key] = v;
+      continue;
+    }
+    if (key === "pipelineMeta") {
+      if (v && typeof v === "object" && !Array.isArray(v)) out[key] = v;
+      continue;
+    }
+    if (key === "activityLog") {
+      if (Array.isArray(v)) out[key] = v;
+      continue;
+    }
+    if (key === "callHistory") {
+      if (Array.isArray(v)) out[key] = v;
+      continue;
+    }
+    if (key === "workspaceNotes") {
+      if (typeof v === "string") out[key] = v;
       continue;
     }
     if (
@@ -95,6 +116,39 @@ export async function PATCH(req: Request, context: Ctx) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
     await connectDB();
+    const existing = await LeadModel.findById(id).lean();
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const existingMeta =
+      (existing as { pipelineMeta?: unknown }).pipelineMeta &&
+      typeof (existing as { pipelineMeta?: unknown }).pipelineMeta === "object" &&
+      !Array.isArray((existing as { pipelineMeta?: unknown }).pipelineMeta)
+        ? ((existing as { pipelineMeta: Record<string, unknown> }).pipelineMeta)
+        : {};
+    if (patch.pipelineMeta && typeof patch.pipelineMeta === "object") {
+      const merged = mergePipelineMeta(existingMeta, patch.pipelineMeta as Record<string, unknown>);
+      patch.pipelineMeta = merged;
+      patch.pipelineSteps = computePipelineStepsFromMeta(merged);
+    } else if (typeof patch.pipelineSteps === "number") {
+      const prevSteps = Math.min(
+        4,
+        Math.max(
+          0,
+          Number((existing as { pipelineSteps?: number }).pipelineSteps) || 0,
+        ),
+      );
+      const next = patch.pipelineSteps;
+      if (next > prevSteps + 1) {
+        return NextResponse.json(
+          {
+            error:
+              "Complete the previous pipeline step before advancing (Demo → Brochure → Fees → Schedule).",
+          },
+          { status: 400 },
+        );
+      }
+    }
     const doc = await LeadModel.findByIdAndUpdate(
       id,
       { $set: patch },

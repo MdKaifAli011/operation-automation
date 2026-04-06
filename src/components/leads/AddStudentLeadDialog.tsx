@@ -213,10 +213,7 @@ export function AddStudentLeadDialog({
             <span>
               Phone <span className="text-rose-600">*</span>
             </span>
-            <p className="mb-1 text-[11px] font-normal text-slate-500">
-              Code is set from country; change it if needed, then enter the local
-              number.
-            </p>
+          
             <div
               className="mt-1 flex w-full min-w-0 max-w-full flex-nowrap items-stretch gap-2"
               role="group"
@@ -297,11 +294,7 @@ export function AddStudentLeadDialog({
             </div>
           </fieldset>
 
-          <p className="text-[11px] leading-snug text-slate-500">
-            New leads default to <span className="font-medium">Organic</span> source
-            and <span className="font-medium">{DEFAULT_GRADE}</span> in the sheet —
-            edit in the grid if needed.
-          </p>
+       
         </form>
         {error && (
           <p className="mt-2 text-[12px] text-rose-700" role="alert">

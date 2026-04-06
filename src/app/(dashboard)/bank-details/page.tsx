@@ -1,14 +1,16 @@
 "use client";
 
+import { format } from "date-fns";
 import { useState, type ReactNode } from "react";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 
 export default function BankDetailsPage() {
   const [showAcct, setShowAcct] = useState(false);
-  const [bank, setBank] = useState("SBI");
+  const [bank, setBank] = useState("");
   const [emiRzp, setEmiRzp] = useState(false);
   const [emiPayu, setEmiPayu] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   return (
     <div className={SX.pageWrap}>
@@ -38,21 +40,24 @@ export default function BankDetailsPage() {
           <span>
             <span className="text-[#757575]">Last saved</span>{" "}
             <span className="font-medium tabular-nums text-[#212121]">
-              03 Apr 2026, 10:30 AM
+              {lastSavedAt ?? "Not saved yet (not persisted to server)"}
             </span>
           </span>
           <span className="hidden sm:inline text-[#bdbdbd]" aria-hidden>
             |
           </span>
-          <span className="rounded-none bg-[#e8f5e9] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success">
-            Active profile
+          <span className="rounded-none bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+            Draft only
           </span>
         </div>
 
         <form
           id="bank-details-form"
           className="divide-y divide-[#d0d0d0] border-b border-[#d0d0d0] bg-white"
-          onSubmit={(e) => e.preventDefault()}
+          onSubmit={(e) => {
+            e.preventDefault();
+            setLastSavedAt(format(new Date(), "dd MMM yyyy, HH:mm"));
+          }}
         >
           <section className="overflow-hidden bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
             <div className={SX.sectionHead}>
@@ -66,7 +71,7 @@ export default function BankDetailsPage() {
                     <input
                       className={SX.input}
                       name="instituteName"
-                      defaultValue="Testprepkart"
+                      placeholder="Institute name"
                     />
                   </KvRow>
                   <KvRow label="Registration Number">
@@ -80,7 +85,7 @@ export default function BankDetailsPage() {
                       className={SX.textarea}
                       name="address"
                       rows={3}
-                      defaultValue="123 Education Street"
+                      placeholder="Registered address"
                     />
                   </KvRow>
                   <KvRow label="City">
@@ -93,7 +98,7 @@ export default function BankDetailsPage() {
                     <input
                       className={SX.input}
                       name="country"
-                      defaultValue="India"
+                      placeholder="Country"
                     />
                   </KvRow>
                   <KvRow label="Pincode">
@@ -133,6 +138,7 @@ export default function BankDetailsPage() {
                       value={bank}
                       onChange={(e) => setBank(e.target.value)}
                     >
+                      <option value="">Select bank</option>
                       <option value="SBI">SBI</option>
                       <option value="HDFC">HDFC</option>
                       <option value="ICICI">ICICI</option>
@@ -144,7 +150,7 @@ export default function BankDetailsPage() {
                     <input
                       className={SX.input}
                       name="acctHolder"
-                      defaultValue="Testprepkart"
+                      placeholder="As per bank records"
                     />
                   </KvRow>
                   <KvRow label="Account Number">
@@ -153,8 +159,8 @@ export default function BankDetailsPage() {
                         type={showAcct ? "text" : "password"}
                         className={SX.input}
                         name="acctNo"
-                        defaultValue="****1234"
-                        readOnly
+                        placeholder="Account number"
+                        autoComplete="off"
                         aria-label="Account number"
                       />
                       <button
@@ -209,7 +215,6 @@ export default function BankDetailsPage() {
                       <input
                         type="checkbox"
                         name="po_bank"
-                        defaultChecked
                         className="h-4 w-4 accent-primary"
                       />
                     </td>
@@ -221,7 +226,6 @@ export default function BankDetailsPage() {
                       <input
                         type="checkbox"
                         name="po_upi"
-                        defaultChecked
                         className="h-4 w-4 accent-primary"
                       />
                     </td>
@@ -233,7 +237,6 @@ export default function BankDetailsPage() {
                       <input
                         type="checkbox"
                         name="po_cash"
-                        defaultChecked
                         className="h-4 w-4 accent-primary"
                       />
                     </td>

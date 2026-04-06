@@ -285,10 +285,37 @@ export function leadsToExportCsv(leads: Lead[]): string {
   return [headerLine, ...lines].join("\r\n");
 }
 
+/** Header + one example row — same columns as export; safe to import after editing. */
+export function buildLeadCsvTemplate(): string {
+  const headerLine = LEAD_CSV_EXPORT_HEADERS.map(csvEscape).join(",");
+  const sample = [
+    "2026-04-01",
+    "Sample Student",
+    "Parent Name",
+    "Organic",
+    "12th",
+    "NEET, JEE",
+    "India",
+    "9876543210",
+    "new",
+    "",
+  ] as const;
+  return [headerLine, sample.map((c) => csvEscape(c)).join(",")].join("\r\n");
+}
+
+/** Detect `;` vs `,` from first line (Excel “CSV UTF-8” in some locales uses `;`). */
+function detectCsvDelimiter(t: string): "," | ";" {
+  const line = t.split(/\r\n|\r|\n/, 1)[0] ?? "";
+  const commas = (line.match(/,/g) ?? []).length;
+  const semis = (line.match(/;/g) ?? []).length;
+  return semis > commas ? ";" : ",";
+}
+
 /** RFC-style CSV parser with quoted fields. */
 export function parseCsvText(text: string): string[][] {
   let t = text;
   if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
+  const delim = detectCsvDelimiter(t);
   const rows: string[][] = [];
   let row: string[] = [];
   let cur = "";
@@ -307,7 +334,7 @@ export function parseCsvText(text: string): string[][] {
       }
     } else if (c === '"') {
       inQuotes = true;
-    } else if (c === ",") {
+    } else if (c === delim) {
       row.push(cur);
       cur = "";
     } else if (c === "\n" || c === "\r") {
@@ -379,27 +406,19 @@ export function parseLeadImportRows(
   const today = format(new Date(), "yyyy-MM-dd");
   for (let r = 1; r < grid.length; r++) {
     const row = grid[r] ?? [];
-    const lineNum = r + 1;
     if (!row.some((c) => c.trim())) continue;
-    const studentName = cell(row, idx, "studentName");
-    const phone = cell(row, idx, "phone");
-    if (!studentName) {
-      issues.push({ row: lineNum, message: "Missing student name — row skipped." });
-      continue;
-    }
-    if (!phone) {
-      issues.push({ row: lineNum, message: `Missing phone for “${studentName}” — row skipped.` });
-      continue;
-    }
+    const studentNameRaw = cell(row, idx, "studentName");
+    const phoneRaw = cell(row, idx, "phone");
+    const studentName = studentNameRaw || "Unknown";
     const dateRaw = cell(row, idx, "date");
     const dateParsed = dateRaw ? parseLeadDateValue(dateRaw) : null;
     const date = dateParsed ?? today;
-    const parentName = cell(row, idx, "parentName") || "—";
-    const dataType = cell(row, idx, "dataType") || "—";
-    const grade = cell(row, idx, "grade") || "—";
+    const parentName = cell(row, idx, "parentName").trim();
+    const dataType = cell(row, idx, "dataType").trim() || "Organic";
+    const grade = cell(row, idx, "grade").trim() || "12th";
     const targetExams = parseTargetExamsValue(cell(row, idx, "targetExams"));
-    const country = cell(row, idx, "country") || "India";
-    const phoneNorm = phone.replace(/\s+/g, "");
+    const country = cell(row, idx, "country").trim() || "India";
+    const phoneNorm = phoneRaw.replace(/\s+/g, "");
     const rowTone = parseRowToneValue(cell(row, idx, "rowTone"));
     const followRaw = cell(row, idx, "followUpDate");
     const followUpDate = followRaw ? parseLeadDateValue(followRaw) : null;

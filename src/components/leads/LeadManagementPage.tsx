@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SortDir, SortKey } from "@/lib/types";
 import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { AddStudentLeadDialog } from "./AddStudentLeadDialog";
+import { LeadCsvTemplateButton } from "./LeadCsvTemplateButton";
 import { ExportLeadsButton } from "./ExportLeadsButton";
 import { FollowUpDialog } from "./FollowUpDialog";
 import { ImportExcelControl } from "./ImportExcelControl";
@@ -163,13 +164,22 @@ export function LeadManagementPage() {
     sortDir,
   ]);
 
-  /** Ongoing tab: only Interested rows still on the ongoing sheet (pipeline: Demo → …). */
-  const ongoingInterestedLeads = useMemo(
-    () =>
-      filtered.filter(
-        (l) => l.sheetTab === "ongoing" && l.rowTone === "interested",
-      ),
+  /** All leads still on the ongoing sheet (interested + new imports + other statuses). */
+  const ongoingSheetLeads = useMemo(
+    () => filtered.filter((l) => l.sheetTab === "ongoing"),
     [filtered],
+  );
+
+  /** Ongoing tab · pipeline: only Interested (Demo → Brochure → …). */
+  const ongoingInterestedLeads = useMemo(
+    () => ongoingSheetLeads.filter((l) => l.rowTone === "interested"),
+    [ongoingSheetLeads],
+  );
+
+  /** Ongoing tab · imports & intakes land here (status New, etc.) until marked Interested. */
+  const ongoingOtherLeads = useMemo(
+    () => ongoingSheetLeads.filter((l) => l.rowTone !== "interested"),
+    [ongoingSheetLeads],
   );
 
   const followUpLeads = useMemo(
@@ -192,9 +202,7 @@ export function LeadManagementPage() {
   );
 
   const counts = useMemo(() => {
-    const ongoing = leads.filter(
-      (l) => l.sheetTab === "ongoing" && l.rowTone === "interested",
-    ).length;
+    const ongoing = leads.filter((l) => l.sheetTab === "ongoing").length;
     const followup = leads.filter((l) => l.sheetTab === "followup").length;
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
@@ -266,13 +274,13 @@ export function LeadManagementPage() {
 
   const tabCounts = useMemo(
     () => ({
-      ongoing: ongoingInterestedLeads.length,
+      ongoing: ongoingSheetLeads.length,
       not_interested: notInterestedLeads.length,
       followup: followUpLeads.length,
       converted: convertedLeadsFullPipeline.length,
     }),
     [
-      ongoingInterestedLeads.length,
+      ongoingSheetLeads.length,
       notInterestedLeads.length,
       followUpLeads.length,
       convertedLeadsFullPipeline.length,
@@ -374,6 +382,7 @@ export function LeadManagementPage() {
             Add student
           </button>
           <ExportLeadsButton leads={leads} />
+          <LeadCsvTemplateButton />
           <ImportExcelControl onImported={refreshLeads} />
         </div>
       </header>
@@ -587,44 +596,72 @@ export function LeadManagementPage() {
 
         <div className={SX.leadSheetBody}>
           {mainTab === "ongoing" && (
-            <section
-              className="px-3 py-4 md:px-4 md:py-5"
-              aria-label="Interested ongoing pipeline"
-            >
-              <div className={SX.leadSectionHead}>
-                <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
-                <p className={SX.leadSectionMeta}>
-                  Only students marked <span className="font-medium">Interested</span> on
-                  the ongoing sheet — that&apos;s when you run Demo, Brochure, Fees, and
-                  Schedule.{" "}
-                  <span className="tabular-nums">
-                    {ongoingInterestedLeads.length}{" "}
-                    {ongoingInterestedLeads.length === 1 ? "row" : "rows"}
-                  </span>
-                </p>
-              </div>
-              {ongoingInterestedLeads.length === 0 ? (
-                <div
-                  className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
-                  role="status"
-                >
-                  No interested leads here yet. Use the row <span className="font-medium">⋯</span>{" "}
-                  menu and choose <span className="font-medium">Interested</span> to move a
-                  lead into this pipeline.
+            <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
+              <section aria-label="New and other ongoing leads">
+                <div className={SX.leadSectionHead}>
+                  <h2 className={SX.leadSectionTitle}>New &amp; other ongoing</h2>
+                  <p className={SX.leadSectionMeta}>
+                    <span className="font-medium">CSV / Excel imports</span> and new intakes
+                    appear here (status <span className="font-medium">New</span>, etc.).
+                    Mark <span className="font-medium">Interested</span> from the row menu to
+                    move someone into the pipeline below.{" "}
+                    <span className="tabular-nums">
+                      {ongoingOtherLeads.length}{" "}
+                      {ongoingOtherLeads.length === 1 ? "row" : "rows"}
+                    </span>
+                  </p>
                 </div>
-              ) : (
-                <LeadSheetTable
-                  variant="standard"
-                  showFollowUpColumn={false}
-                  className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                  leads={applyDraftToList(ongoingInterestedLeads)}
-                  sheetEditMode={sheetEditMode}
-                  onDraftPatch={onDraftPatch}
-                  onUpdateLead={onUpdateLead}
-                  visibleIds={ongoingInterestedLeads.map((l) => l.id)}
-                />
-              )}
-            </section>
+                {ongoingOtherLeads.length === 0 ? (
+                  <div
+                    className="mt-3 border border-slate-200 bg-slate-50 px-4 py-6 text-center text-[13px] text-slate-600"
+                    role="status"
+                  >
+                    No rows here yet. Imported leads with status{" "}
+                    <span className="font-medium">New</span> show in this block.
+                  </div>
+                ) : (
+                  <LeadSheetTable
+                    variant="standard"
+                    showFollowUpColumn={false}
+                    className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                    leads={applyDraftToList(ongoingOtherLeads)}
+                    sheetEditMode={sheetEditMode}
+                    onDraftPatch={onDraftPatch}
+                    onUpdateLead={onUpdateLead}
+                    visibleIds={ongoingOtherLeads.map((l) => l.id)}
+                  />
+                )}
+              </section>
+
+              <section aria-label="Interested ongoing pipeline">
+                <div className={SX.leadSectionHead}>
+                  <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
+                  
+                </div>
+                {ongoingInterestedLeads.length === 0 ? (
+                  <div
+                    className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
+                    role="status"
+                  >
+                    No interested leads here yet. Use the row{" "}
+                    <span className="font-medium">⋯</span> menu and choose{" "}
+                    <span className="font-medium">Interested</span> to move a lead into this
+                    pipeline.
+                  </div>
+                ) : (
+                  <LeadSheetTable
+                    variant="standard"
+                    showFollowUpColumn={false}
+                    className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                    leads={applyDraftToList(ongoingInterestedLeads)}
+                    sheetEditMode={sheetEditMode}
+                    onDraftPatch={onDraftPatch}
+                    onUpdateLead={onUpdateLead}
+                    visibleIds={ongoingInterestedLeads.map((l) => l.id)}
+                  />
+                )}
+              </section>
+            </div>
           )}
 
           {mainTab === "followup" && (

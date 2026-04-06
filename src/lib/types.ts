@@ -1,3 +1,5 @@
+import type { LeadPipelineMeta } from "@/lib/leadPipelineMetaTypes";
+
 export type SheetTabId = "ongoing" | "followup" | "not_interested" | "converted";
 
 export type RowTone =
@@ -6,6 +8,28 @@ export type RowTone =
   | "followup_later"
   | "new"
   | "called_no_response";
+
+export type PipelineActivityKind =
+  | "demo"
+  | "brochure"
+  | "fees"
+  | "schedule"
+  | "call"
+  | "note";
+
+export type PipelineActivity = {
+  /** ISO timestamp */
+  at: string;
+  kind: PipelineActivityKind;
+  message: string;
+};
+
+export type CallHistoryEntry = {
+  at: string;
+  outcome: string;
+  duration?: string;
+  notes?: string;
+};
 
 export type Lead = {
   id: string;
@@ -24,9 +48,21 @@ export type Lead = {
   phone: string;
   /** Optional contact email (stored in DB). */
   email?: string | null;
-  pipelineSteps: number; // 0–4 completed (Demo → Brochure → Fees → Schedule)
+  /** 0–4: how many of Demo → Brochure → Fees → Schedule are done (dots on lead grid). */
+  pipelineSteps: number;
   rowTone: RowTone;
   sheetTab: SheetTabId;
+  /**
+   * Workspace data for this student — demos, brochure, fees, schedule.
+   * Stored in MongoDB (`Lead.pipelineMeta`); see `leadPipelineMetaTypes.ts`.
+   */
+  pipelineMeta?: LeadPipelineMeta | Record<string, unknown> | null;
+  /** Newest-first recommended in UI. */
+  activityLog?: PipelineActivity[];
+  /** Workspace notes (detail page sidebar). */
+  workspaceNotes?: string | null;
+  /** Logged calls (newest first). */
+  callHistory?: CallHistoryEntry[];
 };
 
 export type Faculty = {

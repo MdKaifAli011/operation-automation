@@ -12,11 +12,9 @@ function parseCreateBody(body: unknown): Partial<Lead> | null {
   const studentName =
     typeof b.studentName === "string" ? b.studentName.trim() : "";
   const phone = typeof b.phone === "string" ? b.phone.replace(/\s+/g, "") : "";
-  if (!studentName || !phone) return null;
   const targetExams = Array.isArray(b.targetExams)
     ? b.targetExams.filter((x): x is string => typeof x === "string")
     : [];
-  if (targetExams.length === 0) return null;
   return {
     date:
       typeof b.date === "string" && b.date.length >= 8
@@ -28,11 +26,15 @@ function parseCreateBody(body: unknown): Partial<Lead> | null {
         : typeof b.followUpDate === "string"
           ? b.followUpDate
           : null,
-    studentName,
+    studentName: studentName || "Unknown",
     parentName:
-      typeof b.parentName === "string" ? b.parentName.trim() : "—",
-    dataType: typeof b.dataType === "string" ? b.dataType : "Organic",
-    grade: typeof b.grade === "string" ? b.grade : "12th",
+      typeof b.parentName === "string" ? b.parentName.trim() : "",
+    dataType:
+      typeof b.dataType === "string" && b.dataType.trim()
+        ? b.dataType.trim()
+        : "Organic",
+    grade:
+      typeof b.grade === "string" && b.grade.trim() ? b.grade.trim() : "12th",
     targetExams,
     country:
       typeof b.country === "string" && b.country.trim()
@@ -81,7 +83,7 @@ export async function POST(req: Request) {
     const parsed = parseCreateBody(body);
     if (!parsed) {
       return NextResponse.json(
-        { error: "studentName, phone, and at least one target exam are required." },
+        { error: "Invalid JSON body." },
         { status: 400 },
       );
     }

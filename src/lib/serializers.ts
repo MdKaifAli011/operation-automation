@@ -1,5 +1,6 @@
 import type { Types } from "mongoose";
 import type { Lead, Faculty, FeeRecord } from "@/lib/types";
+import { computePipelineStepsFromMeta } from "@/lib/pipeline";
 
 export function serializeLead(
   doc: {
@@ -17,9 +18,31 @@ export function serializeLead(
     pipelineSteps: number;
     rowTone: string;
     sheetTab: string;
+    pipelineMeta?: unknown;
+    activityLog?: unknown;
+    workspaceNotes?: string;
+    callHistory?: unknown;
   },
 ): Lead {
   const email = doc.email?.trim();
+  const meta =
+    doc.pipelineMeta &&
+    typeof doc.pipelineMeta === "object" &&
+    !Array.isArray(doc.pipelineMeta)
+      ? (doc.pipelineMeta as Record<string, unknown>)
+      : null;
+  const rawLog = doc.activityLog;
+  const activityLog = Array.isArray(rawLog)
+    ? (rawLog as Lead["activityLog"])
+    : undefined;
+  const rawCalls = doc.callHistory;
+  const callHistory = Array.isArray(rawCalls)
+    ? (rawCalls as Lead["callHistory"])
+    : undefined;
+  const pipelineSteps =
+    meta != null
+      ? computePipelineStepsFromMeta(meta)
+      : (doc.pipelineSteps ?? 0);
   return {
     id: String(doc._id),
     date: doc.date,
@@ -32,9 +55,13 @@ export function serializeLead(
     country: doc.country,
     phone: doc.phone,
     email: email || null,
-    pipelineSteps: doc.pipelineSteps,
+    pipelineSteps,
     rowTone: doc.rowTone as Lead["rowTone"],
     sheetTab: doc.sheetTab as Lead["sheetTab"],
+    pipelineMeta: meta,
+    activityLog,
+    callHistory,
+    workspaceNotes: doc.workspaceNotes?.trim() || null,
   };
 }
 

@@ -1,9 +1,16 @@
 "use client";
 
-import { addMonths, format, parseISO } from "date-fns";
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  format,
+  formatDistanceToNow,
+  parseISO,
+  startOfWeek,
+} from "date-fns";
 import Link from "next/link";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -11,10 +18,23 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Faculty, Lead } from "@/lib/types";
+import type { LeadPipelineScheduleClass } from "@/lib/leadPipelineMetaTypes";
+import type {
+  CallHistoryEntry,
+  Faculty,
+  Lead,
+  PipelineActivity,
+} from "@/lib/types";
 import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { formatTargetExams } from "@/lib/lead-display";
 import { formatLeadPhone } from "@/lib/phone-display";
+import {
+  PIPELINE_STEP_LABELS,
+  appendActivity,
+  canAccessPipelineStep,
+  canGoToNextPipelineStep,
+  mergePipelineMeta,
+} from "@/lib/pipeline";
 import { extrasForLead } from "@/lib/student-detail";
 import { SX } from "@/components/student/student-excel-ui";
 import {
@@ -179,9 +199,7 @@ function pickDefaultTeacher(subj: string, faculties: Faculty[]): string {
       faculties[0];
     return m.name;
   }
-  if (subj === "Biology") return "Dr. Meena Singh";
-  if (subj === "Physics") return "Mr. Ravi Kumar";
-  return "Ms. Priya Sharma";
+  return "";
 }
 
 type DemoTableRow = {
@@ -193,25 +211,144 @@ type DemoTableRow = {
   isoDate: string;
   /** HH:mm wall clock in India (IST) */
   timeHmIST: string;
+  inviteSent?: boolean;
+  inviteSentAt?: string | null;
 };
+
+function activityIconForKind(kind: PipelineActivity["kind"]) {
+  switch (kind) {
+    case "demo":
+      return IconCalendar;
+    case "brochure":
+      return IconMail;
+    case "fees":
+      return IconFileText;
+    case "schedule":
+      return IconCalendar;
+    case "call":
+      return IconPhone;
+    case "note":
+      return IconPencil;
+    default:
+      return IconPlus;
+  }
+}
+
+function formatActivityTime(iso: string): string {
+  try {
+    return formatDistanceToNow(parseISO(iso), { addSuffix: true });
+  } catch {
+    return iso;
+  }
+}
 
 type Props = { lead: Lead };
 
-export function StudentDetailPage({ lead }: Props) {
+export function StudentDetailPage({ lead: initialLead }: Props) {
+  const [lead, setLead] = useState(initialLead);
+  const leadRef = useRef(lead);
+  leadRef.current = lead;
+  useEffect(() => {
+    setLead(initialLead);
+  }, [initialLead]);
+
+  const patchLead = useCallback(
+    async (updates: Partial<Lead>) => {
+      const res = await fetch(`/api/leads/${encodeURIComponent(lead.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof (data as { error?: string }).error === "string"
+            ? (data as { error: string }).error
+            : "Could not save.",
+        );
+      }
+      setLead(data as Lead);
+      return data as Lead;
+    },
+    [lead.id],
+  );
+
   const extras = useMemo(() => extrasForLead(lead), [lead]);
   const completed = lead.pipelineSteps;
   const [activeStep, setActiveStep] = useState(() => {
-    const c = lead.pipelineSteps;
+    const c = initialLead.pipelineSteps;
     if (c >= PIPELINE_TOTAL) return PIPELINE_TOTAL;
     return Math.min(Math.max(c, 0) + 1, PIPELINE_TOTAL);
   });
-  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    const c = initialLead.pipelineSteps;
+    setActiveStep(
+      c >= PIPELINE_TOTAL
+        ? PIPELINE_TOTAL
+        : Math.min(Math.max(c, 0) + 1, PIPELINE_TOTAL),
+    );
+  }, [initialLead.id]);
+  const [notes, setNotes] = useState(initialLead.workspaceNotes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const skipNotesAutosave = useRef(true);
+
+  useEffect(() => {
+    skipNotesAutosave.current = true;
+  }, [lead.id]);
+
+  useEffect(() => {
+    setNotes(lead.workspaceNotes ?? "");
+  }, [lead.workspaceNotes, lead.id]);
+
+  useEffect(() => {
+    if (skipNotesAutosave.current) {
+      skipNotesAutosave.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const next = notes.trimEnd();
+      const cur = leadRef.current;
+      const prev = (cur.workspaceNotes ?? "").trimEnd();
+      if (next === prev) return;
+      setNotesSaving(true);
+      void patchLead({
+        workspaceNotes: next,
+        activityLog: appendActivity(
+          cur.activityLog,
+          "note",
+          "Workspace notes saved",
+        ),
+      })
+        .then(() => {
+          setNotesSaved(true);
+          window.setTimeout(() => setNotesSaved(false), 2000);
+        })
+        .finally(() => setNotesSaving(false));
+    }, 750);
+    return () => window.clearTimeout(t);
+  }, [notes, lead.id, patchLead]);
   const [callOpen, setCallOpen] = useState(false);
-  const [scheduleView, setScheduleView] = useState<"table" | "calendar">(
-    "table",
-  );
+  const [scheduleView, setScheduleView] = useState<"table" | "calendar">(() => {
+    const v = (initialLead.pipelineMeta?.schedule as { view?: string } | undefined)
+      ?.view;
+    return v === "calendar" ? "calendar" : "table";
+  });
   const [faculties, setFaculties] = useState<Faculty[]>([]);
+
+  const maxAccessibleStep = completed >= PIPELINE_TOTAL ? PIPELINE_TOTAL : completed + 1;
+
+  useEffect(() => {
+    if (activeStep > maxAccessibleStep) {
+      setActiveStep(maxAccessibleStep);
+    }
+  }, [maxAccessibleStep, activeStep]);
+
+  useEffect(() => {
+    const v = (lead.pipelineMeta?.schedule as { view?: string } | undefined)?.view;
+    if (v === "calendar" || v === "table") setScheduleView(v);
+  }, [lead.id, lead.pipelineMeta]);
 
   useEffect(() => {
     let cancelled = false;
@@ -382,67 +519,39 @@ export function StudentDetailPage({ lead }: Props) {
               aria-labelledby={`pipeline-tab-${activeStep}`}
             >
               {activeStep === 1 && (
-                <DemoSection lead={lead} faculties={faculties} />
+                <DemoSection
+                  lead={lead}
+                  faculties={faculties}
+                  onPatchLead={patchLead}
+                />
               )}
-              {activeStep === 2 && <BrochureSection />}
-              {activeStep === 3 && <FeeSection lead={lead} />}
+              {activeStep === 2 && (
+                <BrochureSection lead={lead} onPatchLead={patchLead} />
+              )}
+              {activeStep === 3 && (
+                <FeeSection lead={lead} onPatchLead={patchLead} />
+              )}
               {activeStep === 4 && (
                 <ScheduleSection
+                  lead={lead}
                   view={scheduleView}
                   onViewChange={setScheduleView}
+                  onPatchLead={patchLead}
                 />
               )}
             </div>
-            <StepFooter activeStep={activeStep} onStepChange={setActiveStep} />
+            <StepFooter
+              completed={completed}
+              activeStep={activeStep}
+              onStepChange={setActiveStep}
+            />
           </div>
 
           <aside className={SX.asidePane}>
             <p className={SX.asideIntro}>
               Activity, notes, and calls for this lead.
             </p>
-            <div className={SX.sidePanel}>
-              <div className={SX.sideHead}>Activity</div>
-              <div className={SX.sideBody}>
-                <ul className="divide-y divide-slate-100 text-[13px]">
-                  {[
-                    {
-                      StepIcon: IconMail,
-                      text: "Brochure sent (WhatsApp)",
-                      time: "2h ago",
-                    },
-                    {
-                      StepIcon: IconPhone,
-                      text: "Call — Interested",
-                      time: "1d ago",
-                    },
-                    {
-                      StepIcon: IconCalendar,
-                      text: "Demo scheduled · Biology",
-                      time: "2d ago",
-                    },
-                    {
-                      StepIcon: IconPlus,
-                      text: "Lead created",
-                      time: "3d ago",
-                    },
-                  ].map(({ StepIcon, text, time }, i) => (
-                    <li
-                      key={i}
-                      className="flex gap-3 py-2.5 first:pt-0 last:pb-0"
-                    >
-                      <StepIcon
-                        className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
-                        aria-hidden
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="leading-snug text-slate-800">{text}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">{time}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <ActivityAside activities={lead.activityLog} />
 
             <div className={SX.sidePanel}>
               <div className={SX.sideHead}>Notes</div>
@@ -450,78 +559,250 @@ export function StudentDetailPage({ lead }: Props) {
                 <textarea
                   rows={8}
                   className={cn(SX.textarea, "min-h-[140px] resize-y")}
-                  placeholder="Type notes here — visible to your team in this session."
+                  placeholder="Type notes here — auto-saved for your team."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  onBlur={() => {
-                    setNotesSaved(true);
-                    window.setTimeout(() => setNotesSaved(false), 2000);
-                  }}
                 />
-                {notesSaved && (
-                  <p className="mt-2 flex items-center gap-1 text-[12px] text-success">
-                    <IconCheck className="h-3.5 w-3.5" /> Saved
+                {(notesSaving || notesSaved) && (
+                  <p
+                    className={cn(
+                      "mt-2 flex items-center gap-1 text-[12px]",
+                      notesSaving ? "text-slate-500" : "text-success",
+                    )}
+                  >
+                    {notesSaving ? (
+                      "Saving…"
+                    ) : (
+                      <>
+                        <IconCheck className="h-3.5 w-3.5" /> Saved
+                      </>
+                    )}
                   </p>
                 )}
               </div>
             </div>
 
-            <div className={SX.sidePanel}>
-              <div className={SX.sideHead}>Call history</div>
-              <div className={SX.sideBody}>
-                <ul className="divide-y divide-slate-100 text-[13px]">
-                  <li className="flex flex-col gap-1 py-3 first:pt-0">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="tabular-nums text-slate-600">02 Apr 2026</span>
-                      <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
-                        Interested
-                      </span>
-                    </div>
-                    <p className="text-[12px] text-slate-500">Discussed fee plan.</p>
-                  </li>
-                  <li className="flex flex-wrap items-baseline justify-between gap-2 py-3">
-                    <span className="tabular-nums text-slate-600">28 Mar 2026</span>
-                    <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-                      No answer
-                    </span>
-                  </li>
-                </ul>
-                <button
-                  type="button"
-                  className={cn(
-                    SX.btnGhost,
-                    "mt-4 w-full justify-center border border-dashed border-slate-200 py-2.5 text-slate-600 hover:bg-slate-50",
-                  )}
-                  onClick={() => setCallOpen((v) => !v)}
-                >
-                  + Log call
-                </button>
-                {callOpen && (
-                  <form
-                    className="mt-3 space-y-2 border border-slate-200 bg-slate-50/80 p-3 text-[13px]"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setCallOpen(false);
-                    }}
-                  >
-                    <input type="date" className={SX.input} />
-                    <input placeholder="Duration" className={SX.input} />
-                    <select className={cn(SX.select, "w-full")}>
-                      <option>Interested</option>
-                      <option>No Answer</option>
-                      <option>Callback</option>
-                      <option>Not Interested</option>
-                    </select>
-                    <input placeholder="Notes" className={SX.input} />
-                    <button type="submit" className={cn(SX.btnPrimary, "w-full")}>
-                      Save call
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
+            <CallHistoryPanel
+              lead={lead}
+              callOpen={callOpen}
+              onToggleOpen={() => setCallOpen((v) => !v)}
+              onPatchLead={patchLead}
+            />
           </aside>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CallHistoryPanel({
+  lead,
+  callOpen,
+  onToggleOpen,
+  onPatchLead,
+}: {
+  lead: Lead;
+  callOpen: boolean;
+  onToggleOpen: () => void;
+  onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+}) {
+  const [callDate, setCallDate] = useState("");
+  const [duration, setDuration] = useState("");
+  const [outcome, setOutcome] = useState("Interested");
+  const [callNotes, setCallNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const calls = lead.callHistory ?? [];
+
+  return (
+    <div className={SX.sidePanel}>
+      <div className={SX.sideHead}>Call history</div>
+      <div className={SX.sideBody}>
+        {calls.length === 0 ? (
+          <p className="text-[13px] text-slate-500">No calls logged yet.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100 text-[13px]">
+            {calls.map((c, i) => {
+              let when = "—";
+              try {
+                when = format(parseISO(c.at), "dd MMM yyyy, HH:mm");
+              } catch {
+                when = c.at;
+              }
+              return (
+                <li key={`${c.at}-${i}`} className="flex flex-col gap-1 py-3 first:pt-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="tabular-nums text-slate-600">{when}</span>
+                    <span
+                      className={cn(
+                        "rounded px-2 py-0.5 text-[11px] font-medium",
+                        c.outcome === "Interested"
+                          ? "bg-emerald-50 text-emerald-800"
+                          : c.outcome === "Not Interested"
+                            ? "bg-red-50 text-red-800"
+                            : "bg-slate-100 text-slate-600",
+                      )}
+                    >
+                      {c.outcome || "—"}
+                    </span>
+                  </div>
+                  {c.duration ? (
+                    <p className="text-[11px] text-slate-500">Duration: {c.duration}</p>
+                  ) : null}
+                  {c.notes ? (
+                    <p className="text-[12px] text-slate-600">{c.notes}</p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <button
+          type="button"
+          className={cn(
+            SX.btnGhost,
+            "mt-4 w-full justify-center border border-dashed border-slate-200 py-2.5 text-slate-600 hover:bg-slate-50",
+          )}
+          onClick={onToggleOpen}
+        >
+          + Log call
+        </button>
+        {callOpen && (
+          <form
+            className="mt-3 space-y-2 border border-slate-200 bg-slate-50/80 p-3 text-[13px]"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSaving(true);
+              const entry: CallHistoryEntry = {
+                at: new Date().toISOString(),
+                outcome,
+                duration: duration.trim(),
+                notes: callNotes.trim(),
+              };
+              const dateLabel = callDate
+                ? format(parseISO(callDate), "dd MMM yyyy")
+                : format(new Date(), "dd MMM yyyy");
+              void onPatchLead({
+                callHistory: [entry, ...calls],
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "call",
+                  `Call logged — ${outcome}${callDate ? ` (${dateLabel})` : ""}`,
+                ),
+              })
+                .then(() => {
+                  setCallDate("");
+                  setDuration("");
+                  setOutcome("Interested");
+                  setCallNotes("");
+                  onToggleOpen();
+                })
+                .finally(() => setSaving(false));
+            }}
+          >
+            <input
+              type="date"
+              className={SX.input}
+              value={callDate}
+              onChange={(e) => setCallDate(e.target.value)}
+              aria-label="Call date"
+            />
+            <input
+              placeholder="Duration (e.g. 12 min)"
+              className={SX.input}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+            />
+            <select
+              className={cn(SX.select, "w-full")}
+              value={outcome}
+              onChange={(e) => setOutcome(e.target.value)}
+            >
+              <option value="Interested">Interested</option>
+              <option value="No Answer">No Answer</option>
+              <option value="Callback">Callback</option>
+              <option value="Not Interested">Not Interested</option>
+            </select>
+            <input
+              placeholder="Notes"
+              className={SX.input}
+              value={callNotes}
+              onChange={(e) => setCallNotes(e.target.value)}
+            />
+            <button
+              type="submit"
+              className={cn(SX.btnPrimary, "w-full")}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save call"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActivityAside({
+  activities,
+}: {
+  activities: PipelineActivity[] | undefined;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const list = activities ?? [];
+  const recent = list.slice(0, 5);
+  const display = showAll ? list : recent;
+
+  return (
+    <div className={SX.sidePanel}>
+      <div className={SX.sideHead}>Activity</div>
+      <div className={SX.sideBody}>
+        {list.length === 0 ? (
+          <p className="text-[13px] leading-relaxed text-slate-500">
+            No activity yet. Completing pipeline steps and saving notes will appear
+            here.
+          </p>
+        ) : (
+          <>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              {showAll ? "All activity" : "Recent"}
+            </p>
+            <ul className="max-h-[min(40vh,320px)] divide-y divide-slate-100 overflow-y-auto text-[13px] [scrollbar-width:thin]">
+              {display.map((a, i) => {
+                const StepIcon = activityIconForKind(a.kind);
+                return (
+                  <li
+                    key={`${a.at}-${i}-${a.message.slice(0, 24)}`}
+                    className="flex gap-3 py-2.5 first:pt-0 last:pb-0"
+                  >
+                    <StepIcon
+                      className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="leading-snug text-slate-800">{a.message}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {formatActivityTime(a.at)}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {list.length > 5 ? (
+              <button
+                type="button"
+                className={cn(
+                  SX.btnGhost,
+                  "mt-2 w-full justify-center text-[12px]",
+                )}
+                onClick={() => setShowAll((v) => !v)}
+              >
+                {showAll ? "Show recent only" : `Show all (${list.length})`}
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );
@@ -552,6 +833,11 @@ function Stepper({
           {STEPS.map((s) => {
             const isDone = completed >= s.n;
             const isActive = activeStep === s.n;
+            const unlocked = canAccessPipelineStep(completed, s.n);
+            const lockHint =
+              s.n >= 2
+                ? `Complete ${PIPELINE_STEP_LABELS[s.n - 2]} first`
+                : "";
             return (
               <button
                 key={s.id}
@@ -560,23 +846,32 @@ function Stepper({
                 role="tab"
                 aria-selected={isActive}
                 aria-current={isActive ? "step" : undefined}
+                disabled={!unlocked}
                 title={
-                  isDone
-                    ? `${s.label} — completed`
-                    : isActive
-                      ? `${s.label} — open (in progress)`
-                      : `${s.label} — not started`
+                  !unlocked
+                    ? lockHint
+                    : isDone
+                      ? `${s.label} — completed`
+                      : isActive
+                        ? `${s.label} — open (in progress)`
+                        : `${s.label} — not started`
                 }
-                onClick={() => onStepSelect(s.n)}
+                onClick={() => {
+                  if (unlocked) onStepSelect(s.n);
+                }}
                 className={cn(
                   "flex min-h-9 min-w-[4.5rem] flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-[12px] font-medium transition-all sm:min-w-0 sm:px-2.5",
+                  !unlocked && "cursor-not-allowed opacity-45",
                   isActive &&
+                    unlocked &&
                     "bg-white font-semibold text-primary shadow-sm ring-1 ring-slate-200/70",
                   !isActive &&
                     isDone &&
+                    unlocked &&
                     "text-emerald-900 hover:bg-white/80",
                   !isActive &&
                     !isDone &&
+                    unlocked &&
                     "text-slate-700 hover:bg-white/70",
                 )}
               >
@@ -584,7 +879,7 @@ function Stepper({
                   className={cn(
                     "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold tabular-nums leading-none transition-colors",
                     isDone &&
-                      "bg-emerald-600 text-white shadow-sm shadow-emerald-900/20",
+                      "bg-emerald-600 text-white shadow-sm shadow-emerald-900/20 ring-2 ring-emerald-300/90",
                     !isDone &&
                       isActive &&
                       "border-2 border-primary bg-white text-primary shadow-sm ring-2 ring-primary/20",
@@ -644,13 +939,16 @@ function Stepper({
 }
 
 function StepFooter({
+  completed,
   activeStep,
   onStepChange,
 }: {
+  completed: number;
   activeStep: number;
   onStepChange: (n: number) => void;
 }) {
   const label = STEPS.find((s) => s.n === activeStep)?.label ?? "";
+  const canNext = canGoToNextPipelineStep(completed, activeStep);
   return (
     <div className={SX.footerBar}>
       <button
@@ -664,12 +962,19 @@ function StepFooter({
       >
         ← Previous
       </button>
-      <span className="max-w-[min(100%,200px)] truncate text-center text-[11px] text-[#78909c]">
+      <span
+        className="max-w-[min(100%,220px)] truncate text-center text-[11px] text-[#78909c]"
+        title={
+          !canNext && activeStep < PIPELINE_TOTAL
+            ? "Mark this step complete before going to the next"
+            : undefined
+        }
+      >
         Step {activeStep}/{PIPELINE_TOTAL} · {label}
       </span>
       <button
         type="button"
-        disabled={activeStep >= PIPELINE_TOTAL}
+        disabled={activeStep >= PIPELINE_TOTAL || !canNext}
         onClick={() => onStepChange(activeStep + 1)}
         className={cn(
           SX.btnPrimary,
@@ -682,9 +987,24 @@ function StepFooter({
   );
 }
 
-function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) {
+function DemoSection({
+  lead,
+  faculties,
+  onPatchLead,
+}: {
+  lead: Lead;
+  faculties: Faculty[];
+  onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+}) {
+  const leadRef = useRef(lead);
+  leadRef.current = lead;
+  const demoRowsFromMeta = (
+    lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined
+  )?.rows;
   const [expanded, setExpanded] = useState(false);
-  const [rows, setRows] = useState<DemoTableRow[]>([]);
+  const [rows, setRows] = useState<DemoTableRow[]>(() =>
+    Array.isArray(demoRowsFromMeta) ? demoRowsFromMeta : [],
+  );
   const [scheduleSuccessOpen, setScheduleSuccessOpen] = useState(false);
   const dismissScheduleSuccess = useCallback(() => setScheduleSuccessOpen(false), []);
   const [shareSuccessOpen, setShareSuccessOpen] = useState(false);
@@ -735,9 +1055,54 @@ function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) 
 
   const confirmSendRow = useCallback(() => {
     if (rowAction?.type !== "send") return;
+    const idx = rowAction.index;
+    const row = rows[idx];
     closeRowModal();
     setShareSuccessOpen(true);
-  }, [rowAction, closeRowModal]);
+    if (row) {
+      const at = new Date().toISOString();
+      const nextRows = rows.map((r, j) =>
+        j === idx ? { ...r, inviteSent: true, inviteSentAt: at } : r,
+      );
+      setRows(nextRows);
+      void onPatchLead({
+        pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+          demo: {
+            rows: nextRows,
+            lastInviteSharedAt: at,
+            lastInviteSummary: demoRowSummaryLine(row),
+          },
+        }),
+        activityLog: appendActivity(
+          lead.activityLog,
+          "demo",
+          `Demo invite shared with family: ${demoRowSummaryLine(row)}`,
+        ),
+      });
+    }
+  }, [rowAction, rows, closeRowModal, onPatchLead, lead.pipelineMeta, lead.activityLog]);
+
+  useEffect(() => {
+    const r = (
+      lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined
+    )?.rows;
+    if (Array.isArray(r)) setRows(r);
+  }, [lead.id, lead.pipelineMeta]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      const server = (
+        lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined
+      )?.rows;
+      if (JSON.stringify(rows) === JSON.stringify(server ?? [])) return;
+      void onPatchLead({
+        pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+          demo: { rows },
+        }),
+      });
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, [rows, lead.id, onPatchLead, lead.pipelineMeta]);
 
   const activeRow =
     rowAction && rows[rowAction.index] ? rows[rowAction.index] : null;
@@ -752,7 +1117,14 @@ function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) 
     <section className={SX.section}>
       <div className={SX.sectionHead}>
         <div className="min-w-0 flex-1">
-          <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
+            {lead.pipelineSteps >= 1 ? (
+              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
+                Done
+              </span>
+            ) : null}
+          </div>
           <p className="mt-0.5 max-w-xl text-xs leading-snug text-slate-500">
             Schedule in <span className="font-medium text-slate-600">IST</span>.{" "}
             <span className="font-medium text-slate-600">Student time</span> is their
@@ -774,6 +1146,38 @@ function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) 
         ) : null}
       </div>
       <div className={SX.sectionBody}>
+      {rows.length > 0 ? (
+        <div
+          className="mb-4 rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-3 text-[13px] text-emerald-950 shadow-sm shadow-emerald-900/5"
+          role="status"
+        >
+          <p className="font-semibold tracking-tight">
+            {rows.length === 1
+              ? "1 demo saved on this lead"
+              : `${rows.length} demos saved on this lead`}
+          </p>
+          <p className="mt-1 text-[12px] leading-snug text-emerald-900/85">
+            Open this tab anytime to see the full table. Each row is stored in the
+            database.
+          </p>
+          <ul className="mt-2 space-y-1 border-t border-emerald-200/80 pt-2 text-[12px] text-emerald-900">
+            {rows.map((r, i) => (
+              <li key={i} className="flex flex-wrap gap-x-2">
+                <span className="font-medium tabular-nums text-emerald-800">
+                  #{i + 1}
+                </span>
+                <span>{demoRowSummaryLine(r)}</span>
+                <span className="text-emerald-700/80">· {r.status}</span>
+                {r.inviteSent ? (
+                  <span className="rounded bg-emerald-600/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-900">
+                    Invite sent
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {rows.length === 0 && !expanded ? (
         <div className="flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/60 px-3 py-5 text-center">
           <IconCalendarLarge className="h-10 w-10 text-slate-300" />
@@ -803,9 +1207,20 @@ function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) 
           faculties={faculties}
           onCancel={() => setExpanded(false)}
           onSchedule={(r) => {
-            setRows([r]);
+            const nextRows = [r];
+            setRows(nextRows);
             setExpanded(false);
             setScheduleSuccessOpen(true);
+            void onPatchLead({
+              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                demo: { rows: nextRows },
+              }),
+              activityLog: appendActivity(
+                lead.activityLog,
+                "demo",
+                `Demo created & saved on lead — ${r.subject} with ${r.teacher} · ${format(parseISO(r.isoDate), "d MMM yyyy")} IST`,
+              ),
+            });
           }}
         />
       ) : (
@@ -977,7 +1392,23 @@ function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) 
               faculties={faculties}
               onCancel={() => setExpanded(false)}
               onSchedule={(r) => {
-                setRows((prev) => [...prev, r]);
+                setRows((prev) => {
+                  const nextRows = [...prev, r];
+                  queueMicrotask(() => {
+                    const L = leadRef.current;
+                    void onPatchLead({
+                      pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+                        demo: { rows: nextRows },
+                      }),
+                      activityLog: appendActivity(
+                        L.activityLog,
+                        "demo",
+                        `Demo created & saved on lead — ${r.subject} with ${r.teacher} · ${format(parseISO(r.isoDate), "d MMM yyyy")} IST`,
+                      ),
+                    });
+                  });
+                  return nextRows;
+                });
                 setExpanded(false);
                 setScheduleSuccessOpen(true);
               }}
@@ -985,6 +1416,9 @@ function DemoSection({ lead, faculties }: { lead: Lead; faculties: Faculty[] }) 
           )}
         </div>
       )}
+      <p className="mt-3 text-[11px] leading-snug text-slate-500">
+        Demos save automatically. Adding a demo updates pipeline progress.
+      </p>
       </div>
     </section>
     <DemoEditRowDialog
@@ -1056,10 +1490,12 @@ function DemoEditRowDialog({
 
   const teacherOptions = useMemo(() => {
     const names = faculties.map((f) => f.name);
-    if (!draft) return names.length ? names : ["Dr. Meena Singh"];
+    if (!draft) return names;
     return names.includes(draft.teacher)
       ? names
-      : [draft.teacher, ...names];
+      : draft.teacher
+        ? [draft.teacher, ...names]
+        : names;
   }, [draft, faculties]);
 
   useEffect(() => {
@@ -1702,15 +2138,12 @@ function DemoForm({
     return `${formatDateInZone(slot, studentTimeZone)} · ${formatTime12hInZone(slot, studentTimeZone)} ${zoneShortLabel(studentTimeZone)}`;
   }, [effectiveDemoDate, demoTime, studentTimeZone]);
 
-  const teacherNameOptions = useMemo(() => {
-    const n = faculties.map((f) => f.name);
-    return n.length > 0 ? n : [pickDefaultTeacher(subj, faculties)];
-  }, [faculties, subj]);
+  const teacherNameOptions = useMemo(() => faculties.map((f) => f.name), [faculties]);
 
   const effectiveTeacher = useMemo(() => {
     if (teacherNameOptions.includes(teacher)) return teacher;
-    return teacherNameOptions[0] ?? pickDefaultTeacher(subj, faculties);
-  }, [teacher, teacherNameOptions, subj, faculties]);
+    return teacherNameOptions[0] ?? "";
+  }, [teacher, teacherNameOptions]);
 
   const pickSubject = (s: string) => {
     setScheduleWarnMsg(null);
@@ -1813,13 +2246,23 @@ function DemoForm({
                     setTeacher(e.target.value);
                   }}
                   aria-label="Teacher"
+                  disabled={teacherNameOptions.length === 0}
                 >
-                  {teacherNameOptions.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
+                  {teacherNameOptions.length === 0 ? (
+                    <option value="">— Add faculty under Faculties first —</option>
+                  ) : (
+                    teacherNameOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))
+                  )}
                 </select>
+                {teacherNameOptions.length === 0 ? (
+                  <p className="mt-1.5 text-[12px] text-amber-800">
+                    No teachers in the system yet. Add faculty so demos can be assigned.
+                  </p>
+                ) : null}
               </td>
             </tr>
             <tr>
@@ -1914,8 +2357,13 @@ function DemoForm({
           <button
             type="button"
             className={SX.btnPrimary}
+            disabled={!effectiveTeacher.trim()}
             onClick={() => {
               setScheduleWarnMsg(null);
+              if (!effectiveTeacher.trim()) {
+                setScheduleWarnMsg("Choose a teacher from your faculty list.");
+                return;
+              }
               const slot = parseIstSlot(effectiveDemoDate, demoTime);
               if (!slot) {
                 setScheduleWarnMsg("Enter a valid date and time.");
@@ -1949,20 +2397,161 @@ function DemoForm({
   );
 }
 
-function BrochureSection() {
+function BrochureSection({
+  lead,
+  onPatchLead,
+}: {
+  lead: Lead;
+  onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+}) {
+  const br = lead.pipelineMeta?.brochure as
+    | {
+        notes?: string;
+        fileName?: string | null;
+        generated?: boolean;
+        sentWhatsApp?: boolean;
+        sentEmail?: boolean;
+        sentWhatsAppAt?: string;
+        sentEmailAt?: string;
+      }
+    | undefined;
   const [file, setFile] = useState<File | null>(null);
-  const [genPreview, setGenPreview] = useState(false);
+  const [genPreview, setGenPreview] = useState(br?.generated ?? false);
+  const [notes, setNotes] = useState(br?.notes ?? "");
+  const [savedName, setSavedName] = useState<string | null>(br?.fileName ?? null);
+  const brochureSkipAutosave = useRef(true);
+  const leadBrRef = useRef(lead);
+  leadBrRef.current = lead;
+
+  useEffect(() => {
+    brochureSkipAutosave.current = true;
+  }, [lead.id]);
+
+  useEffect(() => {
+    const b = lead.pipelineMeta?.brochure as
+      | {
+          notes?: string;
+          fileName?: string | null;
+          generated?: boolean;
+        }
+      | undefined;
+    if (b) {
+      setNotes(b.notes ?? "");
+      setSavedName(b.fileName ?? null);
+      setGenPreview(b.generated ?? false);
+    }
+  }, [lead.id, lead.pipelineMeta]);
+
+  const brochureFileLabel = file?.name ?? savedName ?? "";
+  const formatSentAt = (iso?: string) => {
+    if (!iso) return "";
+    try {
+      return format(parseISO(iso), "dd MMM yyyy, HH:mm");
+    } catch {
+      return "";
+    }
+  };
+
+  const brochurePayload = useCallback(
+    (patch: Record<string, unknown> = {}) => ({
+      notes,
+      fileName: file?.name ?? savedName,
+      generated: genPreview,
+      ...patch,
+    }),
+    [notes, file, savedName, genPreview],
+  );
+
+  useEffect(() => {
+    if (brochureSkipAutosave.current) {
+      brochureSkipAutosave.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const L = leadBrRef.current;
+      const prev = (L.pipelineMeta?.brochure as { notes?: string } | undefined)
+        ?.notes;
+      if ((prev ?? "") === notes) return;
+      void onPatchLead({
+        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+          brochure: brochurePayload(),
+        }),
+      });
+    }, 650);
+    return () => window.clearTimeout(t);
+  }, [notes, brochurePayload, onPatchLead]);
+
   return (
     <section className={SX.section}>
       <div className={SX.sectionHead}>
         <div>
-          <h2 className={SX.sectionTitle}>Step 2 · Course brochure</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className={SX.sectionTitle}>Step 2 · Course brochure</h2>
+            {lead.pipelineSteps >= 2 ? (
+              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
+                Done
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Upload or generate a PDF, then send to the family.
+            Upload or generate a PDF, then send to the family. Everything below is
+            stored on this lead.
           </p>
         </div>
       </div>
       <div className={SX.sectionBody}>
+      {br?.generated ||
+      br?.sentWhatsApp ||
+      br?.sentEmail ||
+      brochureFileLabel ||
+      notes.trim() ? (
+        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-800 shadow-sm shadow-slate-900/5">
+          <p className="font-semibold text-slate-900">Brochure on this student</p>
+          {brochureFileLabel ? (
+            <p className="mt-1.5 text-[13px]">
+              <span className="text-slate-500">File: </span>
+              <span className="font-medium text-slate-900">{brochureFileLabel}</span>
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[12px] text-slate-500">No file name saved yet.</p>
+          )}
+          {br?.generated ? (
+            <p className="mt-1 text-[12px] font-medium text-emerald-800">
+              ✓ Brochure generated (preview)
+            </p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {br?.sentWhatsApp ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-[#25d366]/15 px-2 py-1 text-[11px] font-semibold text-[#1b5e20] ring-1 ring-[#25d366]/30">
+                <IconCheck className="h-3 w-3" /> Sent WhatsApp
+                {br.sentWhatsAppAt ? (
+                  <span className="font-normal text-emerald-900/80">
+                    · {formatSentAt(br.sentWhatsAppAt)}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
+                WhatsApp — not sent yet
+              </span>
+            )}
+            {br?.sentEmail ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/25">
+                <IconCheck className="h-3 w-3" /> Sent email
+                {br.sentEmailAt ? (
+                  <span className="font-normal text-slate-700">
+                    · {formatSentAt(br.sentEmailAt)}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
+                Email — not sent yet
+              </span>
+            )}
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600">
@@ -1970,7 +2559,29 @@ function BrochureSection() {
               type="file"
               accept=".pdf,image/*"
               className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const nextFile = e.target.files?.[0] ?? null;
+                setFile(nextFile);
+                const name = nextFile?.name ?? null;
+                setSavedName(name);
+                const patch: Partial<Lead> = {
+                  pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                    brochure: {
+                      notes,
+                      fileName: name,
+                      generated: genPreview,
+                    },
+                  }),
+                };
+                if (nextFile) {
+                  patch.activityLog = appendActivity(
+                    lead.activityLog,
+                    "brochure",
+                    `Brochure file attached: ${nextFile.name}`,
+                  );
+                }
+                void onPatchLead(patch);
+              }}
             />
             <IconCloudUpload />
             <span>Upload PDF or image</span>
@@ -1983,24 +2594,64 @@ function BrochureSection() {
                 Preview
               </button>{" "}
               ·{" "}
-              <button type="button" className="text-[#c62828] underline" onClick={() => setFile(null)}>
+              <button
+                type="button"
+                className="text-[#c62828] underline"
+                onClick={() => {
+                  setFile(null);
+                  void onPatchLead({
+                    pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                      brochure: {
+                        notes,
+                        fileName: null,
+                        generated: genPreview,
+                      },
+                    }),
+                  });
+                }}
+              >
                 Remove
               </button>
             </p>
           )}
+          {!file && savedName ? (
+            <p className="mt-2 text-[13px] text-slate-600">
+              Saved file: <span className="font-medium">{savedName}</span>
+            </p>
+          ) : null}
         </div>
         <div>
-          <label className="text-[13px] font-semibold text-slate-900">Generate from performance notes</label>
+          <label className="text-[13px] font-semibold text-slate-900">
+            Generate from performance notes
+          </label>
           <textarea
             rows={4}
             className={cn(SX.textarea, "mt-2")}
             placeholder="Demo performance notes, strengths, areas to improve…"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
           />
           <button
             type="button"
             className={cn(SX.btnPrimary, "mt-2 gap-2")}
             onClick={() => {
-              window.setTimeout(() => setGenPreview(true), 400);
+              window.setTimeout(() => {
+                setGenPreview(true);
+                void onPatchLead({
+                  pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                    brochure: {
+                      notes,
+                      fileName: file?.name ?? savedName,
+                      generated: true,
+                    },
+                  }),
+                  activityLog: appendActivity(
+                    lead.activityLog,
+                    "brochure",
+                    `Brochure generated from notes — saved on this lead${(file?.name ?? savedName) ? ` (file: ${file?.name ?? savedName})` : ""}.`,
+                  ),
+                });
+              }, 400);
             }}
           >
             <IconSparkles className="h-4 w-4 text-white" />
@@ -2012,13 +2663,59 @@ function BrochureSection() {
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-        <button type="button" className="rounded-none bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]">
+        <button
+          type="button"
+          className="rounded-none bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]"
+          onClick={() => {
+            const label = brochureFileLabel || "Course brochure";
+            const now = new Date().toISOString();
+            void onPatchLead({
+              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                brochure: {
+                  ...brochurePayload(),
+                  sentWhatsApp: true,
+                  sentWhatsAppAt: now,
+                },
+              }),
+              activityLog: appendActivity(
+                lead.activityLog,
+                "brochure",
+                `Brochure "${label}" marked sent via WhatsApp (saved on this lead).`,
+              ),
+            });
+          }}
+        >
           Send via WhatsApp
         </button>
-        <button type="button" className={SX.btnPrimary}>
+        <button
+          type="button"
+          className={SX.btnPrimary}
+          onClick={() => {
+            const label = brochureFileLabel || "Course brochure";
+            const now = new Date().toISOString();
+            void onPatchLead({
+              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                brochure: {
+                  ...brochurePayload(),
+                  sentEmail: true,
+                  sentEmailAt: now,
+                },
+              }),
+              activityLog: appendActivity(
+                lead.activityLog,
+                "brochure",
+                `Brochure "${label}" marked sent via email (saved on this lead).`,
+              ),
+            });
+          }}
+        >
           Send via email
         </button>
       </div>
+      <p className="mt-2 text-[11px] leading-snug text-slate-500">
+        Notes save automatically. Generate, upload, or send via WhatsApp / email to
+        advance the pipeline.
+      </p>
       </div>
     </section>
   );
@@ -2076,18 +2773,31 @@ function redistributeAfterAmountEdit(
   return next;
 }
 
-function FeeSection({ lead }: { lead: Lead }) {
+function FeeSection({
+  lead,
+  onPatchLead,
+}: {
+  lead: Lead;
+  onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+}) {
   const [scholarshipPct, setScholarshipPct] = useState(0);
   const [installmentEnabled, setInstallmentEnabled] = useState(false);
   const [installmentCount, setInstallmentCount] =
     useState<(typeof INSTALLMENT_COUNT_OPTIONS)[number]>(2);
   const [installmentAmounts, setInstallmentAmounts] = useState<number[]>([]);
   const [installmentDates, setInstallmentDates] = useState<string[]>([]);
+  const [baseTotal, setBaseTotal] = useState(0);
+  const feesSkipAutosave = useRef(true);
+  const leadFeesRef = useRef(lead);
+  leadFeesRef.current = lead;
 
-  const total = 85000;
+  useEffect(() => {
+    feesSkipAutosave.current = true;
+  }, [lead.id]);
+
   const finalFee = useMemo(
-    () => Math.round(total * (1 - scholarshipPct / 100)),
-    [total, scholarshipPct],
+    () => Math.round(baseTotal * (1 - scholarshipPct / 100)),
+    [baseTotal, scholarshipPct],
   );
 
   const [currency, setCurrency] = useState("INR");
@@ -2122,7 +2832,17 @@ function FeeSection({ lead }: { lead: Lead }) {
   const onScholarshipChange = (pct: number) => {
     const v = Math.max(0, Math.min(100, pct));
     setScholarshipPct(v);
-    const nextFinal = Math.round(total * (1 - v / 100));
+    const nextFinal = Math.round(baseTotal * (1 - v / 100));
+    if (installmentEnabled) {
+      setInstallmentAmounts(splitFeeEvenly(nextFinal, installmentCount));
+    }
+  };
+
+  const onBaseTotalChange = (value: string) => {
+    const n = Number(String(value).replace(/,/g, ""));
+    const v = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+    setBaseTotal(v);
+    const nextFinal = Math.round(v * (1 - scholarshipPct / 100));
     if (installmentEnabled) {
       setInstallmentAmounts(splitFeeEvenly(nextFinal, installmentCount));
     }
@@ -2135,11 +2855,106 @@ function FeeSection({ lead }: { lead: Lead }) {
     );
   };
 
+  useEffect(() => {
+    const f = lead.pipelineMeta?.fees as
+      | {
+          scholarshipPct?: number;
+          installmentEnabled?: boolean;
+          installmentCount?: number;
+          installmentAmounts?: number[];
+          installmentDates?: string[];
+          currency?: string;
+          baseTotal?: number;
+        }
+      | undefined;
+    if (!f || typeof f !== "object") return;
+    if (typeof f.scholarshipPct === "number") setScholarshipPct(f.scholarshipPct);
+    if (typeof f.installmentEnabled === "boolean")
+      setInstallmentEnabled(f.installmentEnabled);
+    if (
+      typeof f.installmentCount === "number" &&
+      (INSTALLMENT_COUNT_OPTIONS as readonly number[]).includes(f.installmentCount)
+    ) {
+      setInstallmentCount(
+        f.installmentCount as (typeof INSTALLMENT_COUNT_OPTIONS)[number],
+      );
+    }
+    if (Array.isArray(f.installmentAmounts)) setInstallmentAmounts(f.installmentAmounts);
+    if (Array.isArray(f.installmentDates)) setInstallmentDates(f.installmentDates);
+    if (typeof f.currency === "string") setCurrency(f.currency);
+    if (typeof f.baseTotal === "number" && Number.isFinite(f.baseTotal) && f.baseTotal >= 0) {
+      setBaseTotal(Math.round(f.baseTotal));
+    }
+  }, [lead.id, lead.pipelineMeta]);
+
+  const buildFeesMeta = useCallback(() => {
+    const prev = leadFeesRef.current.pipelineMeta?.fees as
+      | Record<string, unknown>
+      | undefined;
+    return {
+      scholarshipPct,
+      installmentEnabled,
+      installmentCount,
+      installmentAmounts,
+      installmentDates,
+      currency,
+      baseTotal,
+      finalFee,
+      feeSentWhatsApp: !!prev?.feeSentWhatsApp,
+      feeSentEmail: !!prev?.feeSentEmail,
+      enrollmentSent: !!prev?.enrollmentSent,
+      feeSentWhatsAppAt:
+        typeof prev?.feeSentWhatsAppAt === "string"
+          ? prev.feeSentWhatsAppAt
+          : undefined,
+      feeSentEmailAt:
+        typeof prev?.feeSentEmailAt === "string"
+          ? prev.feeSentEmailAt
+          : undefined,
+      enrollmentSentAt:
+        typeof prev?.enrollmentSentAt === "string"
+          ? prev.enrollmentSentAt
+          : undefined,
+    };
+  }, [
+    scholarshipPct,
+    installmentEnabled,
+    installmentCount,
+    installmentAmounts,
+    installmentDates,
+    currency,
+    baseTotal,
+    finalFee,
+  ]);
+
+  useEffect(() => {
+    if (feesSkipAutosave.current) {
+      feesSkipAutosave.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const L = leadFeesRef.current;
+      void onPatchLead({
+        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+          fees: buildFeesMeta(),
+        }),
+      });
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, [buildFeesMeta, onPatchLead]);
+
   return (
     <section className={SX.section}>
       <div className={SX.sectionHead}>
         <div className="min-w-0 flex-1">
-          <h2 className={SX.sectionTitle}>Step 3 · Fee structure</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className={SX.sectionTitle}>Step 3 · Fee structure</h2>
+            {lead.pipelineSteps >= 3 ? (
+              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
+                Done
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
             Scholarship, final fee, and installments.
           </p>
@@ -2159,6 +2974,75 @@ function FeeSection({ lead }: { lead: Lead }) {
         )}
       </div>
       <div className={SX.sectionBody}>
+        {(() => {
+          const fm = lead.pipelineMeta?.fees as
+            | {
+                feeSentWhatsApp?: boolean;
+                feeSentEmail?: boolean;
+                enrollmentSent?: boolean;
+                feeSentWhatsAppAt?: string;
+                feeSentEmailAt?: string;
+                enrollmentSentAt?: string;
+              }
+            | undefined;
+          const fmt = (iso?: string) => {
+            if (!iso) return "";
+            try {
+              return format(parseISO(iso), "dd MMM yyyy, HH:mm");
+            } catch {
+              return "";
+            }
+          };
+          return (
+            <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] shadow-sm shadow-slate-900/5">
+              <p className="font-semibold text-slate-900">Fee sends on this lead</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {fm?.feeSentWhatsApp ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-[#25d366]/15 px-2 py-1 text-[11px] font-semibold text-[#1b5e20] ring-1 ring-[#25d366]/30">
+                    <IconCheck className="h-3 w-3" /> Fee structure · WhatsApp sent
+                    {fm.feeSentWhatsAppAt ? (
+                      <span className="font-normal text-emerald-900/80">
+                        · {fmt(fm.feeSentWhatsAppAt)}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span className="rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-slate-200">
+                    Fee · WhatsApp — not sent
+                  </span>
+                )}
+                {fm?.feeSentEmail ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/25">
+                    <IconCheck className="h-3 w-3" /> Fee structure · Email sent
+                    {fm.feeSentEmailAt ? (
+                      <span className="font-normal text-slate-700">
+                        · {fmt(fm.feeSentEmailAt)}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span className="rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-slate-200">
+                    Fee · Email — not sent
+                  </span>
+                )}
+                {fm?.enrollmentSent ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-violet-100 px-2 py-1 text-[11px] font-semibold text-violet-900 ring-1 ring-violet-200">
+                    <IconCheck className="h-3 w-3" /> Enrollment form sent
+                    {fm.enrollmentSentAt ? (
+                      <span className="font-normal text-violet-800/90">
+                        · {fmt(fm.enrollmentSentAt)}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span className="rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-slate-200">
+                    Enrollment form — not sent
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
         <div className="overflow-auto border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.02]">
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
@@ -2173,7 +3057,20 @@ function FeeSection({ lead }: { lead: Lead }) {
             <tbody>
               <tr>
                 <td className={SX.dataTd}>{formatTargetExams(lead.targetExams)}</td>
-                <td className={SX.dataTd}>₹85,000</td>
+                <td className={SX.dataTd}>
+                  <label className="sr-only" htmlFor={`base-fee-${lead.id}`}>
+                    Base course fee (INR)
+                  </label>
+                  <input
+                    id={`base-fee-${lead.id}`}
+                    type="number"
+                    min={0}
+                    className={cn(SX.input, "w-full min-w-[120px] max-w-[180px] tabular-nums")}
+                    value={baseTotal}
+                    onChange={(e) => onBaseTotalChange(e.target.value)}
+                    aria-label="Base course fee in Indian rupees"
+                  />
+                </td>
                 <td className={SX.dataTd}>
                   <input
                     type="number"
@@ -2380,10 +3277,47 @@ function FeeSection({ lead }: { lead: Lead }) {
           <button
             type="button"
             className="rounded-none bg-[#25d366] px-3 py-2 text-[13px] font-medium text-white shadow-sm hover:bg-[#1fb855]"
+            onClick={() => {
+              const now = new Date().toISOString();
+              void onPatchLead({
+                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                  fees: {
+                    ...buildFeesMeta(),
+                    feeSentWhatsApp: true,
+                    feeSentWhatsAppAt: now,
+                  },
+                }),
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "fees",
+                  `Fee structure (₹${finalFee.toLocaleString("en-IN")} final) marked sent on WhatsApp — saved on lead.`,
+                ),
+              });
+            }}
           >
             WhatsApp
           </button>
-          <button type="button" className={SX.btnPrimary}>
+          <button
+            type="button"
+            className={SX.btnPrimary}
+            onClick={() => {
+              const now = new Date().toISOString();
+              void onPatchLead({
+                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                  fees: {
+                    ...buildFeesMeta(),
+                    feeSentEmail: true,
+                    feeSentEmailAt: now,
+                  },
+                }),
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "fees",
+                  `Fee structure (₹${finalFee.toLocaleString("en-IN")} final) marked sent by email — saved on lead.`,
+                ),
+              });
+            }}
+          >
             Email
           </button>
           <button
@@ -2392,29 +3326,194 @@ function FeeSection({ lead }: { lead: Lead }) {
               SX.btnSecondary,
               "border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100",
             )}
+            onClick={() => {
+              const now = new Date().toISOString();
+              void onPatchLead({
+                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                  fees: {
+                    ...buildFeesMeta(),
+                    enrollmentSent: true,
+                    enrollmentSentAt: now,
+                  },
+                }),
+                activityLog: appendActivity(
+                  lead.activityLog,
+                  "fees",
+                  "Enrollment form marked sent to family — saved on lead.",
+                ),
+              });
+            }}
           >
             Send enrollment form
           </button>
         </div>
+        <p className="mt-2 text-[11px] leading-snug text-slate-500">
+          Scholarship and installments save automatically. Use send actions to advance
+          the pipeline.
+        </p>
       </div>
     </section>
   );
 }
 
+function emptyScheduleClassRow(): LeadPipelineScheduleClass {
+  return {
+    day: "",
+    subject: "",
+    timeIST: "",
+    timeLocal: "",
+    teacher: "",
+    duration: "",
+  };
+}
+
+/** Map weekday label to 0=Mon … 6=Sun for the calendar columns. */
+function scheduleDayToIndex(day: string | undefined): number | null {
+  if (!day?.trim()) return null;
+  const d = day.trim().toLowerCase();
+  const map: Record<string, number> = {
+    mon: 0,
+    monday: 0,
+    tue: 1,
+    tues: 1,
+    tuesday: 1,
+    wed: 2,
+    wednesday: 2,
+    thu: 3,
+    thur: 3,
+    thurs: 3,
+    thursday: 3,
+    fri: 4,
+    friday: 4,
+    sat: 5,
+    saturday: 5,
+    sun: 6,
+    sunday: 6,
+  };
+  return map[d] ?? null;
+}
+
 function ScheduleSection({
+  lead,
   view,
   onViewChange,
+  onPatchLead,
 }: {
+  lead: Lead;
   view: "table" | "calendar";
   onViewChange: (v: "table" | "calendar") => void;
+  onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
 }) {
-  const hours = Array.from({ length: 17 }, (_, i) => i + 6);
+  const leadSchedRef = useRef(lead);
+  leadSchedRef.current = lead;
+  const scheduleSkipAutosave = useRef(true);
+
+  const [classes, setClasses] = useState<LeadPipelineScheduleClass[]>([]);
+  const [weekStart, setWeekStart] = useState(() =>
+    startOfWeek(new Date(), { weekStartsOn: 1 }),
+  );
+
+  useEffect(() => {
+    scheduleSkipAutosave.current = true;
+    const sched = lead.pipelineMeta?.schedule;
+    const raw =
+      sched && typeof sched === "object" && !Array.isArray(sched)
+        ? (sched as Record<string, unknown>)
+        : {};
+    const list = Array.isArray(raw.classes) ? raw.classes : [];
+    setClasses(
+      list.map((r) =>
+        r && typeof r === "object" && !Array.isArray(r)
+          ? { ...emptyScheduleClassRow(), ...(r as LeadPipelineScheduleClass) }
+          : emptyScheduleClassRow(),
+      ),
+    );
+    if (typeof raw.weekStartIso === "string" && raw.weekStartIso) {
+      try {
+        setWeekStart(
+          startOfWeek(parseISO(raw.weekStartIso), { weekStartsOn: 1 }),
+        );
+      } catch {
+        setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+      }
+    } else {
+      setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+    }
+  }, [lead.id]);
+
+  useEffect(() => {
+    if (scheduleSkipAutosave.current) {
+      scheduleSkipAutosave.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const L = leadSchedRef.current;
+      const prev =
+        L.pipelineMeta?.schedule &&
+        typeof L.pipelineMeta.schedule === "object" &&
+        !Array.isArray(L.pipelineMeta.schedule)
+          ? (L.pipelineMeta.schedule as Record<string, unknown>)
+          : {};
+      void onPatchLead({
+        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
+          schedule: {
+            ...prev,
+            view,
+            classes,
+            weekStartIso: weekStart.toISOString(),
+            weekLabel: format(weekStart, "'Week of' MMM d, yyyy"),
+          },
+        }),
+      });
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [view, classes, weekStart, onPatchLead]);
+
+  const updateClass = (
+    index: number,
+    patch: Partial<LeadPipelineScheduleClass>,
+  ) => {
+    setClasses((rows) => {
+      const next = [...rows];
+      const cur = next[index] ?? emptyScheduleClassRow();
+      next[index] = { ...cur, ...patch };
+      return next;
+    });
+  };
+
+  const removeClass = (index: number) => {
+    setClasses((rows) => rows.filter((_, i) => i !== index));
+  };
+
+  const weekEnd = addDays(weekStart, 6);
+  const weekRangeLabel = `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d, yyyy")}`;
+
+  const unassignedDayClasses = useMemo(
+    () =>
+      classes.filter(
+        (c) =>
+          scheduleDayToIndex(c.day) === null &&
+          Boolean(
+            (c.subject && c.subject.trim()) ||
+              (c.timeIST && c.timeIST.trim()) ||
+              (c.teacher && c.teacher.trim()),
+          ),
+      ),
+    [classes],
+  );
 
   return (
     <section className={SX.section}>
       <div className={SX.sectionHead}>
         <div className="min-w-0 flex-1">
-          <h2 className={SX.sectionTitle}>Step 4 · Class schedule</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className={SX.sectionTitle}>Step 4 · Class schedule</h2>
+            {lead.pipelineSteps >= 4 ? (
+              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
+                Done
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
             Table or week view for confirmed classes.
           </p>
@@ -2472,82 +3571,254 @@ function ScheduleSection({
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className={SX.dataTd}>Monday</td>
-                <td className={SX.dataTd}>Biology</td>
-                <td className={SX.dataTd}>9:00 AM</td>
-                <td className={SX.dataTdMuted}>11:30 AM SGT</td>
-                <td className={SX.dataTd}>Dr. Meena Singh</td>
-                <td className={SX.dataTd}>90 min</td>
-                <td className={cn(SX.dataTd, "text-[#1565c0]")}>Edit / Delete</td>
-              </tr>
+              {classes.length === 0 ? (
+                <tr>
+                  <td
+                    className={cn(SX.dataTd, "text-[13px] text-slate-500")}
+                    colSpan={7}
+                  >
+                    No classes yet. Use &quot;Add class&quot; to build the weekly
+                    schedule (saved on this lead).
+                  </td>
+                </tr>
+              ) : (
+                classes.map((row, i) => (
+                  <tr key={i}>
+                    <td className={SX.dataTd}>
+                      <input
+                        className={cn(SX.input, "w-full min-w-[100px] max-w-[140px]")}
+                        value={row.day ?? ""}
+                        placeholder="e.g. Monday"
+                        onChange={(e) => updateClass(i, { day: e.target.value })}
+                        aria-label={`Class ${i + 1} day`}
+                      />
+                    </td>
+                    <td className={SX.dataTd}>
+                      <input
+                        className={cn(SX.input, "w-full min-w-[100px]")}
+                        value={row.subject ?? ""}
+                        onChange={(e) =>
+                          updateClass(i, { subject: e.target.value })
+                        }
+                        aria-label={`Class ${i + 1} subject`}
+                      />
+                    </td>
+                    <td className={SX.dataTd}>
+                      <input
+                        className={cn(SX.input, "w-full min-w-[88px]")}
+                        value={row.timeIST ?? ""}
+                        placeholder="9:00"
+                        onChange={(e) =>
+                          updateClass(i, { timeIST: e.target.value })
+                        }
+                        aria-label={`Class ${i + 1} time IST`}
+                      />
+                    </td>
+                    <td className={SX.dataTdMuted}>
+                      <input
+                        className={cn(SX.input, "w-full min-w-[88px]")}
+                        value={row.timeLocal ?? ""}
+                        onChange={(e) =>
+                          updateClass(i, { timeLocal: e.target.value })
+                        }
+                        aria-label={`Class ${i + 1} local time`}
+                      />
+                    </td>
+                    <td className={SX.dataTd}>
+                      <input
+                        className={cn(SX.input, "w-full min-w-[120px]")}
+                        value={row.teacher ?? ""}
+                        onChange={(e) =>
+                          updateClass(i, { teacher: e.target.value })
+                        }
+                        aria-label={`Class ${i + 1} teacher`}
+                      />
+                    </td>
+                    <td className={SX.dataTd}>
+                      <input
+                        className={cn(SX.input, "w-full min-w-[72px] max-w-[100px]")}
+                        value={row.duration ?? ""}
+                        placeholder="90 min"
+                        onChange={(e) =>
+                          updateClass(i, { duration: e.target.value })
+                        }
+                        aria-label={`Class ${i + 1} duration`}
+                      />
+                    </td>
+                    <td className={SX.dataTd}>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-[13px] font-medium text-red-700 hover:underline"
+                        onClick={() => removeClass(i)}
+                      >
+                        <IconTrash className="h-3.5 w-3.5" aria-hidden />
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-          <button type="button" className={cn(SX.btnGhost, "mt-3")}>
+          <button
+            type="button"
+            className={cn(SX.btnGhost, "mt-3")}
+            onClick={() =>
+              setClasses((rows) => [...rows, emptyScheduleClassRow()])
+            }
+          >
             + Add class
           </button>
         </div>
       ) : (
         <div className="overflow-auto">
-          <div className="mb-2 flex justify-between text-[13px]">
-            <button type="button" className="font-medium text-[#1565c0] hover:underline">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px]">
+            <button
+              type="button"
+              className="font-medium text-primary hover:underline"
+              onClick={() =>
+                setWeekStart((w) => startOfWeek(addWeeks(w, -1), { weekStartsOn: 1 }))
+              }
+            >
               ← Prev week
             </button>
-            <span className="font-semibold text-[#212121]">Week of Apr 2026</span>
-            <button type="button" className="font-medium text-[#1565c0] hover:underline">
+            <span className="font-semibold text-[#212121]">{weekRangeLabel}</span>
+            <button
+              type="button"
+              className="font-medium text-primary hover:underline"
+              onClick={() =>
+                setWeekStart((w) => startOfWeek(addWeeks(w, 1), { weekStartsOn: 1 }))
+              }
+            >
               Next week →
             </button>
           </div>
-          <div className="grid min-w-[800px] grid-cols-[80px_repeat(7,1fr)] gap-px border border-[#d0d0d0] bg-[#d0d0d0] text-[11px]">
-            <div className="bg-[#f2f2f2] p-1" />
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => (
-              <div
-                key={d}
-                className={cn(
-                  "bg-[#f2f2f2] p-2 text-center text-[11px] font-semibold uppercase tracking-wide text-[#424242]",
-                  i === 0 && "bg-[#e3f2fd]",
-                )}
-              >
-                {d}
-              </div>
-            ))}
-            {hours.map((h) => (
-              <Fragment key={h}>
-                <div className="bg-white p-1 text-[#757575]">
-                  {h > 12 ? `${h - 12} PM` : `${h} AM`}
-                </div>
-                {[0, 1, 2, 3, 4, 5, 6].map((c) => (
-                  <div
-                    key={`${h}-${c}`}
-                    className={cn(
-                      "min-h-[28px] bg-white p-0.5",
-                      c === 0 && "bg-[#fafafa]",
-                    )}
-                  >
-                    {h === 9 && c === 0 && (
-                      <div
-                        className="rounded-none bg-[#2e7d32] px-1 py-0.5 text-[10px] font-medium text-white"
-                        title="Biology · Dr. Meena · 90 min"
-                      >
-                        Biology
-                      </div>
+          <p className="mb-3 text-[12px] text-slate-500">
+            Classes are grouped by weekday name (e.g. Monday). Edit the table view
+            for full detail; this week grid updates from the same saved rows.
+          </p>
+          <div className="grid min-w-[640px] grid-cols-7 gap-2 sm:min-w-[800px]">
+            {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
+              const dayDate = addDays(weekStart, dayIndex);
+              const dayClasses = classes.filter(
+                (c) => scheduleDayToIndex(c.day) === dayIndex,
+              );
+              return (
+                <div
+                  key={dayIndex}
+                  className="flex min-h-[140px] flex-col border border-slate-200 bg-white p-2 text-[11px] shadow-sm"
+                >
+                  <div className="border-b border-slate-100 pb-1.5 text-center font-semibold text-slate-800">
+                    {format(dayDate, "EEE")}
+                    <div className="text-[10px] font-normal text-slate-500">
+                      {format(dayDate, "MMM d")}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-1 flex-col gap-1.5">
+                    {dayClasses.length === 0 ? (
+                      <p className="text-[10px] text-slate-400">No classes</p>
+                    ) : (
+                      dayClasses.map((c, idx) => (
+                        <div
+                          key={`${c.subject}-${idx}`}
+                          className="rounded border border-emerald-200 bg-emerald-50/80 px-1.5 py-1 text-left text-[10px] text-emerald-950"
+                        >
+                          <div className="font-semibold leading-tight">
+                            {c.subject?.trim() || "—"}
+                          </div>
+                          {c.timeIST?.trim() ? (
+                            <div className="text-emerald-900/90">
+                              IST {c.timeIST}
+                            </div>
+                          ) : null}
+                          {c.teacher?.trim() ? (
+                            <div className="text-emerald-800/80">{c.teacher}</div>
+                          ) : null}
+                          {c.duration?.trim() ? (
+                            <div className="text-emerald-800/70">{c.duration}</div>
+                          ) : null}
+                        </div>
+                      ))
                     )}
                   </div>
-                ))}
-              </Fragment>
-            ))}
+                </div>
+              );
+            })}
           </div>
+          {unassignedDayClasses.length > 0 ? (
+            <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
+              Set the <strong>Day</strong> field (e.g. Monday) so rows appear in a
+              column:{" "}
+              {unassignedDayClasses
+                .map((c) => c.subject?.trim() || "Class")
+                .join(", ")}
+            </p>
+          ) : null}
         </div>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#e8e8e8] pt-3">
         <span className="text-[13px] font-semibold">Send schedule</span>
-        <button type="button" className="rounded-none bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]">
+        <button
+          type="button"
+          className="rounded-none bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]"
+          onClick={() => {
+            const prev =
+              lead.pipelineMeta?.schedule &&
+              typeof lead.pipelineMeta.schedule === "object" &&
+              !Array.isArray(lead.pipelineMeta.schedule)
+                ? (lead.pipelineMeta.schedule as Record<string, unknown>)
+                : {};
+            void onPatchLead({
+              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                schedule: {
+                  ...prev,
+                  view,
+                  scheduleSentWhatsApp: true,
+                },
+              }),
+              activityLog: appendActivity(
+                lead.activityLog,
+                "schedule",
+                "Class schedule sent via WhatsApp.",
+              ),
+            });
+          }}
+        >
           WhatsApp
         </button>
-        <button type="button" className={SX.btnPrimary}>
+        <button
+          type="button"
+          className={SX.btnPrimary}
+          onClick={() => {
+            const prev =
+              lead.pipelineMeta?.schedule &&
+              typeof lead.pipelineMeta.schedule === "object" &&
+              !Array.isArray(lead.pipelineMeta.schedule)
+                ? (lead.pipelineMeta.schedule as Record<string, unknown>)
+                : {};
+            void onPatchLead({
+              pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                schedule: {
+                  ...prev,
+                  view,
+                  scheduleSentEmail: true,
+                },
+              }),
+              activityLog: appendActivity(
+                lead.activityLog,
+                "schedule",
+                "Class schedule sent via email.",
+              ),
+            });
+          }}
+        >
           Email
         </button>
       </div>
+      <p className="mt-2 text-[11px] leading-snug text-slate-500">
+        Table / Calendar choice saves automatically. Send via WhatsApp or email to
+        complete the pipeline.
+      </p>
       </div>
     </section>
   );

@@ -6,19 +6,54 @@ import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-/** Import rows: same shape as a Lead without id (dates/strings from CSV). */
+const ROW_TONES: Lead["rowTone"][] = [
+  "interested",
+  "not_interested",
+  "followup_later",
+  "new",
+  "called_no_response",
+];
+
+const SHEET_TABS: Lead["sheetTab"][] = [
+  "ongoing",
+  "followup",
+  "not_interested",
+  "converted",
+];
+
+function safeRowTone(v: unknown): Lead["rowTone"] {
+  return typeof v === "string" && ROW_TONES.includes(v as Lead["rowTone"])
+    ? (v as Lead["rowTone"])
+    : "new";
+}
+
+function safeSheetTab(v: unknown): Lead["sheetTab"] {
+  return typeof v === "string" && SHEET_TABS.includes(v as Lead["sheetTab"])
+    ? (v as Lead["sheetTab"])
+    : "ongoing";
+}
+
+/** Import rows: same shape as a Lead without id — empty/missing cells use defaults (never drop a row). */
 function normalizeImportRow(
   row: Record<string, unknown>,
 ): Record<string, unknown> | null {
+  if (!row || typeof row !== "object") return null;
   const studentName =
     typeof row.studentName === "string" ? row.studentName.trim() : "";
   const phone =
     typeof row.phone === "string" ? row.phone.replace(/\s+/g, "") : "";
-  if (!studentName || !phone) return null;
+
   const targetExams = Array.isArray(row.targetExams)
-    ? row.targetExams.filter((x): x is string => typeof x === "string")
+    ? row.targetExams
+        .filter((x): x is string => typeof x === "string")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
-  if (targetExams.length === 0) return null;
+
+  const rawDataType =
+    typeof row.dataType === "string" ? row.dataType.trim() : "";
+  const rawGrade = typeof row.grade === "string" ? row.grade.trim() : "";
+
   return {
     date:
       typeof row.date === "string" && row.date.length >= 8
@@ -30,13 +65,11 @@ function normalizeImportRow(
         : typeof row.followUpDate === "string"
           ? row.followUpDate
           : null,
-    studentName,
+    studentName: studentName || "Unknown",
     parentName:
-      typeof row.parentName === "string" && row.parentName.trim()
-        ? row.parentName.trim()
-        : "—",
-    dataType: typeof row.dataType === "string" ? row.dataType : "Organic",
-    grade: typeof row.grade === "string" ? row.grade : "12th",
+      typeof row.parentName === "string" ? row.parentName.trim() : "",
+    dataType: rawDataType || "Organic",
+    grade: rawGrade || "12th",
     targetExams,
     country:
       typeof row.country === "string" && row.country.trim()
@@ -50,14 +83,8 @@ function normalizeImportRow(
       row.pipelineSteps <= 4
         ? row.pipelineSteps
         : 0,
-    rowTone:
-      typeof row.rowTone === "string"
-        ? (row.rowTone as Lead["rowTone"])
-        : "new",
-    sheetTab:
-      typeof row.sheetTab === "string"
-        ? (row.sheetTab as Lead["sheetTab"])
-        : "ongoing",
+    rowTone: safeRowTone(row.rowTone),
+    sheetTab: safeSheetTab(row.sheetTab),
   };
 }
 
@@ -86,7 +113,10 @@ export async function POST(req: Request) {
     }
     if (payloads.length === 0) {
       return NextResponse.json(
-        { error: "No valid leads in batch." },
+        {
+          error:
+            "No valid rows to save. Each row needs at least student name and phone. If you fixed the file, try again.",
+        },
         { status: 400 },
       );
     }
@@ -99,9 +129,12 @@ export async function POST(req: Request) {
     );
   } catch (e) {
     console.error(e);
-    return NextResponse.json(
-      { error: "Batch import failed." },
-      { status: 400 },
-    );
+    const msg =
+      e instanceof Error
+        ? e.message
+        : typeof e === "object" && e !== null && "message" in e
+          ? String((e as { message: unknown }).message)
+          : "Batch import failed.";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }
