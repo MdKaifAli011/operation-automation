@@ -2398,6 +2398,14 @@ function DemoForm({
   );
 }
 
+type ExamBrochureCatalogRow = {
+  exam: string;
+  title: string;
+  summary: string;
+  linkUrl: string;
+  linkLabel: string;
+};
+
 function BrochureSection({
   lead,
   onPatchLead,
@@ -2420,13 +2428,57 @@ function BrochureSection({
   const [genPreview, setGenPreview] = useState(br?.generated ?? false);
   const [notes, setNotes] = useState(br?.notes ?? "");
   const [savedName, setSavedName] = useState<string | null>(br?.fileName ?? null);
+  const [examBrochureCatalog, setExamBrochureCatalog] =
+    useState<ExamBrochureCatalogRow | null>(null);
+  const [examBrochureCatalogLoading, setExamBrochureCatalogLoading] =
+    useState(true);
   const brochureSkipAutosave = useRef(true);
   const leadBrRef = useRef(lead);
   leadBrRef.current = lead;
 
+  const brochurePrimaryExam = useMemo(
+    () => primaryExamForFee(lead.targetExams),
+    [lead.targetExams],
+  );
+
   useEffect(() => {
     brochureSkipAutosave.current = true;
   }, [lead.id]);
+
+  useEffect(() => {
+    const exam = brochurePrimaryExam;
+    if (!exam) {
+      setExamBrochureCatalog(null);
+      setExamBrochureCatalogLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setExamBrochureCatalogLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/exam-brochure-templates", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const rows = (await res.json()) as ExamBrochureCatalogRow[];
+        const hit = Array.isArray(rows)
+          ? rows.find((r) => r.exam === exam)
+          : null;
+        if (!cancelled) {
+          setExamBrochureCatalog(hit ?? null);
+          setExamBrochureCatalogLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setExamBrochureCatalog(null);
+          setExamBrochureCatalogLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [brochurePrimaryExam, lead.id]);
 
   useEffect(() => {
     const b = lead.pipelineMeta?.brochure as
@@ -2495,12 +2547,96 @@ function BrochureSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Upload or generate a PDF, then send to the family. Everything below is
-            stored on this lead.
+            The brochure for this student&apos;s target exam loads from Course
+            Brochures. Upload or generate here; everything is stored on this lead.
           </p>
         </div>
       </div>
       <div className={SX.sectionBody}>
+      {!brochurePrimaryExam ? (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-3 text-[13px] text-amber-950">
+          <p className="font-semibold">No target exam selected</p>
+          <p className="mt-1 text-[12px] leading-snug text-amber-900/90">
+            Add target exams (e.g. NEET) on the lead row so the matching brochure
+            template can appear here.
+          </p>
+        </div>
+      ) : examBrochureCatalogLoading ? (
+        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-600">
+          Loading brochure template for{" "}
+          <span className="font-semibold">{brochurePrimaryExam}</span>…
+        </div>
+      ) : examBrochureCatalog &&
+        (examBrochureCatalog.title.trim() ||
+          examBrochureCatalog.summary.trim() ||
+          examBrochureCatalog.linkUrl.trim()) ? (
+        <div className="mb-4 rounded-lg border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-slate-50/80 px-4 py-4 shadow-sm shadow-slate-900/5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-sky-900">
+              Brochure · {brochurePrimaryExam}
+            </p>
+            <Link
+              href="/course-brochure"
+              className="text-[11px] font-medium text-primary hover:underline"
+            >
+              Edit templates
+            </Link>
+          </div>
+          {examBrochureCatalog.title.trim() ? (
+            <h3 className="mt-2 text-lg font-semibold leading-snug text-slate-900">
+              {examBrochureCatalog.title}
+            </h3>
+          ) : null}
+          {examBrochureCatalog.summary.trim() ? (
+            <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
+              {examBrochureCatalog.summary}
+            </p>
+          ) : null}
+          {examBrochureCatalog.linkUrl.trim() ? (
+            <p className="mt-3">
+              <a
+                href={examBrochureCatalog.linkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
+              >
+                <IconLink className="h-4 w-4 shrink-0" />
+                {examBrochureCatalog.linkLabel.trim()
+                  ? examBrochureCatalog.linkLabel
+                  : "Open brochure document"}
+              </a>
+            </p>
+          ) : null}
+          {examBrochureCatalog.summary.trim() ? (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-sky-100/80 pt-3">
+              <button
+                type="button"
+                className={cn(SX.btnSecondary, "text-[12px]")}
+                onClick={() => {
+                  const s = examBrochureCatalog.summary.trim();
+                  if (!s) return;
+                  setNotes((prev) => (prev.trim() ? `${prev}\n\n${s}` : s));
+                }}
+              >
+                Insert summary into notes below
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-700">
+          <p className="font-semibold text-slate-800">
+            No brochure template for {brochurePrimaryExam} yet
+          </p>
+          <p className="mt-1 text-[12px] leading-snug text-slate-600">
+            Add title, summary, or a PDF link under{" "}
+            <Link href="/course-brochure" className="font-medium text-primary underline">
+              Course Brochures
+            </Link>{" "}
+            — it will show here for all {brochurePrimaryExam} students.
+          </p>
+        </div>
+      )}
       {br?.generated ||
       br?.sentWhatsApp ||
       br?.sentEmail ||
