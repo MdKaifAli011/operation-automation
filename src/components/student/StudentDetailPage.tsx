@@ -1012,10 +1012,7 @@ function DemoSection({
   const dismissShareSuccess = useCallback(() => setShareSuccessOpen(false), []);
 
   const [rowAction, setRowAction] = useState<
-    | { type: "edit"; index: number }
-    | { type: "delete"; index: number }
-    | { type: "send"; index: number }
-    | null
+    { type: "edit"; index: number } | { type: "send"; index: number } | null
   >(null);
   const [editDraft, setEditDraft] = useState<DemoTableRow | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
@@ -1046,13 +1043,6 @@ function DemoSection({
     setRows((prev) => prev.map((row, j) => (j === i ? { ...editDraft } : row)));
     closeRowModal();
   }, [editDraft, rowAction, closeRowModal]);
-
-  const confirmDeleteRow = useCallback(() => {
-    if (rowAction?.type !== "delete") return;
-    const i = rowAction.index;
-    setRows((prev) => prev.filter((_, j) => j !== i));
-    closeRowModal();
-  }, [rowAction, closeRowModal]);
 
   const confirmSendRow = useCallback(() => {
     if (rowAction?.type !== "send") return;
@@ -1147,38 +1137,6 @@ function DemoSection({
         ) : null}
       </div>
       <div className={SX.sectionBody}>
-      {rows.length > 0 ? (
-        <div
-          className="mb-4 rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-3 text-[13px] text-emerald-950 shadow-sm shadow-emerald-900/5"
-          role="status"
-        >
-          <p className="font-semibold tracking-tight">
-            {rows.length === 1
-              ? "1 demo saved on this lead"
-              : `${rows.length} demos saved on this lead`}
-          </p>
-          <p className="mt-1 text-[12px] leading-snug text-emerald-900/85">
-            Open this tab anytime to see the full table. Each row is stored in the
-            database.
-          </p>
-          <ul className="mt-2 space-y-1 border-t border-emerald-200/80 pt-2 text-[12px] text-emerald-900">
-            {rows.map((r, i) => (
-              <li key={i} className="flex flex-wrap gap-x-2">
-                <span className="font-medium tabular-nums text-emerald-800">
-                  #{i + 1}
-                </span>
-                <span>{demoRowSummaryLine(r)}</span>
-                <span className="text-emerald-700/80">· {r.status}</span>
-                {r.inviteSent ? (
-                  <span className="rounded bg-emerald-600/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-900">
-                    Invite sent
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       {rows.length === 0 && !expanded ? (
         <div className="flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/60 px-3 py-5 text-center">
           <IconCalendarLarge className="h-10 w-10 text-slate-300" />
@@ -1355,25 +1313,28 @@ function DemoSection({
                           type="button"
                           className={cn(
                             demoActionBtn,
-                            "hover:border-[#ffcdd2] hover:bg-[#fff8f8] hover:text-[#c62828]",
+                            r.inviteSent
+                              ? "border-2 border-emerald-600 bg-emerald-50 font-semibold text-emerald-900 shadow-sm"
+                              : "text-[#1565c0] hover:border-[#90caf9] hover:bg-[#e3f2fd]",
                           )}
-                          aria-label="Delete demo"
-                          onClick={() => setRowAction({ type: "delete", index: i })}
-                        >
-                          <IconTrash />
-                          Delete
-                        </button>
-                        <button
-                          type="button"
-                          className={cn(
-                            demoActionBtn,
-                            "text-[#1565c0] hover:border-[#90caf9] hover:bg-[#e3f2fd]",
-                          )}
-                          aria-label="Share demo invite"
+                          aria-label={
+                            r.inviteSent
+                              ? "Invite marked sent — tap to open again"
+                              : "Share demo invite"
+                          }
                           onClick={() => setRowAction({ type: "send", index: i })}
                         >
-                          <IconLink />
-                          Share
+                          {r.inviteSent ? (
+                            <>
+                              <IconCheck className="h-3.5 w-3.5" />
+                              Sent
+                            </>
+                          ) : (
+                            <>
+                              <IconLink />
+                              Share
+                            </>
+                          )}
                         </button>
                       </div>
                     </td>
@@ -1418,7 +1379,8 @@ function DemoSection({
         </div>
       )}
       <p className="mt-3 text-[11px] leading-snug text-slate-500">
-        Demos save automatically. Adding a demo updates pipeline progress.
+        Demos save automatically. Set status to Completed or Cancelled when done;
+        rows stay on the lead for your records.
       </p>
       </div>
     </section>
@@ -1430,12 +1392,6 @@ function DemoSection({
       onClose={closeRowModal}
       onSave={saveEditRow}
       error={editError}
-    />
-    <DemoDeleteRowDialog
-      open={rowAction?.type === "delete"}
-      summary={activeRow ? demoRowSummaryLine(activeRow) : ""}
-      onClose={closeRowModal}
-      onConfirm={confirmDeleteRow}
     />
     <DemoSendRowDialog
       open={rowAction?.type === "send"}
@@ -1659,97 +1615,6 @@ function DemoEditRowDialog({
         </button>
         <button type="button" className={SX.btnPrimary} onClick={onSave}>
           Save changes
-        </button>
-      </div>
-    </dialog>
-  );
-}
-
-function DemoDeleteRowDialog({
-  open,
-  summary,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  summary: string;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open) {
-      if (!d.open) d.showModal();
-    } else if (d.open) {
-      d.close();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const dlg = ref.current;
-    if (!dlg) return;
-    const onBackdrop = (e: MouseEvent) => {
-      if (e.target === dlg) onClose();
-    };
-    dlg.addEventListener("mousedown", onBackdrop);
-    return () => dlg.removeEventListener("mousedown", onBackdrop);
-  }, [open, onClose]);
-
-  return (
-    <dialog
-      ref={ref}
-      className={cn(
-        "fixed left-1/2 top-1/2 z-[205] w-[min(100vw-1.5rem,24rem)] -translate-x-1/2 -translate-y-1/2",
-        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
-        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
-        "open:flex open:flex-col",
-      )}
-      onClose={onClose}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) ref.current?.close();
-      }}
-      aria-labelledby="demo-delete-title"
-    >
-      <div className="flex items-center justify-between border-b border-[#ffcdd2] bg-[#ffebee] px-3 py-2.5">
-        <h2
-          id="demo-delete-title"
-          className="text-[13px] font-bold tracking-tight text-[#b71c1c]"
-        >
-          Delete demo
-        </h2>
-        <button
-          type="button"
-          className="flex h-7 w-7 items-center justify-center text-[18px] leading-none text-[#b71c1c] hover:bg-black/5"
-          aria-label="Close"
-          onClick={() => ref.current?.close()}
-        >
-          ×
-        </button>
-      </div>
-      <div className="px-3 py-4">
-        <p className="text-[13px] leading-relaxed text-[#37474f]">
-          Remove this demo from the list? This cannot be undone.
-        </p>
-        {summary ? (
-          <p className="mt-2 border border-[#eceff1] bg-[#fafafa] px-2 py-2 text-[12px] leading-snug text-[#546e7a]">
-            {summary}
-          </p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
-        <button type="button" className={SX.btnSecondary} onClick={() => ref.current?.close()}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="rounded-none border border-[#b71c1c] bg-[#c62828] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#b71c1c]"
-          onClick={onConfirm}
-        >
-          Delete
         </button>
       </div>
     </dialog>
@@ -2637,58 +2502,6 @@ function BrochureSection({
           </p>
         </div>
       )}
-      {br?.generated ||
-      br?.sentWhatsApp ||
-      br?.sentEmail ||
-      brochureFileLabel ||
-      notes.trim() ? (
-        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-800 shadow-sm shadow-slate-900/5">
-          <p className="font-semibold text-slate-900">Brochure on this student</p>
-          {brochureFileLabel ? (
-            <p className="mt-1.5 text-[13px]">
-              <span className="text-slate-500">File: </span>
-              <span className="font-medium text-slate-900">{brochureFileLabel}</span>
-            </p>
-          ) : (
-            <p className="mt-1.5 text-[12px] text-slate-500">No file name saved yet.</p>
-          )}
-          {br?.generated ? (
-            <p className="mt-1 text-[12px] font-medium text-emerald-800">
-              ✓ Brochure generated (preview)
-            </p>
-          ) : null}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {br?.sentWhatsApp ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-[#25d366]/15 px-2 py-1 text-[11px] font-semibold text-[#1b5e20] ring-1 ring-[#25d366]/30">
-                <IconCheck className="h-3 w-3" /> Sent WhatsApp
-                {br.sentWhatsAppAt ? (
-                  <span className="font-normal text-emerald-900/80">
-                    · {formatSentAt(br.sentWhatsAppAt)}
-                  </span>
-                ) : null}
-              </span>
-            ) : (
-              <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
-                WhatsApp — not sent yet
-              </span>
-            )}
-            {br?.sentEmail ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/25">
-                <IconCheck className="h-3 w-3" /> Sent email
-                {br.sentEmailAt ? (
-                  <span className="font-normal text-slate-700">
-                    · {formatSentAt(br.sentEmailAt)}
-                  </span>
-                ) : null}
-              </span>
-            ) : (
-              <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-500">
-                Email — not sent yet
-              </span>
-            )}
-          </div>
-        </div>
-      ) : null}
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="flex h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600">
@@ -2802,7 +2615,12 @@ function BrochureSection({
       <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
         <button
           type="button"
-          className="rounded-none bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]"
+          className={cn(
+            "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold shadow-sm transition-colors",
+            br?.sentWhatsApp
+              ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
+              : "bg-[#25d366] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]",
+          )}
           onClick={() => {
             const label = brochureFileLabel || "Course brochure";
             const now = new Date().toISOString();
@@ -2822,11 +2640,28 @@ function BrochureSection({
             });
           }}
         >
-          Send via WhatsApp
+          {br?.sentWhatsApp ? (
+            <>
+              <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+              Sent · WhatsApp
+              {br?.sentWhatsAppAt ? (
+                <span className="font-normal opacity-90">
+                  · {formatSentAt(br.sentWhatsAppAt)}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            "Send via WhatsApp"
+          )}
         </button>
         <button
           type="button"
-          className={SX.btnPrimary}
+          className={cn(
+            "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold transition-colors",
+            br?.sentEmail
+              ? "border-2 border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+              : SX.btnPrimary,
+          )}
           onClick={() => {
             const label = brochureFileLabel || "Course brochure";
             const now = new Date().toISOString();
@@ -2846,7 +2681,19 @@ function BrochureSection({
             });
           }}
         >
-          Send via email
+          {br?.sentEmail ? (
+            <>
+              <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+              Sent · Email
+              {br?.sentEmailAt ? (
+                <span className="font-normal opacity-90">
+                  · {formatSentAt(br.sentEmailAt)}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            "Send via email"
+          )}
         </button>
       </div>
       <p className="mt-2 text-[11px] leading-snug text-slate-500">
@@ -3129,6 +2976,25 @@ function FeeSection({
     return () => window.clearTimeout(t);
   }, [buildFeesMeta, onPatchLead]);
 
+  const feeFlags = lead.pipelineMeta?.fees as
+    | {
+        feeSentWhatsApp?: boolean;
+        feeSentEmail?: boolean;
+        enrollmentSent?: boolean;
+        feeSentWhatsAppAt?: string;
+        feeSentEmailAt?: string;
+        enrollmentSentAt?: string;
+      }
+    | undefined;
+  const feeSentAtLabel = (iso?: string | null) => {
+    if (!iso) return "";
+    try {
+      return format(parseISO(iso), "dd MMM yyyy, HH:mm");
+    } catch {
+      return "";
+    }
+  };
+
   return (
     <section className={SX.section}>
       <div className={SX.sectionHead}>
@@ -3161,75 +3027,6 @@ function FeeSection({
         )}
       </div>
       <div className={SX.sectionBody}>
-        {(() => {
-          const fm = lead.pipelineMeta?.fees as
-            | {
-                feeSentWhatsApp?: boolean;
-                feeSentEmail?: boolean;
-                enrollmentSent?: boolean;
-                feeSentWhatsAppAt?: string;
-                feeSentEmailAt?: string;
-                enrollmentSentAt?: string;
-              }
-            | undefined;
-          const fmt = (iso?: string) => {
-            if (!iso) return "";
-            try {
-              return format(parseISO(iso), "dd MMM yyyy, HH:mm");
-            } catch {
-              return "";
-            }
-          };
-          return (
-            <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] shadow-sm shadow-slate-900/5">
-              <p className="font-semibold text-slate-900">Fee sends on this lead</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {fm?.feeSentWhatsApp ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-[#25d366]/15 px-2 py-1 text-[11px] font-semibold text-[#1b5e20] ring-1 ring-[#25d366]/30">
-                    <IconCheck className="h-3 w-3" /> Fee structure · WhatsApp sent
-                    {fm.feeSentWhatsAppAt ? (
-                      <span className="font-normal text-emerald-900/80">
-                        · {fmt(fm.feeSentWhatsAppAt)}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : (
-                  <span className="rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-slate-200">
-                    Fee · WhatsApp — not sent
-                  </span>
-                )}
-                {fm?.feeSentEmail ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/25">
-                    <IconCheck className="h-3 w-3" /> Fee structure · Email sent
-                    {fm.feeSentEmailAt ? (
-                      <span className="font-normal text-slate-700">
-                        · {fmt(fm.feeSentEmailAt)}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : (
-                  <span className="rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-slate-200">
-                    Fee · Email — not sent
-                  </span>
-                )}
-                {fm?.enrollmentSent ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-violet-100 px-2 py-1 text-[11px] font-semibold text-violet-900 ring-1 ring-violet-200">
-                    <IconCheck className="h-3 w-3" /> Enrollment form sent
-                    {fm.enrollmentSentAt ? (
-                      <span className="font-normal text-violet-800/90">
-                        · {fmt(fm.enrollmentSentAt)}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : (
-                  <span className="rounded-md bg-white px-2 py-1 text-[11px] text-slate-500 ring-1 ring-slate-200">
-                    Enrollment form — not sent
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })()}
         <div className="overflow-auto border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.02]">
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
@@ -3463,7 +3260,12 @@ function FeeSection({
           </span>
           <button
             type="button"
-            className="rounded-none bg-[#25d366] px-3 py-2 text-[13px] font-medium text-white shadow-sm hover:bg-[#1fb855]"
+            className={cn(
+              "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold shadow-sm transition-colors",
+              feeFlags?.feeSentWhatsApp
+                ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
+                : "bg-[#25d366] font-medium text-white hover:bg-[#1fb855]",
+            )}
             onClick={() => {
               const now = new Date().toISOString();
               void onPatchLead({
@@ -3482,11 +3284,28 @@ function FeeSection({
               });
             }}
           >
-            WhatsApp
+            {feeFlags?.feeSentWhatsApp ? (
+              <>
+                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                Sent · WhatsApp
+                {feeFlags.feeSentWhatsAppAt ? (
+                  <span className="font-normal opacity-90">
+                    · {feeSentAtLabel(feeFlags.feeSentWhatsAppAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "WhatsApp"
+            )}
           </button>
           <button
             type="button"
-            className={SX.btnPrimary}
+            className={cn(
+              "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold transition-colors",
+              feeFlags?.feeSentEmail
+                ? "border-2 border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+                : SX.btnPrimary,
+            )}
             onClick={() => {
               const now = new Date().toISOString();
               void onPatchLead({
@@ -3505,13 +3324,30 @@ function FeeSection({
               });
             }}
           >
-            Email
+            {feeFlags?.feeSentEmail ? (
+              <>
+                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                Sent · Email
+                {feeFlags.feeSentEmailAt ? (
+                  <span className="font-normal opacity-90">
+                    · {feeSentAtLabel(feeFlags.feeSentEmailAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Email"
+            )}
           </button>
           <button
             type="button"
             className={cn(
-              SX.btnSecondary,
-              "border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100",
+              "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold transition-colors",
+              feeFlags?.enrollmentSent
+                ? "border-2 border-violet-600 bg-violet-100 text-violet-900 ring-1 ring-violet-300"
+                : cn(
+                    SX.btnSecondary,
+                    "border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100",
+                  ),
             )}
             onClick={() => {
               const now = new Date().toISOString();
@@ -3531,7 +3367,19 @@ function FeeSection({
               });
             }}
           >
-            Send enrollment form
+            {feeFlags?.enrollmentSent ? (
+              <>
+                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                Sent · Enrollment
+                {feeFlags.enrollmentSentAt ? (
+                  <span className="font-normal opacity-90">
+                    · {feeSentAtLabel(feeFlags.enrollmentSentAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Send enrollment form"
+            )}
           </button>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
@@ -3688,6 +3536,23 @@ function ScheduleSection({
       ),
     [classes],
   );
+
+  const schedSend = lead.pipelineMeta?.schedule as
+    | {
+        scheduleSentWhatsApp?: boolean;
+        scheduleSentEmail?: boolean;
+        scheduleSentWhatsAppAt?: string | null;
+        scheduleSentEmailAt?: string | null;
+      }
+    | undefined;
+  const schedSentAtLabel = (iso?: string | null) => {
+    if (!iso) return "";
+    try {
+      return format(parseISO(iso), "dd MMM yyyy, HH:mm");
+    } catch {
+      return "";
+    }
+  };
 
   return (
     <section className={SX.section}>
@@ -3947,8 +3812,14 @@ function ScheduleSection({
         <span className="text-[13px] font-semibold">Send schedule</span>
         <button
           type="button"
-          className="rounded-none bg-[#25d366] px-3 py-1.5 text-[13px] text-white hover:bg-[#1fb855]"
+          className={cn(
+            "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
+            schedSend?.scheduleSentWhatsApp
+              ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
+              : "bg-[#25d366] text-white hover:bg-[#1fb855]",
+          )}
           onClick={() => {
+            const now = new Date().toISOString();
             const prev =
               lead.pipelineMeta?.schedule &&
               typeof lead.pipelineMeta.schedule === "object" &&
@@ -3961,6 +3832,7 @@ function ScheduleSection({
                   ...prev,
                   view,
                   scheduleSentWhatsApp: true,
+                  scheduleSentWhatsAppAt: now,
                 },
               }),
               activityLog: appendActivity(
@@ -3971,12 +3843,30 @@ function ScheduleSection({
             });
           }}
         >
-          WhatsApp
+          {schedSend?.scheduleSentWhatsApp ? (
+            <>
+              <IconCheck className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+              Sent · WhatsApp
+              {schedSend.scheduleSentWhatsAppAt ? (
+                <span className="font-normal opacity-90">
+                  · {schedSentAtLabel(schedSend.scheduleSentWhatsAppAt)}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            "WhatsApp"
+          )}
         </button>
         <button
           type="button"
-          className={SX.btnPrimary}
+          className={cn(
+            "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
+            schedSend?.scheduleSentEmail
+              ? "border-2 border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+              : SX.btnPrimary,
+          )}
           onClick={() => {
+            const now = new Date().toISOString();
             const prev =
               lead.pipelineMeta?.schedule &&
               typeof lead.pipelineMeta.schedule === "object" &&
@@ -3989,6 +3879,7 @@ function ScheduleSection({
                   ...prev,
                   view,
                   scheduleSentEmail: true,
+                  scheduleSentEmailAt: now,
                 },
               }),
               activityLog: appendActivity(
@@ -3999,7 +3890,19 @@ function ScheduleSection({
             });
           }}
         >
-          Email
+          {schedSend?.scheduleSentEmail ? (
+            <>
+              <IconCheck className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+              Sent · Email
+              {schedSend.scheduleSentEmailAt ? (
+                <span className="font-normal opacity-90">
+                  · {schedSentAtLabel(schedSend.scheduleSentEmailAt)}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            "Email"
+          )}
         </button>
       </div>
       <p className="mt-2 text-[11px] leading-snug text-slate-500">
