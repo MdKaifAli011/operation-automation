@@ -297,10 +297,7 @@ export function ExportLeadsButton({ leads }: Props) {
             <p className="text-[12px] font-medium text-slate-700">
               Intake date range
             </p>
-            <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-              Only <span className="font-medium text-slate-600">today and past</span> —
-              future dates are disabled. Empty = no date limit on that side.
-            </p>
+           
             <div className="mt-2 grid gap-4 sm:grid-cols-2">
               <label className={label}>
                 From
@@ -363,7 +360,7 @@ export function ExportLeadsButton({ leads }: Props) {
             </select>
           </label>
 
-          <div className="mt-4 border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
+          {/* <div className="mt-4 border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
             <span className="font-semibold text-slate-900 tabular-nums">
               {matchingLeads.length}
             </span>
@@ -375,7 +372,7 @@ export function ExportLeadsButton({ leads }: Props) {
                 Widen filters or clear dates to include more leads.
               </span>
             )}
-          </div>
+          </div> */}
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3">
