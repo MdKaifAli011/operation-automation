@@ -22,7 +22,8 @@ async function fileToGrid(file: File): Promise<string[][]> {
     return parseCsvText(text);
   }
   const buf = await file.arrayBuffer();
-  const XLSX = await import("xlsx");
+  /** @e965/xlsx — SheetJS CE 0.20.x with prototype-pollution & ReDoS fixes (not on legacy `xlsx` npm). */
+  const XLSX = await import("@e965/xlsx");
   const wb = XLSX.read(buf, { type: "array", cellDates: false, raw: false });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) return [];
