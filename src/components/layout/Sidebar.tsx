@@ -6,6 +6,7 @@ import {
   IconBookOpen,
   IconClipboard,
   IconFileText,
+  IconGlobe,
   IconGraduationCap,
   IconLandmark,
   IconLink,
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/course-brochure", label: "Course Brochure", Icon: IconFileText },
   { href: "/email-templates", label: "Email Templates", Icon: IconMail },
   { href: "/meet-links", label: "Meet links", Icon: IconLink },
+  { href: "/time-zones", label: "Time zones", Icon: IconGlobe },
   { href: "/bank-details", label: "Bank & A/c Details", Icon: IconLandmark },
   { href: "/enroll-student", label: "Enroll Student", Icon: IconUserPlus },
 ] as const;

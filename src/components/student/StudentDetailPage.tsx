@@ -61,6 +61,13 @@ import { BrochureInlinePreviewFrame } from "@/components/brochure/BrochureInline
 import { normalizeBrochurePreviewUrl } from "@/lib/brochurePreview";
 import { cn } from "@/lib/cn";
 import { computeMeetWindow } from "@/lib/meetLinks/window";
+import { defaultTimeZoneForCountry } from "@/lib/timezones/countryDefaultTimeZone";
+import {
+  ensureSelectedTimeZoneOption,
+  formatTimeZoneSelectLabel,
+  getGroupedTimeZoneSelectOptions,
+  timeZoneShortLabelForMessages,
+} from "@/lib/timezones/ianaTimeZones";
 import { getTeacherFeedbackEligibleAt } from "@/lib/demoFeedback/eligibility";
 import {
   examTrackLabel,
@@ -112,37 +119,14 @@ function formatDateInZone(d: Date, timeZone: string): string {
   }).format(d);
 }
 
-const STUDENT_TIMEZONE_OPTIONS: { value: string; label: string }[] = [
-  { value: "Asia/Kolkata", label: "India — IST" },
-  { value: "Asia/Kathmandu", label: "Nepal — NPT" },
-  { value: "Asia/Dubai", label: "UAE — GST" },
-  { value: "Asia/Singapore", label: "Singapore — SGT" },
-  { value: "Asia/Riyadh", label: "Saudi Arabia — AST" },
-  { value: "Asia/Kuwait", label: "Kuwait — AST" },
-  { value: "Europe/London", label: "UK — GMT / BST" },
-  { value: "America/New_York", label: "US — Eastern" },
-  { value: "America/Los_Angeles", label: "US — Pacific" },
-];
-
-function zoneShortLabel(tz: string): string {
-  const o = STUDENT_TIMEZONE_OPTIONS.find((x) => x.value === tz);
-  if (!o) return tz.replace(/^.*\//, "");
-  const parts = o.label.split(" — ");
-  return (parts[1] ?? parts[0]).trim();
-}
-
-function studentTimeZoneMenuLabel(tz: string): string {
-  return STUDENT_TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz;
-}
-
 /** One instant; message spells out IST + student zone so ops trust both were considered. */
 function buildPastSlotWarning(slot: Date, studentTz: string): string {
   const ist = `${formatDateInZone(slot, "Asia/Kolkata")}, ${formatTime12hInZone(slot, "Asia/Kolkata")} IST`;
-  const st = `${formatDateInZone(slot, studentTz)}, ${formatTime12hInZone(slot, studentTz)} ${zoneShortLabel(studentTz)}`;
+  const st = `${formatDateInZone(slot, studentTz)}, ${formatTime12hInZone(slot, studentTz)} ${timeZoneShortLabelForMessages(studentTz, slot)}`;
   return (
     "This demo time is already in the past — it cannot be created. " +
     "Checked in India (IST) and in the student timezone. " +
-    `India: ${ist}. Student (${studentTimeZoneMenuLabel(studentTz)}): ${st}. ` +
+    `India: ${ist}. Student (${formatTimeZoneSelectLabel(studentTz, slot)}): ${st}. ` +
     "Choose a later time or a future date."
   );
 }
@@ -177,13 +161,49 @@ function demoRowSummaryLine(r: DemoTableRow): string {
   return `${r.subject} · ${r.teacher} · ${ist}`;
 }
 
-function defaultStudentTimeZone(country: string): string {
-  const c = country.trim().toLowerCase();
-  if (c === "uae" || c.includes("emirates")) return "Asia/Dubai";
-  if (c === "singapore") return "Asia/Singapore";
-  if (c === "nepal") return "Asia/Kathmandu";
-  if (c === "saudi" || c === "ksa") return "Asia/Riyadh";
-  return "Asia/Kolkata";
+function StudentTimeZoneSelect({
+  value,
+  onChange,
+  id,
+  className,
+  disabled,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  id?: string;
+  className?: string;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) {
+  const { options, groups } = useMemo(() => {
+    const base = getGroupedTimeZoneSelectOptions();
+    const options = ensureSelectedTimeZoneOption(value, base);
+    const groups = [...new Set(options.map((o) => o.group))];
+    return { options, groups };
+  }, [value]);
+  return (
+    <select
+      id={id}
+      className={className}
+      value={value}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {groups.map((g) => (
+        <optgroup key={g} label={g}>
+          {options
+            .filter((o) => o.group === g)
+            .map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </select>
+  );
 }
 
 function pickDefaultTeacher(subj: string, faculties: Faculty[]): string {
@@ -2008,7 +2028,7 @@ function DemoSection({
                               </div>
                               <div className="mt-0.5 text-[12px] leading-tight text-slate-600">
                                 {formatTime12hInZone(slot, r.studentTimeZone)}{" "}
-                                {zoneShortLabel(r.studentTimeZone)}
+                                {timeZoneShortLabelForMessages(r.studentTimeZone, slot)}
                               </div>
                             </>
                           ) : (
@@ -2527,19 +2547,11 @@ function DemoEditRowDialog({
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
                 Student timezone
               </label>
-              <select
+              <StudentTimeZoneSelect
                 className={cn(SX.select, "w-full")}
                 value={draft.studentTimeZone}
-                onChange={(e) =>
-                  onDraftChange({ studentTimeZone: e.target.value })
-                }
-              >
-                {STUDENT_TIMEZONE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(next) => onDraftChange({ studentTimeZone: next })}
+              />
             </div>
             <div>
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
@@ -3182,7 +3194,7 @@ function DemoForm({
   const [demoDate, setDemoDate] = useState(todayStr);
   const [demoTime, setDemoTime] = useState("10:00");
   const [studentTimeZone, setStudentTimeZone] = useState(() =>
-    defaultStudentTimeZone(lead.country),
+    defaultTimeZoneForCountry(lead.country),
   );
   const [scheduleWarnMsg, setScheduleWarnMsg] = useState<string | null>(null);
   const dismissScheduleWarn = useCallback(() => setScheduleWarnMsg(null), []);
@@ -3213,13 +3225,18 @@ function DemoForm({
     setShareSlotConfirm(null);
   }, []);
   const [meetGateBusy, setMeetGateBusy] = useState(false);
+
+  useEffect(() => {
+    setStudentTimeZone(defaultTimeZoneForCountry(lead.country));
+  }, [lead.id, lead.country]);
+
   /** If the tab crosses midnight, raw `demoDate` can lag; never schedule or show a past calendar day. */
   const effectiveDemoDate = demoDate < todayStr ? todayStr : demoDate;
 
   const studentLocalPreview = useMemo(() => {
     const slot = parseIstSlot(effectiveDemoDate, demoTime);
     if (!slot || Number.isNaN(slot.getTime())) return "";
-    return `${formatDateInZone(slot, studentTimeZone)} · ${formatTime12hInZone(slot, studentTimeZone)} ${zoneShortLabel(studentTimeZone)}`;
+    return `${formatDateInZone(slot, studentTimeZone)} · ${formatTime12hInZone(slot, studentTimeZone)} ${timeZoneShortLabelForMessages(studentTimeZone, slot)}`;
   }, [effectiveDemoDate, demoTime, studentTimeZone]);
 
   const teacherNameOptions = useMemo(
@@ -3323,8 +3340,10 @@ function DemoForm({
             <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
               Schedule in{" "}
               <span className="font-medium text-slate-700">IST</span> (left).
-              Set the student&apos;s timezone (right) so invites show the right
-              local time — default follows country ({lead.country}).
+              The student timezone (right) defaults from this lead&apos;s
+              country (<span className="font-medium text-slate-700">{lead.country}</span>
+              ). Pick any IANA zone from the list; override anytime. See sidebar:
+              Time zones for country → default mapping.
             </p>
           </div>
         </div>
@@ -3489,24 +3508,18 @@ function DemoForm({
                         >
                           Student timezone
                         </label>
-                        <select
+                        <StudentTimeZoneSelect
                           id="demo-student-tz"
                           className={cn(SX.select, "w-full max-w-[320px]")}
                           value={studentTimeZone}
-                          onChange={(e) => {
+                          onChange={(next) => {
                             setScheduleWarnMsg(null);
                             setPreScheduleBlock(null);
                             setShareSlotConfirm(null);
-                            setStudentTimeZone(e.target.value);
+                            setStudentTimeZone(next);
                           }}
-                          aria-label="Student timezone for invite preview"
-                        >
-                          {STUDENT_TIMEZONE_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
+                          ariaLabel="Student timezone for invite preview"
+                        />
                         {studentLocalPreview ? (
                           <div className="space-y-1">
                             <p className="text-[12px] leading-snug text-[#424242]">
