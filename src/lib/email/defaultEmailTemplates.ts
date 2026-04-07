@@ -19,7 +19,9 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     bodyHtml: `<p>Hello {{parentName}},</p>
 <p>Here are the details for <strong>{{studentName}}</strong>&rsquo;s trial class:</p>
 <p>{{demoSummary}}</p>
-<p>We will share the join link on WhatsApp as well. If you have questions, reply to this email.</p>
+<p><strong>Join link:</strong> <a href="{{meetLink}}">{{meetLink}}</a></p>
+<p>If the link is empty, assign a Meet link on the lead first (Step 1 · Demo).</p>
+<p>If you have questions, reply to this email.</p>
 <p>Regards,<br/>Team</p>`,
   },
   {

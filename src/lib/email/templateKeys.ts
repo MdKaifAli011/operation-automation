@@ -28,6 +28,7 @@ export const EMAIL_TEMPLATE_META: Record<
       "{{grade}}",
       "{{targetExams}}",
       "{{demoSummary}}",
+      "{{meetLink}}",
     ],
   },
   brochure: {

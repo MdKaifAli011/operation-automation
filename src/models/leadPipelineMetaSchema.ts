@@ -17,6 +17,31 @@ export const DemoRowSchema = new Schema(
     /** Whether invite was marked sent for this specific demo */
     inviteSent: { type: Boolean, default: false },
     inviteSentAt: { type: String, default: null },
+    /** Stable key for Meet booking (UUID per row) */
+    meetRowId: { type: String, default: "" },
+    /** Assigned Google Meet URL for this slot */
+    meetLinkUrl: { type: String, default: "" },
+    meetBookingId: { type: String, default: "" },
+    meetWindowStartIso: { type: String, default: "" },
+    meetWindowEndIso: { type: String, default: "" },
+    /** ISO — staff sent the one-time teacher feedback link */
+    teacherFeedbackInviteSentAt: { type: String, default: null },
+    /** ISO — teacher submitted the feedback form (link no longer valid) */
+    teacherFeedbackSubmittedAt: { type: String, default: null },
+    teacherFeedbackRating: { type: String, default: "" },
+    teacherFeedbackStrengths: { type: String, default: "" },
+    teacherFeedbackImprovements: { type: String, default: "" },
+    teacherFeedbackNotes: { type: String, default: "" },
+    teacherFeedbackExamTrack: { type: String, default: "" },
+    teacherFeedbackSessionTopics: { type: String, default: "" },
+    teacherFeedbackPaceFit: { type: String, default: "" },
+    teacherFeedbackRatingEngagement: { type: String, default: "" },
+    teacherFeedbackRatingConceptual: { type: String, default: "" },
+    teacherFeedbackRatingApplication: { type: String, default: "" },
+    teacherFeedbackRatingExamReadiness: { type: String, default: "" },
+    teacherFeedbackParentInvolvement: { type: String, default: "" },
+    teacherFeedbackRecommendedNext: { type: String, default: "" },
+    teacherFeedbackFollowUpHomework: { type: String, default: "" },
   },
   { _id: false },
 );

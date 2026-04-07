@@ -597,10 +597,14 @@ export function LeadManagementPage() {
         <div className={SX.leadSheetBody}>
           {mainTab === "ongoing" && (
             <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
-              <section aria-label="New and other ongoing leads">
+              <section aria-label="New and Daily leads">
                 <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>New &amp; other ongoing</h2>
-                  
+                  <h2 className={SX.leadSectionTitle}>New &amp; Daily</h2>
+                  <p className={SX.leadSectionMeta}>
+                    {ongoingOtherLeads.length} lead
+                    {ongoingOtherLeads.length === 1 ? "" : "s"} · intakes and
+                    imports not yet in the Interested pipeline
+                  </p>
                 </div>
                 {ongoingOtherLeads.length === 0 ? (
                   <div
@@ -614,6 +618,7 @@ export function LeadManagementPage() {
                   <LeadSheetTable
                     variant="standard"
                     showFollowUpColumn={false}
+                    showPipelineColumn={false}
                     className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                     leads={applyDraftToList(ongoingOtherLeads)}
                     sheetEditMode={sheetEditMode}
@@ -627,7 +632,12 @@ export function LeadManagementPage() {
               <section aria-label="Interested ongoing pipeline">
                 <div className={SX.leadSectionHead}>
                   <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
-                  
+                  <p className={SX.leadSectionMeta}>
+                    {ongoingInterestedLeads.length} lead
+                    {ongoingInterestedLeads.length === 1 ? "" : "s"} · Demo →
+                    Brochure → Fees → Schedule — use the Status column for step
+                    progress
+                  </p>
                 </div>
                 {ongoingInterestedLeads.length === 0 ? (
                   <div
@@ -643,6 +653,7 @@ export function LeadManagementPage() {
                   <LeadSheetTable
                     variant="standard"
                     showFollowUpColumn={false}
+                    showPipelineColumn
                     className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                     leads={applyDraftToList(ongoingInterestedLeads)}
                     sheetEditMode={sheetEditMode}
@@ -662,11 +673,12 @@ export function LeadManagementPage() {
                 <p className={SX.leadSectionMeta}>
                   {followUpLeads.length} lead
                   {followUpLeads.length === 1 ? "" : "s"} · call or message on
-                  the date shown
+                  the date shown · Status = pipeline progress
                 </p>
               </div>
               <LeadSheetTable
                 showFollowUpColumn
+                showPipelineColumn
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(followUpLeads)}
                 sheetEditMode={sheetEditMode}
@@ -687,11 +699,12 @@ export function LeadManagementPage() {
                 <p className={SX.leadSectionMeta}>
                   {notInterestedLeads.length} closed lead
                   {notInterestedLeads.length === 1 ? "" : "s"} · archived from
-                  active work
+                  active work · Status shows pipeline progress at close
                 </p>
               </div>
               <LeadSheetTable
                 showFollowUpColumn={false}
+                showPipelineColumn
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(notInterestedLeads)}
                 sheetEditMode={sheetEditMode}
@@ -712,11 +725,13 @@ export function LeadManagementPage() {
                 <p className={SX.leadSectionMeta}>
                   Students who finished onboarding ·{" "}
                   {convertedLeadsFullPipeline.length} lead
-                  {convertedLeadsFullPipeline.length === 1 ? "" : "s"}
+                  {convertedLeadsFullPipeline.length === 1 ? "" : "s"} · Status
+                  shows completed pipeline steps
                 </p>
               </div>
               <LeadSheetTable
                 showFollowUpColumn={false}
+                showPipelineColumn
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(convertedLeadsFullPipeline)}
                 sheetEditMode={sheetEditMode}

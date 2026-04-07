@@ -1,0 +1,76 @@
+import { NextResponse } from "next/server";
+import { assignMeetLinkForDemoRow } from "@/lib/meetLinks/assignMeetLink";
+
+export const runtime = "nodejs";
+
+type Body = {
+  leadId?: unknown;
+  meetRowId?: unknown;
+  isoDate?: unknown;
+  timeHmIST?: unknown;
+  durationMinutes?: unknown;
+  teacher?: unknown;
+  teacherBlockMinutes?: unknown;
+};
+
+export async function POST(req: Request) {
+  let body: Body;
+  try {
+    body = (await req.json()) as Body;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  const leadId = typeof body.leadId === "string" ? body.leadId.trim() : "";
+  const meetRowId = typeof body.meetRowId === "string" ? body.meetRowId.trim() : "";
+  const isoDate = typeof body.isoDate === "string" ? body.isoDate.trim() : "";
+  const timeHmIST = typeof body.timeHmIST === "string" ? body.timeHmIST.trim() : "";
+  const teacher = typeof body.teacher === "string" ? body.teacher.trim() : "";
+
+  let durationMinutes: number | undefined;
+  if (typeof body.durationMinutes === "number" && Number.isFinite(body.durationMinutes)) {
+    durationMinutes = Math.max(1, Math.min(24 * 60, Math.round(body.durationMinutes)));
+  }
+  let teacherBlockMinutes: number | undefined;
+  if (typeof body.teacherBlockMinutes === "number" && Number.isFinite(body.teacherBlockMinutes)) {
+    teacherBlockMinutes = Math.max(15, Math.min(24 * 60, Math.round(body.teacherBlockMinutes)));
+  }
+
+  if (!leadId || !meetRowId || !isoDate || !timeHmIST) {
+    return NextResponse.json(
+      { error: "leadId, meetRowId, isoDate, and timeHmIST are required." },
+      { status: 400 },
+    );
+  }
+
+  if (!teacher) {
+    return NextResponse.json(
+      { error: "teacher is required to check availability and reserve the slot.", code: "bad_request" },
+      { status: 400 },
+    );
+  }
+
+  const result = await assignMeetLinkForDemoRow({
+    leadId,
+    meetRowId,
+    isoDate,
+    timeHmIST,
+    durationMinutes,
+    teacher,
+    teacherBlockMinutes,
+  });
+
+  if ("error" in result) {
+    const status =
+      result.code === "not_found"
+        ? 404
+        : result.code === "all_busy" ||
+            result.code === "no_links" ||
+            result.code === "teacher_busy"
+          ? 409
+          : 400;
+    return NextResponse.json({ error: result.error, code: result.code }, { status });
+  }
+
+  return NextResponse.json(result);
+}

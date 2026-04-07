@@ -125,7 +125,8 @@ export function buildLeadEmailVars(
         : 0;
     const row = rows[idx] as DemoTableRowPersisted | undefined;
     const demoSummary = row ? demoInviteSummaryLine(row) : "—";
-    return { ...base, demoSummary };
+    const meetLink = str(row?.meetLinkUrl);
+    return { ...base, demoSummary, meetLink };
   }
 
   if (key === "brochure") {

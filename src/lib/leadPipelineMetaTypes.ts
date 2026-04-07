@@ -12,6 +12,29 @@ export type DemoTableRowPersisted = {
   timeHmIST: string;
   inviteSent?: boolean;
   inviteSentAt?: string | null;
+  /** Stable id for Meet pool booking (one per demo row). */
+  meetRowId?: string;
+  meetLinkUrl?: string;
+  meetBookingId?: string;
+  meetWindowStartIso?: string;
+  meetWindowEndIso?: string;
+  teacherFeedbackInviteSentAt?: string | null;
+  teacherFeedbackSubmittedAt?: string | null;
+  teacherFeedbackRating?: string;
+  teacherFeedbackStrengths?: string;
+  teacherFeedbackImprovements?: string;
+  teacherFeedbackNotes?: string;
+  /** Extended feedback: NEET/JEE/SAT/IB track etc. */
+  teacherFeedbackExamTrack?: string;
+  teacherFeedbackSessionTopics?: string;
+  teacherFeedbackPaceFit?: string;
+  teacherFeedbackRatingEngagement?: string;
+  teacherFeedbackRatingConceptual?: string;
+  teacherFeedbackRatingApplication?: string;
+  teacherFeedbackRatingExamReadiness?: string;
+  teacherFeedbackParentInvolvement?: string;
+  teacherFeedbackRecommendedNext?: string;
+  teacherFeedbackFollowUpHomework?: string;
 };
 
 export type LeadPipelineDemo = {

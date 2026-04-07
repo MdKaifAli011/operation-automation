@@ -2,10 +2,13 @@
 
 import {
   addDays,
+  addMinutes,
   addMonths,
   addWeeks,
+  differenceInMinutes,
   format,
   formatDistanceToNow,
+  isBefore,
   parseISO,
   startOfWeek,
 } from "date-fns";
@@ -56,6 +59,14 @@ import {
 import { BrochureInlinePreviewFrame } from "@/components/brochure/BrochureInlinePreviewFrame";
 import { normalizeBrochurePreviewUrl } from "@/lib/brochurePreview";
 import { cn } from "@/lib/cn";
+import { computeMeetWindow } from "@/lib/meetLinks/window";
+import { getTeacherFeedbackEligibleAt } from "@/lib/demoFeedback/eligibility";
+import {
+  examTrackLabel,
+  paceFitLabel,
+  parentInvolvementLabel,
+  recommendedNextLabel,
+} from "@/lib/demoFeedback/teacherFeedbackExtended";
 
 const STEPS = [
   { id: "step-1", n: 1, label: "Demo" },
@@ -213,6 +224,28 @@ type DemoTableRow = {
   timeHmIST: string;
   inviteSent?: boolean;
   inviteSentAt?: string | null;
+  /** Stable id for Google Meet pool booking */
+  meetRowId?: string;
+  meetLinkUrl?: string;
+  meetBookingId?: string;
+  meetWindowStartIso?: string;
+  meetWindowEndIso?: string;
+  teacherFeedbackInviteSentAt?: string | null;
+  teacherFeedbackSubmittedAt?: string | null;
+  teacherFeedbackRating?: string;
+  teacherFeedbackStrengths?: string;
+  teacherFeedbackImprovements?: string;
+  teacherFeedbackNotes?: string;
+  teacherFeedbackExamTrack?: string;
+  teacherFeedbackSessionTopics?: string;
+  teacherFeedbackPaceFit?: string;
+  teacherFeedbackRatingEngagement?: string;
+  teacherFeedbackRatingConceptual?: string;
+  teacherFeedbackRatingApplication?: string;
+  teacherFeedbackRatingExamReadiness?: string;
+  teacherFeedbackParentInvolvement?: string;
+  teacherFeedbackRecommendedNext?: string;
+  teacherFeedbackFollowUpHomework?: string;
 };
 
 function activityIconForKind(kind: PipelineActivity["kind"]) {
@@ -272,6 +305,25 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
     },
     [lead.id],
   );
+
+  const refreshLead = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/leads/${encodeURIComponent(lead.id)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as Lead;
+      setLead(data);
+    } catch {
+      /* ignore */
+    }
+  }, [lead.id]);
+
+  useEffect(() => {
+    const onFocus = () => void refreshLead();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshLead]);
 
   const extras = useMemo(() => extrasForLead(lead), [lead]);
   const completed = lead.pipelineSteps;
@@ -530,9 +582,11 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
             >
               {activeStep === 1 && (
                 <DemoSection
+                  key={lead.id}
                   lead={lead}
                   faculties={faculties}
                   onPatchLead={patchLead}
+                  refreshLead={refreshLead}
                 />
               )}
               {activeStep === 2 && (
@@ -999,14 +1053,249 @@ function StepFooter({
   );
 }
 
+function DemoTeacherFeedbackViewDialog({
+  row,
+  onClose,
+}: {
+  row: DemoTableRow | null;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const open = row != null;
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdrop = (e: MouseEvent) => {
+      if (e.target === dlg) onClose();
+    };
+    dlg.addEventListener("mousedown", onBackdrop);
+    return () => dlg.removeEventListener("mousedown", onBackdrop);
+  }, [open, onClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[205] w-[min(100vw-1rem,32rem)] max-h-[min(92vh,620px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="demo-feedback-view-title"
+    >
+      <div className="flex items-center justify-between border-b border-[#d0d0d0] bg-[#e8f5e9] px-3 py-2.5">
+        <h2
+          id="demo-feedback-view-title"
+          className="text-[13px] font-bold tracking-tight text-[#1b5e20]"
+        >
+          Teacher feedback
+        </h2>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center text-[18px] leading-none text-[#546e7a] hover:bg-black/5"
+          aria-label="Close"
+          onClick={() => ref.current?.close()}
+        >
+          ×
+        </button>
+      </div>
+      {row ? (
+        <div className="max-h-[min(70vh,480px)] overflow-y-auto px-3 py-3 text-[13px] leading-relaxed">
+          <p className="text-[12px] text-slate-600">
+            {row.subject} · {row.teacher} ·{" "}
+            {row.isoDate ? format(parseISO(row.isoDate), "d MMM yyyy") : ""}{" "}
+            · {row.timeHmIST} IST
+          </p>
+          {row.teacherFeedbackSubmittedAt ? (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Submitted{" "}
+              {((): string => {
+                try {
+                  return formatDistanceToNow(
+                    parseISO(row.teacherFeedbackSubmittedAt!),
+                    { addSuffix: true },
+                  );
+                } catch {
+                  return row.teacherFeedbackSubmittedAt ?? "";
+                }
+              })()}
+            </p>
+          ) : null}
+          <dl className="mt-4 space-y-3">
+            {row.teacherFeedbackExamTrack ? (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Exam / track
+                </dt>
+                <dd className="mt-0.5 text-slate-900">
+                  {examTrackLabel(row.teacherFeedbackExamTrack)}
+                </dd>
+              </div>
+            ) : null}
+            {row.teacherFeedbackSessionTopics?.trim() ? (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Session focus
+                </dt>
+                <dd className="mt-0.5 whitespace-pre-wrap text-slate-800">
+                  {row.teacherFeedbackSessionTopics.trim()}
+                </dd>
+              </div>
+            ) : null}
+            {row.teacherFeedbackPaceFit ? (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Pace
+                </dt>
+                <dd className="mt-0.5 text-slate-800">
+                  {paceFitLabel(row.teacherFeedbackPaceFit)}
+                </dd>
+              </div>
+            ) : null}
+            {row.teacherFeedbackRatingEngagement ||
+            row.teacherFeedbackRatingConceptual ||
+            row.teacherFeedbackRatingApplication ||
+            row.teacherFeedbackRatingExamReadiness ? (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  1–5 ratings
+                </dt>
+                <dd className="mt-1 grid gap-1.5 text-[12px] text-slate-800">
+                  {row.teacherFeedbackRatingEngagement ? (
+                    <span>
+                      Engagement:{" "}
+                      <span className="font-semibold tabular-nums text-slate-900">
+                        {row.teacherFeedbackRatingEngagement} / 5
+                      </span>
+                    </span>
+                  ) : null}
+                  {row.teacherFeedbackRatingConceptual ? (
+                    <span>
+                      Concepts:{" "}
+                      <span className="font-semibold tabular-nums text-slate-900">
+                        {row.teacherFeedbackRatingConceptual} / 5
+                      </span>
+                    </span>
+                  ) : null}
+                  {row.teacherFeedbackRatingApplication ? (
+                    <span>
+                      Application:{" "}
+                      <span className="font-semibold tabular-nums text-slate-900">
+                        {row.teacherFeedbackRatingApplication} / 5
+                      </span>
+                    </span>
+                  ) : null}
+                  {row.teacherFeedbackRatingExamReadiness ? (
+                    <span>
+                      Exam readiness:{" "}
+                      <span className="font-semibold tabular-nums text-slate-900">
+                        {row.teacherFeedbackRatingExamReadiness} / 5
+                      </span>
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Overall
+              </dt>
+              <dd className="mt-0.5 font-medium text-slate-900">
+                {row.teacherFeedbackRating || "—"}
+              </dd>
+            </div>
+            {row.teacherFeedbackRecommendedNext ? (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Recommended next
+                </dt>
+                <dd className="mt-0.5 text-slate-800">
+                  {recommendedNextLabel(row.teacherFeedbackRecommendedNext)}
+                </dd>
+              </div>
+            ) : null}
+            {row.teacherFeedbackParentInvolvement ? (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Parent involvement observed
+                </dt>
+                <dd className="mt-0.5 text-slate-800">
+                  {parentInvolvementLabel(row.teacherFeedbackParentInvolvement)}
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Strengths
+              </dt>
+              <dd className="mt-0.5 whitespace-pre-wrap text-slate-800">
+                {row.teacherFeedbackStrengths?.trim() || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Areas to improve
+              </dt>
+              <dd className="mt-0.5 whitespace-pre-wrap text-slate-800">
+                {row.teacherFeedbackImprovements?.trim() || "—"}
+              </dd>
+            </div>
+            {row.teacherFeedbackFollowUpHomework?.trim() ? (
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Follow-up / homework
+                </dt>
+                <dd className="mt-0.5 whitespace-pre-wrap text-slate-800">
+                  {row.teacherFeedbackFollowUpHomework.trim()}
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Additional notes
+              </dt>
+              <dd className="mt-0.5 whitespace-pre-wrap text-slate-800">
+                {row.teacherFeedbackNotes?.trim() || "—"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
+      <div className="flex justify-end border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
+        <button type="button" className={SX.btnSecondary} onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function DemoSection({
   lead,
   faculties,
   onPatchLead,
+  refreshLead,
 }: {
   lead: Lead;
   faculties: Faculty[];
   onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+  refreshLead: () => Promise<void>;
 }) {
   const leadRef = useRef(lead);
   leadRef.current = lead;
@@ -1017,6 +1306,17 @@ function DemoSection({
   const [rows, setRows] = useState<DemoTableRow[]>(() =>
     Array.isArray(demoRowsFromMeta) ? demoRowsFromMeta : [],
   );
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const [holdMin, setHoldMin] = useState(300);
+  const [teacherBlockMin, setTeacherBlockMin] = useState(120);
+  const [demoAutoCompleteMin, setDemoAutoCompleteMin] = useState(300);
+  const [feedbackAfterMin, setFeedbackAfterMin] = useState(45);
+  const [meetErrors, setMeetErrors] = useState<Record<string, string>>({});
+  const prevMeetRowIdsRef = useRef<Set<string>>(new Set());
+  const prevDemoStatusRef = useRef<Record<string, string>>({});
+  const assignGenRef = useRef(0);
+  const lastFailedSlotRef = useRef<Record<string, string>>({});
   const [scheduleSuccessOpen, setScheduleSuccessOpen] = useState(false);
   const dismissScheduleSuccess = useCallback(
     () => setScheduleSuccessOpen(false),
@@ -1026,6 +1326,145 @@ function DemoSection({
   const dismissShareSuccess = useCallback(() => setShareSuccessOpen(false), []);
   const [sendEmailError, setSendEmailError] = useState<string | null>(null);
   const [sendEmailBusy, setSendEmailBusy] = useState(false);
+  const [feedbackViewRow, setFeedbackViewRow] = useState<DemoTableRow | null>(
+    null,
+  );
+  const [feedbackBusyMeetRowId, setFeedbackBusyMeetRowId] = useState<
+    string | null
+  >(null);
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [, bumpFeedbackClock] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => bumpFeedbackClock((x) => x + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const sendTeacherFeedbackInvite = useCallback(
+    async (meetRowId: string, sendEmail: boolean) => {
+      setFeedbackBusyMeetRowId(meetRowId);
+      setFeedbackError(null);
+      setFeedbackNotice(null);
+      try {
+        const res = await fetch(
+          `/api/leads/${encodeURIComponent(lead.id)}/demo-feedback`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ meetRowId, sendEmail }),
+          },
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          feedbackUrl?: string;
+          emailSent?: boolean;
+          emailSkippedReason?: string | null;
+        };
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string" ? data.error : "Request failed.",
+          );
+        }
+        if (!sendEmail && typeof data.feedbackUrl === "string") {
+          try {
+            await navigator.clipboard.writeText(data.feedbackUrl);
+            setFeedbackNotice("Feedback link copied to clipboard.");
+          } catch {
+            setFeedbackNotice(
+              `Clipboard unavailable — copy this URL: ${data.feedbackUrl}`,
+            );
+          }
+        } else if (sendEmail && data.emailSent) {
+          setFeedbackNotice("Feedback email sent to the teacher.");
+        } else if (typeof data.emailSkippedReason === "string") {
+          setFeedbackNotice(data.emailSkippedReason);
+        }
+        await refreshLead();
+      } catch (e) {
+        setFeedbackError(
+          e instanceof Error ? e.message : "Could not send feedback link.",
+        );
+      } finally {
+        setFeedbackBusyMeetRowId(null);
+      }
+    },
+    [lead.id, refreshLead],
+  );
+
+  useEffect(() => {
+    void fetch("/api/meet-links", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(
+        (d: {
+          holdDurationMinutes?: unknown;
+          teacherBlockMinutes?: unknown;
+          demoAutoCompleteAfterMinutes?: unknown;
+          teacherFeedbackAfterMinutes?: unknown;
+        }) => {
+          if (
+            typeof d?.holdDurationMinutes === "number" &&
+            Number.isFinite(d.holdDurationMinutes) &&
+            d.holdDurationMinutes > 0
+          ) {
+            setHoldMin(Math.round(d.holdDurationMinutes));
+          }
+          if (
+            typeof d?.teacherBlockMinutes === "number" &&
+            Number.isFinite(d.teacherBlockMinutes) &&
+            d.teacherBlockMinutes > 0
+          ) {
+            setTeacherBlockMin(Math.round(d.teacherBlockMinutes));
+          }
+          if (
+            typeof d?.demoAutoCompleteAfterMinutes === "number" &&
+            Number.isFinite(d.demoAutoCompleteAfterMinutes) &&
+            d.demoAutoCompleteAfterMinutes > 0
+          ) {
+            setDemoAutoCompleteMin(Math.round(d.demoAutoCompleteAfterMinutes));
+          }
+          if (
+            typeof d?.teacherFeedbackAfterMinutes === "number" &&
+            Number.isFinite(d.teacherFeedbackAfterMinutes) &&
+            d.teacherFeedbackAfterMinutes > 0
+          ) {
+            setFeedbackAfterMin(Math.round(d.teacherFeedbackAfterMinutes));
+          }
+        },
+      )
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    lastFailedSlotRef.current = {};
+    setMeetErrors({});
+    prevMeetRowIdsRef.current = new Set();
+    prevDemoStatusRef.current = {};
+  }, [lead.id]);
+
+  useEffect(() => {
+    const ac = demoAutoCompleteMin;
+    const run = () => {
+      setRows((prev) => {
+        const now = Date.now();
+        let changed = false;
+        const next = prev.map((row) => {
+          if (row.status !== "Scheduled") return row;
+          const slot = parseIstSlot(row.isoDate, row.timeHmIST);
+          if (!slot || Number.isNaN(slot.getTime())) return row;
+          if (now >= addMinutes(slot, ac).getTime()) {
+            changed = true;
+            return { ...row, status: "Completed" };
+          }
+          return row;
+        });
+        return changed ? next : prev;
+      });
+    };
+    run();
+    const id = window.setInterval(run, 60_000);
+    return () => clearInterval(id);
+  }, [demoAutoCompleteMin, lead.id]);
 
   const [rowAction, setRowAction] = useState<
     { type: "edit"; index: number } | { type: "send"; index: number } | null
@@ -1127,7 +1566,13 @@ function DemoSection({
   useEffect(() => {
     const r = (lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined)
       ?.rows;
-    if (Array.isArray(r)) setRows(r);
+    if (!Array.isArray(r)) return;
+    setRows(
+      r.map((row) => ({
+        ...row,
+        meetRowId: row.meetRowId?.trim() || crypto.randomUUID(),
+      })),
+    );
   }, [lead.id, lead.pipelineMeta]);
 
   useEffect(() => {
@@ -1144,6 +1589,204 @@ function DemoSection({
     }, 700);
     return () => window.clearTimeout(t);
   }, [rows, lead.id, onPatchLead, lead.pipelineMeta]);
+
+  useEffect(() => {
+    const ids = new Set(
+      rows.map((r) => r.meetRowId?.trim()).filter((x): x is string => !!x),
+    );
+    const prev = prevMeetRowIdsRef.current;
+    for (const id of prev) {
+      if (!ids.has(id)) {
+        void fetch("/api/meet-links/bookings/release", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadId: lead.id, meetRowId: id }),
+        });
+      }
+    }
+    prevMeetRowIdsRef.current = ids;
+  }, [rows, lead.id]);
+
+  useEffect(() => {
+    const toRelease: string[] = [];
+    const toClearMeet = new Set<string>();
+
+    for (const row of rows) {
+      const id = row.meetRowId?.trim();
+      if (!id) continue;
+      const cur = row.status;
+      const prev = prevDemoStatusRef.current[id];
+
+      if (prev === undefined) {
+        prevDemoStatusRef.current[id] = cur;
+        continue;
+      }
+
+      if (
+        prev !== cur &&
+        prev === "Scheduled" &&
+        (cur === "Cancelled" || cur === "Completed")
+      ) {
+        toRelease.push(id);
+        if (cur === "Cancelled") toClearMeet.add(id);
+      }
+
+      prevDemoStatusRef.current[id] = cur;
+    }
+
+    for (const id of toRelease) {
+      void fetch("/api/meet-links/bookings/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id, meetRowId: id }),
+      });
+    }
+
+    if (toClearMeet.size > 0) {
+      const clearIds = toClearMeet;
+      setRows((prev) =>
+        prev.map((r) => {
+          const id = r.meetRowId?.trim();
+          if (!id || !clearIds.has(id)) return r;
+          return {
+            ...r,
+            meetLinkUrl: "",
+            meetBookingId: "",
+            meetWindowStartIso: "",
+            meetWindowEndIso: "",
+          };
+        }),
+      );
+    }
+  }, [rows, lead.id]);
+
+  useEffect(() => {
+    const gen = ++assignGenRef.current;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        if (gen !== assignGenRef.current) return;
+        const leadId = leadRef.current.id;
+        const hold = holdMin;
+        const snapshot = rowsRef.current;
+        const updates = new Map<
+          string,
+          {
+            meetLinkUrl: string;
+            meetBookingId: string;
+            meetWindowStartIso: string;
+            meetWindowEndIso: string;
+          }
+        >();
+        const clearedIds = new Set<string>();
+        const newErrors: Record<string, string> = {};
+
+        for (const row of snapshot) {
+          const meetRowId = row.meetRowId?.trim();
+          if (!meetRowId) continue;
+          if (row.status !== "Scheduled") continue;
+          if (!row.teacher?.trim()) continue;
+
+          const slotKey = `${row.isoDate}|${row.timeHmIST}|${row.teacher}`;
+          const prevFail = lastFailedSlotRef.current[meetRowId];
+          if (prevFail && prevFail !== slotKey) {
+            delete lastFailedSlotRef.current[meetRowId];
+          }
+
+          const slot = parseIstSlot(row.isoDate, row.timeHmIST);
+          if (!slot || slot.getTime() < Date.now()) {
+            continue;
+          }
+
+          const win = computeMeetWindow(row.isoDate, row.timeHmIST, hold);
+          if (!win) continue;
+
+          if (
+            row.meetLinkUrl &&
+            row.meetWindowStartIso === win.start.toISOString() &&
+            row.meetWindowEndIso === win.end.toISOString()
+          ) {
+            continue;
+          }
+
+          if (lastFailedSlotRef.current[meetRowId] === slotKey) {
+            continue;
+          }
+
+          const res = await fetch("/api/meet-links/assign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              leadId,
+              meetRowId,
+              isoDate: row.isoDate,
+              timeHmIST: row.timeHmIST,
+              durationMinutes: hold,
+              teacherBlockMinutes: teacherBlockMin,
+              teacher: row.teacher.trim(),
+            }),
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            code?: string;
+            meetLinkUrl?: string;
+            meetBookingId?: string;
+            meetWindowStartIso?: string;
+            meetWindowEndIso?: string;
+          };
+
+          if (gen !== assignGenRef.current) return;
+
+          if (!res.ok) {
+            lastFailedSlotRef.current[meetRowId] = slotKey;
+            newErrors[meetRowId] =
+              typeof data.error === "string" ? data.error : "Could not assign Meet link.";
+            clearedIds.add(meetRowId);
+            continue;
+          }
+
+          delete lastFailedSlotRef.current[meetRowId];
+          updates.set(meetRowId, {
+            meetLinkUrl: data.meetLinkUrl ?? "",
+            meetBookingId: data.meetBookingId ?? "",
+            meetWindowStartIso: data.meetWindowStartIso ?? "",
+            meetWindowEndIso: data.meetWindowEndIso ?? "",
+          });
+        }
+
+        if (gen !== assignGenRef.current) return;
+
+        if (Object.keys(newErrors).length > 0 || updates.size > 0 || clearedIds.size > 0) {
+          setMeetErrors((prev) => {
+            const next = { ...prev };
+            for (const id of updates.keys()) delete next[id];
+            for (const [id, msg] of Object.entries(newErrors)) next[id] = msg;
+            return next;
+          });
+        }
+
+        if (updates.size > 0 || clearedIds.size > 0) {
+          setRows((prev) =>
+            prev.map((row) => {
+              const id = row.meetRowId?.trim();
+              if (!id) return row;
+              if (clearedIds.has(id)) {
+                return {
+                  ...row,
+                  meetLinkUrl: "",
+                  meetBookingId: "",
+                  meetWindowStartIso: "",
+                  meetWindowEndIso: "",
+                };
+              }
+              const u = updates.get(id);
+              return u ? { ...row, ...u } : row;
+            }),
+          );
+        }
+      })();
+    }, 900);
+    return () => window.clearTimeout(t);
+  }, [rows, lead.id, holdMin, teacherBlockMin]);
 
   const activeRow =
     rowAction && rows[rowAction.index] ? rows[rowAction.index] : null;
@@ -1166,12 +1809,37 @@ function DemoSection({
                 </span>
               ) : null}
             </div>
-            <p className="mt-0.5 max-w-xl text-xs leading-snug text-slate-500">
-              Schedule in{" "}
-              <span className="font-medium text-slate-600">IST</span>.{" "}
-              <span className="font-medium text-slate-600">Student time</span>{" "}
-              is their local date &amp; time on the invite.
-            </p>
+            <div className="mt-0.5 max-w-2xl space-y-1 text-xs leading-snug text-slate-500">
+              <p>
+                Schedule trial classes in{" "}
+                <span className="font-medium text-slate-600">India Standard Time (IST)</span>
+                . Student time shows how the slot reads in their timezone on the
+                invite.
+              </p>
+              <p>
+                Each row reserves{" "}
+                <span className="font-medium text-slate-600">
+                  one teacher and one Google Meet link
+                </span>
+                . The same teacher cannot overlap another demo for{" "}
+                <span className="tabular-nums">{teacherBlockMin}</span> minutes
+                from this start time. Meet links stay held for{" "}
+                <span className="tabular-nums">{holdMin}</span> minutes.
+                Demos left as{" "}
+                <span className="font-medium text-slate-600">Scheduled</span> are
+                marked{" "}
+                <span className="font-medium text-slate-600">Completed</span>{" "}
+                automatically{" "}
+                <span className="tabular-nums">{demoAutoCompleteMin}</span>{" "}
+                minutes after start.{" "}
+                <span className="font-medium text-slate-600">Cancelled</span>{" "}
+                frees the Meet URL and teacher for that slot. About{" "}
+                <span className="tabular-nums">{feedbackAfterMin}</span> minutes
+                after the start, you can email or copy a{" "}
+                <span className="font-medium text-slate-600">one-time teacher feedback</span>{" "}
+                link; it stops working after the teacher submits.
+              </p>
+            </div>
           </div>
           {showAddInHeader ? (
             <button
@@ -1215,6 +1883,8 @@ function DemoSection({
             <DemoForm
               lead={lead}
               faculties={faculties}
+              meetHoldDurationMinutes={holdMin}
+              teacherBlockDurationMinutes={teacherBlockMin}
               onCancel={() => setExpanded(false)}
               onSchedule={(r) => {
                 const nextRows = [r];
@@ -1235,7 +1905,7 @@ function DemoSection({
             />
           ) : (
             <div className="overflow-auto">
-              <table className={cn(SX.dataTable, "min-w-[520px]")}>
+              <table className={cn(SX.dataTable, "min-w-[720px]")}>
                 <thead>
                   <tr>
                     <th className={SX.dataTh}>#</th>
@@ -1243,6 +1913,8 @@ function DemoSection({
                     <th className={SX.dataTh}>Teacher</th>
                     <th className={SX.dataTh}>When (India)</th>
                     <th className={SX.dataTh}>Student time</th>
+                    <th className={SX.dataTh}>Google Meet</th>
+                    <th className={SX.dataTh}>Teacher feedback</th>
                     <th className={SX.dataTh}>Status</th>
                     <th className={SX.dataTh}>Actions</th>
                   </tr>
@@ -1250,8 +1922,30 @@ function DemoSection({
                 <tbody>
                   {rows.map((r, i) => {
                     const slot = parseIstSlot(r.isoDate, r.timeHmIST);
+                    const meetId = r.meetRowId?.trim();
+                    const slotFuture =
+                      slot != null && !Number.isNaN(slot.getTime()) && slot.getTime() >= Date.now();
+                    const nowCoarse = new Date();
+                    const feedbackEligibleAt =
+                      r.status !== "Cancelled" &&
+                      meetId &&
+                      !r.teacherFeedbackSubmittedAt
+                        ? getTeacherFeedbackEligibleAt(r)
+                        : null;
+                    const feedbackCountdownMin =
+                      feedbackEligibleAt &&
+                      isBefore(nowCoarse, feedbackEligibleAt)
+                        ? Math.max(
+                            0,
+                            differenceInMinutes(feedbackEligibleAt, nowCoarse),
+                          )
+                        : null;
+                    const feedbackCanSend =
+                      Boolean(feedbackEligibleAt) &&
+                      feedbackCountdownMin === null &&
+                      !r.teacherFeedbackSubmittedAt;
                     return (
-                      <tr key={i} className="min-h-[44px]">
+                      <tr key={meetId ?? i} className="min-h-[44px]">
                         <td
                           className={cn(
                             SX.dataTd,
@@ -1320,6 +2014,122 @@ function DemoSection({
                             </>
                           ) : (
                             <span className="text-[12px]">—</span>
+                          )}
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "max-w-[min(220px,40vw)] py-2.5 align-top",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {r.status === "Cancelled" ? (
+                            <span className="text-[11px] leading-snug text-slate-400">
+                              Meet link and teacher slot released for this time.
+                            </span>
+                          ) : r.meetLinkUrl ? (
+                            <div className="flex flex-col gap-1">
+                              <a
+                                href={r.meetLinkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="break-all text-[11px] font-medium text-[#1565c0] underline decoration-[#90caf9] underline-offset-2 hover:text-[#0d47a1]"
+                              >
+                                {r.meetLinkUrl}
+                              </a>
+                              <button
+                                type="button"
+                                className={cn(
+                                  demoActionBtn,
+                                  "self-start px-1.5 py-0.5 text-[10px]",
+                                )}
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(r.meetLinkUrl!);
+                                }}
+                              >
+                                Copy link
+                              </button>
+                            </div>
+                          ) : r.status === "Scheduled" && slotFuture ? (
+                            meetId && meetErrors[meetId] ? (
+                              <span className="text-[11px] leading-snug text-amber-900">
+                                {meetErrors[meetId]}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-500">
+                                Reserving a link…
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-[12px] text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td
+                          className={cn(
+                            SX.dataTd,
+                            "max-w-[min(200px,34vw)] py-2.5 align-top",
+                            i % 2 === 1 && SX.zebraRow,
+                          )}
+                        >
+                          {r.status === "Cancelled" ? (
+                            <span className="text-[12px] text-slate-400">—</span>
+                          ) : r.teacherFeedbackSubmittedAt ? (
+                            <button
+                              type="button"
+                              className={demoActionBtn}
+                              onClick={() => setFeedbackViewRow(r)}
+                            >
+                              View feedback
+                            </button>
+                          ) : !meetId || !feedbackEligibleAt ? (
+                            <span className="text-[12px] text-slate-400">—</span>
+                          ) : feedbackCountdownMin !== null ? (
+                            <span className="text-[11px] leading-snug text-slate-500">
+                              Form unlocks in{" "}
+                              <span className="tabular-nums font-medium">
+                                {feedbackCountdownMin}
+                              </span>{" "}
+                              min (after {feedbackAfterMin} min from start).
+                            </span>
+                          ) : feedbackCanSend ? (
+                            <div className="flex flex-col gap-1.5">
+                              {r.teacherFeedbackInviteSentAt ? (
+                                <span className="text-[10px] font-medium text-amber-900">
+                                  Awaiting teacher response
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-600">
+                                  Ready to send
+                                </span>
+                              )}
+                              <div className="flex flex-wrap gap-1">
+                                <button
+                                  type="button"
+                                  className={demoActionBtn}
+                                  disabled={feedbackBusyMeetRowId === meetId}
+                                  onClick={() =>
+                                    void sendTeacherFeedbackInvite(meetId, true)
+                                  }
+                                >
+                                  Email teacher
+                                </button>
+                                <button
+                                  type="button"
+                                  className={demoActionBtn}
+                                  disabled={feedbackBusyMeetRowId === meetId}
+                                  onClick={() =>
+                                    void sendTeacherFeedbackInvite(
+                                      meetId,
+                                      false,
+                                    )
+                                  }
+                                >
+                                  Copy link
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-[12px] text-slate-400">—</span>
                           )}
                         </td>
                         <td
@@ -1409,6 +2219,16 @@ function DemoSection({
                   })}
                 </tbody>
               </table>
+              {feedbackError ? (
+                <p className="mt-2 text-xs text-red-700" role="alert">
+                  {feedbackError}
+                </p>
+              ) : null}
+              {feedbackNotice ? (
+                <p className="mt-2 text-xs font-medium text-emerald-900">
+                  {feedbackNotice}
+                </p>
+              ) : null}
               <p className="mt-2 text-xs text-slate-500">
                 {!expanded
                   ? "More demos: use Add another demo in the header."
@@ -1418,6 +2238,8 @@ function DemoSection({
                 <DemoForm
                   lead={lead}
                   faculties={faculties}
+                  meetHoldDurationMinutes={holdMin}
+                  teacherBlockDurationMinutes={teacherBlockMin}
                   onCancel={() => setExpanded(false)}
                   onSchedule={(r) => {
                     setRows((prev) => {
@@ -1445,8 +2267,12 @@ function DemoSection({
             </div>
           )}
           <p className="mt-3 text-[11px] leading-snug text-slate-500">
-            Demos save automatically. Set status to Completed or Cancelled when
-            done; rows stay on the lead for your records.
+            Demos save automatically. Use{" "}
+            <span className="font-medium text-slate-600">Cancelled</span> to
+            release the Meet link and teacher immediately; use{" "}
+            <span className="font-medium text-slate-600">Completed</span> when
+            the class has run. Completed is also set automatically after the
+            time shown above.
           </p>
         </div>
       </section>
@@ -1479,6 +2305,10 @@ function DemoSection({
         headline="Invite sent"
         body="The demo invite email was sent to the address on this lead."
         autoCloseMs={DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS}
+      />
+      <DemoTeacherFeedbackViewDialog
+        row={feedbackViewRow}
+        onClose={() => setFeedbackViewRow(null)}
       />
     </>
   );
@@ -2067,16 +2897,104 @@ function DemoScheduleWarningDialog({
   );
 }
 
+/** Scheduling cannot proceed (Meet links, teacher conflict, etc.). */
+function DemoPreScheduleBlockedDialog({
+  block,
+  onDismiss,
+}: {
+  block: { message: string; title: string; showMeetLinksCta: boolean } | null;
+  onDismiss: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = "demo-preschedule-block-title";
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (block) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [block]);
+
+  useEffect(() => {
+    if (!block) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdropMouseDown = (e: MouseEvent) => {
+      if (e.target === dlg) onDismiss();
+    };
+    dlg.addEventListener("mousedown", onBackdropMouseDown);
+    return () => dlg.removeEventListener("mousedown", onBackdropMouseDown);
+  }, [block, onDismiss]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-1.5rem,26rem)] max-h-[min(90vh,520px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onDismiss}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby={titleId}
+    >
+      <div className="border-b border-[#ffe082] bg-[#fff8e1] px-3 py-2.5">
+        <h2
+          id={titleId}
+          className="text-[13px] font-bold tracking-tight text-[#e65100]"
+        >
+          {block?.title ?? "Scheduling unavailable"}
+        </h2>
+      </div>
+      <div className="max-h-[min(60vh,360px)] overflow-y-auto px-3 py-3">
+        <p className="text-[13px] leading-relaxed text-[#37474f]">
+          {block?.message ?? ""}
+        </p>
+        {block?.showMeetLinksCta ? (
+          <p className="mt-3 text-[12px] leading-relaxed text-[#546e7a]">
+            <Link
+              href="/meet-links"
+              className="font-semibold text-[#1565c0] underline decoration-[#90caf9] underline-offset-2 hover:text-[#0d47a1]"
+            >
+              Open Meet links
+            </Link>{" "}
+            to add or manage Google Meet URLs (sidebar: Meet links).
+          </p>
+        ) : null}
+      </div>
+      <div className="flex justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2">
+        <button
+          type="button"
+          className={SX.btnPrimary}
+          onClick={() => ref.current?.close()}
+        >
+          OK
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function DemoForm({
   lead,
   faculties,
   onCancel,
   onSchedule,
+  meetHoldDurationMinutes,
+  teacherBlockDurationMinutes,
 }: {
   lead: Lead;
   faculties: Faculty[];
   onCancel: () => void;
   onSchedule: (r: DemoTableRow) => void;
+  meetHoldDurationMinutes: number;
+  teacherBlockDurationMinutes: number;
 }) {
   const demoTargetOptions =
     lead.targetExams.length > 0 ? lead.targetExams : [...TARGET_EXAM_OPTIONS];
@@ -2101,6 +3019,16 @@ function DemoForm({
   );
   const [scheduleWarnMsg, setScheduleWarnMsg] = useState<string | null>(null);
   const dismissScheduleWarn = useCallback(() => setScheduleWarnMsg(null), []);
+  const [preScheduleBlock, setPreScheduleBlock] = useState<{
+    message: string;
+    title: string;
+    showMeetLinksCta: boolean;
+  } | null>(null);
+  const dismissPreScheduleBlock = useCallback(
+    () => setPreScheduleBlock(null),
+    [],
+  );
+  const [meetGateBusy, setMeetGateBusy] = useState(false);
   /** If the tab crosses midnight, raw `demoDate` can lag; never schedule or show a past calendar day. */
   const effectiveDemoDate = demoDate < todayStr ? todayStr : demoDate;
 
@@ -2122,6 +3050,7 @@ function DemoForm({
 
   const pickSubject = (s: string) => {
     setScheduleWarnMsg(null);
+    setPreScheduleBlock(null);
     setSubj(s);
     setTeacher(pickDefaultTeacher(s, faculties));
   };
@@ -2222,6 +3151,7 @@ function DemoForm({
                       value={effectiveTeacher}
                       onChange={(e) => {
                         setScheduleWarnMsg(null);
+                        setPreScheduleBlock(null);
                         setTeacher(e.target.value);
                       }}
                       aria-label="Teacher"
@@ -2264,6 +3194,7 @@ function DemoForm({
                             value={effectiveDemoDate}
                             onChange={(e) => {
                               setScheduleWarnMsg(null);
+                              setPreScheduleBlock(null);
                               const v = e.target.value;
                               if (v >= todayStr) setDemoDate(v);
                             }}
@@ -2282,6 +3213,7 @@ function DemoForm({
                             value={demoTime}
                             onChange={(e) => {
                               setScheduleWarnMsg(null);
+                              setPreScheduleBlock(null);
                               setDemoTime(e.target.value);
                             }}
                             className={cn(SX.input, "w-[112px]")}
@@ -2305,6 +3237,7 @@ function DemoForm({
                           value={studentTimeZone}
                           onChange={(e) => {
                             setScheduleWarnMsg(null);
+                            setPreScheduleBlock(null);
                             setStudentTimeZone(e.target.value);
                           }}
                           aria-label="Student timezone for invite preview"
@@ -2347,38 +3280,121 @@ function DemoForm({
             <button
               type="button"
               className={SX.btnPrimary}
-              disabled={!effectiveTeacher.trim()}
+              disabled={!effectiveTeacher.trim() || meetGateBusy}
               onClick={() => {
-                setScheduleWarnMsg(null);
-                if (!effectiveTeacher.trim()) {
-                  setScheduleWarnMsg(
-                    "Choose a teacher from your faculty list.",
-                  );
-                  return;
-                }
-                const slot = parseIstSlot(effectiveDemoDate, demoTime);
-                if (!slot) {
-                  setScheduleWarnMsg("Enter a valid date and time.");
-                  return;
-                }
-                const now = new Date();
-                if (slot.getTime() < now.getTime()) {
-                  setScheduleWarnMsg(
-                    buildPastSlotWarning(slot, studentTimeZone),
-                  );
-                  return;
-                }
-                onSchedule({
-                  subject: subj,
-                  teacher: effectiveTeacher,
-                  studentTimeZone,
-                  status: "Scheduled",
-                  isoDate: effectiveDemoDate,
-                  timeHmIST: demoTime,
-                });
+                void (async () => {
+                  setScheduleWarnMsg(null);
+                  if (!effectiveTeacher.trim()) {
+                    setScheduleWarnMsg(
+                      "Choose a teacher from your faculty list.",
+                    );
+                    return;
+                  }
+                  const slot = parseIstSlot(effectiveDemoDate, demoTime);
+                  if (!slot) {
+                    setScheduleWarnMsg("Enter a valid date and time.");
+                    return;
+                  }
+                  const now = new Date();
+                  if (slot.getTime() < now.getTime()) {
+                    setScheduleWarnMsg(
+                      buildPastSlotWarning(slot, studentTimeZone),
+                    );
+                    return;
+                  }
+                  const meetRowId = crypto.randomUUID();
+                  const hold =
+                    typeof meetHoldDurationMinutes === "number" &&
+                    Number.isFinite(meetHoldDurationMinutes) &&
+                    meetHoldDurationMinutes > 0
+                      ? Math.round(meetHoldDurationMinutes)
+                      : 300;
+                  const tBlock =
+                    typeof teacherBlockDurationMinutes === "number" &&
+                    Number.isFinite(teacherBlockDurationMinutes) &&
+                    teacherBlockDurationMinutes > 0
+                      ? Math.round(teacherBlockDurationMinutes)
+                      : 120;
+                  setMeetGateBusy(true);
+                  try {
+                    const res = await fetch("/api/meet-links/assign", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        leadId: lead.id,
+                        meetRowId,
+                        isoDate: effectiveDemoDate,
+                        timeHmIST: demoTime,
+                        durationMinutes: hold,
+                        teacherBlockMinutes: tBlock,
+                        teacher: effectiveTeacher.trim(),
+                      }),
+                    });
+                    const data = (await res.json().catch(() => ({}))) as {
+                      error?: string;
+                      code?: string;
+                      meetLinkUrl?: string;
+                      meetBookingId?: string;
+                      meetWindowStartIso?: string;
+                      meetWindowEndIso?: string;
+                    };
+                    if (!res.ok) {
+                      const code = data.code;
+                      if (code === "no_links") {
+                        setPreScheduleBlock({
+                          title: "Add a Google Meet link first",
+                          showMeetLinksCta: true,
+                          message:
+                            "There are no Meet URLs on file yet. Add at least one Google Meet link in settings before a trial class can be saved.",
+                        });
+                      } else if (code === "all_busy") {
+                        setPreScheduleBlock({
+                          title: "All Meet links are in use",
+                          showMeetLinksCta: true,
+                          message:
+                            "Every Meet link is already reserved for this slot. Add another link or choose a different date or time, then try again.",
+                        });
+                      } else if (code === "teacher_busy") {
+                        setPreScheduleBlock({
+                          title: "This teacher is already booked",
+                          showMeetLinksCta: false,
+                          message:
+                            typeof data.error === "string"
+                              ? data.error
+                              : "That teacher already has a demo in this time window. Select a different teacher or change the date or time.",
+                        });
+                      } else {
+                        setPreScheduleBlock({
+                          title: "Could not schedule",
+                          showMeetLinksCta: false,
+                          message:
+                            typeof data.error === "string"
+                              ? data.error
+                              : "We could not reserve this demo. Please try again.",
+                        });
+                      }
+                      return;
+                    }
+                    onSchedule({
+                      subject: subj,
+                      teacher: effectiveTeacher,
+                      studentTimeZone,
+                      status: "Scheduled",
+                      isoDate: effectiveDemoDate,
+                      timeHmIST: demoTime,
+                      meetRowId,
+                      meetLinkUrl: data.meetLinkUrl ?? "",
+                      meetBookingId: data.meetBookingId ?? "",
+                      meetWindowStartIso: data.meetWindowStartIso ?? "",
+                      meetWindowEndIso: data.meetWindowEndIso ?? "",
+                    });
+                  } finally {
+                    setMeetGateBusy(false);
+                  }
+                })();
               }}
             >
-              Schedule demo
+              {meetGateBusy ? "Checking availability…" : "Schedule demo"}
             </button>
           </div>
         </div>
@@ -2386,6 +3402,10 @@ function DemoForm({
       <DemoScheduleWarningDialog
         message={scheduleWarnMsg}
         onDismiss={dismissScheduleWarn}
+      />
+      <DemoPreScheduleBlockedDialog
+        block={preScheduleBlock}
+        onDismiss={dismissPreScheduleBlock}
       />
     </>
   );

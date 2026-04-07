@@ -8,6 +8,7 @@ import {
   IconFileText,
   IconGraduationCap,
   IconLandmark,
+  IconLink,
   IconMail,
   IconUserPlus,
   IconWallet,
@@ -21,6 +22,7 @@ const NAV = [
   { href: "/subjects", label: "Subjects", Icon: IconBookOpen },
   { href: "/course-brochure", label: "Course Brochure", Icon: IconFileText },
   { href: "/email-templates", label: "Email Templates", Icon: IconMail },
+  { href: "/meet-links", label: "Meet links", Icon: IconLink },
   { href: "/bank-details", label: "Bank & A/c Details", Icon: IconLandmark },
   { href: "/enroll-student", label: "Enroll Student", Icon: IconUserPlus },
 ] as const;

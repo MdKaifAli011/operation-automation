@@ -18,6 +18,7 @@ export function getPreviewSampleVars(key: EmailTemplateKey): Record<string, stri
         ...base,
         demoSummary:
           "Physics · Dr. Ravi Kumar · 12 Apr 2026 · 4:00 pm IST",
+        meetLink: "https://meet.google.com/abc-defg-hij",
       };
     case "brochure":
       return {

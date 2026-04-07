@@ -67,6 +67,11 @@ type Props = {
   variant?: "standard" | "daily";
   /** Hide follow-up date column (e.g. Ongoing pipeline — use Follow-ups tab for dates). */
   showFollowUpColumn?: boolean;
+  /**
+   * When true, shows the “Status” column (pipeline step dots). Default false — enable on
+   * Interested, Follow-ups, Converted, and Not interested; keep “New & Daily” without it.
+   */
+  showPipelineColumn?: boolean;
 };
 
 export function LeadSheetTable({
@@ -82,6 +87,7 @@ export function LeadSheetTable({
   className,
   variant = "standard",
   showFollowUpColumn = true,
+  showPipelineColumn = false,
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -206,7 +212,9 @@ export function LeadSheetTable({
             <SheetTh w={COL_WIDTHS.targetExams}>Target (exams)</SheetTh>
             <SheetTh w={COL_WIDTHS.country}>Country</SheetTh>
             <SheetTh w={COL_WIDTHS.phone}>Phone</SheetTh>
-            <SheetTh w={COL_WIDTHS.status}>Status</SheetTh>
+            {showPipelineColumn && (
+              <SheetTh w={COL_WIDTHS.status}>Status</SheetTh>
+            )}
             <SheetTh w={COL_WIDTHS.dataType}>Data type</SheetTh>
             {showFollowUpColumn && (
               <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
@@ -509,12 +517,17 @@ export function LeadSheetTable({
                     </a>
                   )}
                 </td>
-                <td
-                  style={{ width: COL_WIDTHS.status }}
-                  className={cn("border border-slate-200/80 px-2 py-1.5", tone)}
-                >
-                  <PipelineDots completed={lead.pipelineSteps} />
-                </td>
+                {showPipelineColumn && (
+                  <td
+                    style={{ width: COL_WIDTHS.status }}
+                    className={cn(
+                      "border border-slate-200/80 px-2 py-1.5",
+                      tone,
+                    )}
+                  >
+                    <PipelineDots completed={lead.pipelineSteps} />
+                  </td>
+                )}
                 <TextCell
                   lead={lead}
                   field="dataType"
