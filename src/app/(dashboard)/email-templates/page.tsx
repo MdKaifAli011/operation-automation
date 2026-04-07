@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
   type Dispatch,
+  type ReactNode,
   type SetStateAction,
 } from "react";
 import { cn } from "@/lib/cn";
@@ -35,6 +36,8 @@ const PIPELINE_ORDER: EmailTemplateKey[] = [
   "schedule",
 ];
 
+const PIPELINE_TOTAL = PIPELINE_ORDER.length;
+
 function stepBadgeIndex(key: EmailTemplateKey): number {
   const i = PIPELINE_ORDER.indexOf(key);
   return i >= 0 ? i + 1 : 0;
@@ -44,8 +47,8 @@ function ChevronIcon({ open, className }: { open: boolean; className?: string })
   return (
     <svg
       className={cn(
-        "h-5 w-5 shrink-0 text-[#757575] transition-transform duration-200",
-        open && "rotate-180",
+        "h-5 w-5 shrink-0 text-[#9e9e9e] transition-transform duration-200",
+        open && "rotate-180 text-[#1565c0]",
         className,
       )}
       viewBox="0 0 24 24"
@@ -65,13 +68,13 @@ function TemplatesSkeleton() {
       {PIPELINE_ORDER.map((k) => (
         <div
           key={k}
-          className="overflow-hidden rounded-none border border-[#e0e0e0] bg-white p-4"
+          className="overflow-hidden border border-[#e0e0e0] bg-white p-4 shadow-sm"
         >
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 animate-pulse rounded-none bg-[#e0e0e0]" />
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="h-4 w-40 animate-pulse rounded-none bg-[#e0e0e0]" />
-              <div className="h-3 w-full max-w-md animate-pulse rounded-none bg-[#f0f0f0]" />
+          <div className="flex items-center gap-4">
+            <div className="h-11 w-11 animate-pulse bg-[#e8eaf0]" />
+            <div className="min-w-0 flex-1 space-y-2.5">
+              <div className="h-4 w-44 animate-pulse bg-[#e8eaf0]" />
+              <div className="h-3 w-full max-w-lg animate-pulse bg-[#f0f0f0]" />
             </div>
           </div>
         </div>
@@ -81,9 +84,17 @@ function TemplatesSkeleton() {
 }
 
 const btnOutline =
-  "rounded-none border border-[#e0e0e0] bg-white px-4 py-2 text-sm font-medium text-[#424242]";
+  "inline-flex items-center justify-center border border-[#e0e0e0] bg-white px-4 py-2 text-sm font-medium text-[#424242] transition-colors hover:bg-[#fafafa]";
 const btnGreen =
-  "rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white disabled:opacity-60";
+  "inline-flex items-center justify-center bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-95 disabled:opacity-60";
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#757575]">
+      {children}
+    </h3>
+  );
+}
 
 function TemplateEditorPanel({
   r,
@@ -112,111 +123,146 @@ function TemplateEditorPanel({
   );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
-      <label className="flex cursor-pointer select-none items-center gap-3 rounded-none border border-[#e0e0e0] bg-white px-3 py-2">
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded-none border-[#e0e0e0] text-[#1565c0] focus:ring-[#1565c0]"
-          checked={r.enabled}
-          onChange={(e) =>
-            patchRow(r.key, {
-              enabled: e.target.checked,
-            })
-          }
-        />
-        <span className="text-sm text-[#424242]">
-          <span className="font-medium">Enabled</span>
-          <span className="ml-1.5 text-[#757575]">
-            — when off, sends using this template are blocked.
-          </span>
-        </span>
-      </label>
+    <div className="mx-auto max-w-6xl space-y-5">
+      {/* Delivery toggle */}
+      <div className="border border-[#e0e0e0] bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <SectionLabel>Delivery</SectionLabel>
+            <p className="mt-1.5 text-sm leading-snug text-[#616161]">
+              Disabled templates cannot be sent from a student lead until turned
+              on again.
+            </p>
+          </div>
+          <label className="flex cursor-pointer select-none items-center gap-3 border border-[#e0e0e0] bg-[#fafafa] px-4 py-3 sm:shrink-0">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded-none border-[#bdbdbd] text-[#1565c0] focus:ring-2 focus:ring-[#1565c0]/30"
+              checked={r.enabled}
+              onChange={(e) =>
+                patchRow(r.key, {
+                  enabled: e.target.checked,
+                })
+              }
+            />
+            <span className="text-sm font-semibold text-[#212121]">
+              {r.enabled ? (
+                <span className="text-[#2e7d32]">On — will send</span>
+              ) : (
+                <span className="text-[#9e9e9e]">Off — blocked</span>
+              )}
+            </span>
+          </label>
+        </div>
+      </div>
 
-      <div>
-        <label
-          htmlFor={`sub-${r.key}`}
-          className="text-xs font-bold uppercase tracking-wide text-[#757575]"
-        >
-          Email subject
-        </label>
+      {/* Subject */}
+      <div className="border border-[#e0e0e0] bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <label htmlFor={`sub-${r.key}`}>
+            <SectionLabel>Email subject</SectionLabel>
+          </label>
+          <span className="text-[10px] text-[#9e9e9e]">
+            Supports {"{{placeholders}}"}
+          </span>
+        </div>
         <input
           id={`sub-${r.key}`}
-          className="mt-1 w-full rounded-none border border-[#e0e0e0] bg-white px-2 py-2 text-sm text-[#212121] outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
+          className="mt-2 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 text-sm text-[#212121] outline-none transition-shadow placeholder:text-[#bdbdbd] focus:border-[#1565c0] focus:shadow-[inset_0_0_0_1px_#1565c0]"
           value={r.subject}
           onChange={(e) => patchRow(r.key, { subject: e.target.value })}
           autoComplete="off"
+          placeholder="e.g. Welcome — {{studentName}}"
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-        <div>
-          <label
-            htmlFor={`body-${r.key}`}
-            className="text-xs font-bold uppercase tracking-wide text-[#757575]"
-          >
-            HTML body
-          </label>
-          <textarea
-            id={`body-${r.key}`}
-            className="mt-1 min-h-[240px] w-full resize-y rounded-none border border-[#e0e0e0] bg-white px-2 py-2 font-mono text-[13px] leading-relaxed text-[#212121] outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0] lg:min-h-[320px]"
-            value={r.bodyHtml}
-            onChange={(e) => patchRow(r.key, { bodyHtml: e.target.value })}
-            spellCheck={false}
-          />
-          <p className="mt-1.5 text-[11px] text-[#757575]">
-            Use HTML tags (e.g.{" "}
-            <code className="rounded-none bg-[#eeeeee] px-1">&lt;p&gt;</code>,{" "}
-            <code className="rounded-none bg-[#eeeeee] px-1">&lt;br /&gt;</code>
-            ,{" "}
-            <code className="rounded-none bg-[#eeeeee] px-1">
-              &lt;a href=&quot;…&quot;&gt;
-            </code>
-            ). Preview updates as you type.
-          </p>
-        </div>
-
-        <aside className="space-y-2 lg:sticky lg:top-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-[#757575]">
-            Live preview
-          </p>
-          <p className="text-[11px] leading-snug text-[#757575]">
-            Sample student/parent data — real sends use each lead&apos;s fields.
-          </p>
-          <div className="overflow-hidden rounded-none border border-[#e0e0e0] bg-white shadow-sm">
-            <div className="border-b border-[#e0e0e0] bg-[#f5f5f5] px-3 py-2.5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-[#757575]">
-                Subject line
-              </p>
-              <p className="mt-1 break-words text-sm font-semibold text-[#212121]">
-                {previewSubject || "(empty subject)"}
-              </p>
+      {/* Editor | Preview */}
+      <div className="overflow-hidden border border-[#e0e0e0] bg-white shadow-sm">
+        <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-[#e0e0e0]">
+          <div className="flex flex-col p-4 sm:p-5">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <SectionLabel>HTML body</SectionLabel>
+              <span className="font-mono text-[10px] font-medium text-[#9e9e9e]">
+                monospace
+              </span>
             </div>
-            <iframe
-              title={`Email preview: ${r.name}`}
-              className="block h-[min(420px,50vh)] w-full border-0 bg-[#eceff1] lg:h-[min(480px,55vh)]"
-              srcDoc={iframeSrcDoc}
-              sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            <textarea
+              id={`body-${r.key}`}
+              className="min-h-[260px] w-full flex-1 resize-y border border-[#e0e0e0] bg-[#fafafa] px-3 py-2.5 font-mono text-[13px] leading-relaxed text-[#212121] outline-none focus:border-[#1565c0] focus:bg-white focus:shadow-[inset_0_0_0_1px_#1565c0] lg:min-h-[320px]"
+              value={r.bodyHtml}
+              onChange={(e) => patchRow(r.key, { bodyHtml: e.target.value })}
+              spellCheck={false}
+              placeholder="<p>Hello {{parentName}},</p>"
             />
+            <p className="mt-3 text-[11px] leading-relaxed text-[#757575]">
+              Use tags like{" "}
+              <code className="bg-[#eeeeee] px-1 py-0.5 font-mono text-[11px] text-[#424242]">
+                &lt;p&gt;
+              </code>
+              ,{" "}
+              <code className="bg-[#eeeeee] px-1 py-0.5 font-mono text-[11px] text-[#424242]">
+                &lt;br /&gt;
+              </code>
+              ,{" "}
+              <code className="bg-[#eeeeee] px-1 py-0.5 font-mono text-[11px] text-[#424242]">
+                &lt;a href=&quot;…&quot;&gt;
+              </code>
+              . The preview updates as you type.
+            </p>
           </div>
-        </aside>
+
+          <div className="flex flex-col border-t border-[#e0e0e0] bg-[#eceff1] p-4 sm:p-5 lg:border-t-0">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <SectionLabel>Live preview</SectionLabel>
+              <span
+                className="border border-[#ffe082] bg-[#fffde7] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#f57f17]"
+                title="Not real lead data"
+              >
+                Sample data
+              </span>
+            </div>
+            <p className="mb-3 text-[11px] leading-relaxed text-[#546e7a]">
+              Shows how this template looks with example names and numbers. Real
+              emails use each lead&apos;s fields.
+            </p>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-[#cfd8dc] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+              <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] px-3 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#9e9e9e]">
+                  Subject line
+                </p>
+                <p className="mt-1 break-words text-sm font-semibold leading-snug text-[#212121]">
+                  {previewSubject.trim() ? previewSubject : "(empty subject)"}
+                </p>
+              </div>
+              <iframe
+                title={`Email preview: ${r.name}`}
+                className="block min-h-[280px] w-full flex-1 border-0 bg-white sm:min-h-[360px] lg:min-h-[320px]"
+                srcDoc={iframeSrcDoc}
+                sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Placeholders */}
       {meta?.placeholders?.length ? (
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-[#757575]">
-            Placeholders
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="border border-[#e0e0e0] bg-[#fafafa] p-4 sm:p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <SectionLabel>Placeholders you can use</SectionLabel>
+            <span className="text-[10px] text-[#9e9e9e]">Click to copy</span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
             {meta.placeholders.map((ph) => (
               <button
                 key={ph}
                 type="button"
-                title="Copy to clipboard"
+                title={`Copy ${ph}`}
                 className={cn(
-                  "rounded-none border px-2 py-1 font-mono text-[11px] transition-colors",
+                  "border px-2.5 py-1.5 font-mono text-[11px] transition-colors",
                   copiedPh === ph
-                    ? "border-[#2e7d32] bg-[#e8f5e9] text-[#2e7d32]"
-                    : "border-[#e0e0e0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
+                    ? "border-[#2e7d32] bg-[#e8f5e9] text-[#1b5e20]"
+                    : "border-[#e0e0e0] bg-white text-[#424242] shadow-sm hover:border-[#1565c0] hover:bg-[#e3f2fd]",
                 )}
                 onClick={() => {
                   void navigator.clipboard.writeText(ph);
@@ -226,13 +272,10 @@ function TemplateEditorPanel({
                   }, 1600);
                 }}
               >
-                {copiedPh === ph ? "Copied!" : ph}
+                {copiedPh === ph ? "Copied ✓" : ph}
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-[#757575]">
-            Click a placeholder to copy.
-          </p>
         </div>
       ) : null}
     </div>
@@ -348,113 +391,161 @@ export default function EmailTemplatesPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <div className="space-y-8">
+      {/* Title + actions */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 max-w-3xl">
           <h1 className="text-xl font-bold text-[#212121]">
             Email Templates Management
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-[#757575]">
-            Edit subjects and HTML for pipeline emails (demo, brochure, fees,
-            enrollment, schedule). These send from the student workspace. Use
-            placeholders like{" "}
-            <code className="rounded-none bg-[#f5f5f5] px-1 py-0.5 font-mono text-[13px] text-[#424242]">
+          <p className="mt-2 text-sm leading-relaxed text-[#757575]">
+            Messages for the student pipeline: demo invite, brochure, fees,
+            enrollment link, and schedule. Edit HTML here; sends use data from
+            each lead. Placeholders look like{" "}
+            <code className="border border-[#e0e0e0] bg-[#fafafa] px-1.5 py-0.5 font-mono text-[13px] text-[#424242]">
               {"{{studentName}}"}
-            </code>{" "}
-            — values are filled from each lead when you send.
+            </code>
+            .
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/" className={btnOutline}>
-            Leads
-          </Link>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void load()}
-            className={btnOutline}
-          >
-            Refresh
-          </button>
-          <button
-            type="button"
-            disabled={saving || loading || !dirty}
-            onClick={() => void save()}
-            className={btnGreen}
-          >
-            {saving ? "Saving…" : "Save all"}
-          </button>
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Link href="/" className={btnOutline}>
+              Leads
+            </Link>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void load()}
+              className={btnOutline}
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              disabled={saving || loading || !dirty}
+              onClick={() => void save()}
+              className={btnGreen}
+            >
+              {saving ? "Saving…" : "Save all"}
+            </button>
+          </div>
+          <div className="flex min-h-[24px] flex-wrap items-center gap-2 border-t border-[#eeeeee] pt-2 sm:border-0 sm:pt-0">
+            {dirty ? (
+              <span className="inline-flex items-center gap-1.5 border border-[#ffe082] bg-[#fffde7] px-2 py-1 text-[11px] font-semibold text-[#f57f17]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#f57f17]" aria-hidden />
+                Unsaved changes
+              </span>
+            ) : null}
+            {savedAt && !dirty ? (
+              <span className="inline-flex items-center gap-1.5 border border-[#c8e6c9] bg-[#e8f5e9] px-2 py-1 text-[11px] font-medium text-[#2e7d32]">
+                Saved {new Date(savedAt).toLocaleString()}
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      {dirty ? (
-        <p className="text-xs text-[#f57f17]">Unsaved changes.</p>
-      ) : null}
-      {savedAt && !dirty ? (
-        <p className="text-xs text-[#2e7d32]">
-          Saved {new Date(savedAt).toLocaleString()}.
-        </p>
-      ) : null}
-
       {error ? (
-        <p className="text-sm text-rose-700" role="alert">
+        <div
+          className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+          role="alert"
+        >
           {error}{" "}
           <button
             type="button"
-            className="underline"
+            className="font-semibold underline underline-offset-2"
             onClick={() => void load()}
           >
             Retry
           </button>
-        </p>
+        </div>
       ) : null}
 
-      <section className="space-y-3 rounded-none border border-[#e0e0e0] bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-bold text-[#212121]">SMTP status</h2>
-        <p className="text-sm text-[#757575]">
-          Outbound email uses environment variables on the server. Without SMTP,
-          you can still edit templates; sends from a lead will fail until
-          configured.
-        </p>
-        {!smtpConfigured ? (
-          <p className="text-sm text-[#c62828]">
-            Not configured — add{" "}
-            <code className="rounded-none bg-[#ffebee] px-1 font-mono text-[13px]">
-              SMTP_HOST
-            </code>
-            ,{" "}
-            <code className="rounded-none bg-[#ffebee] px-1 font-mono text-[13px]">
-              SMTP_PORT
-            </code>
-            ,{" "}
-            <code className="rounded-none bg-[#ffebee] px-1 font-mono text-[13px]">
-              SMTP_USER
-            </code>
-            ,{" "}
-            <code className="rounded-none bg-[#ffebee] px-1 font-mono text-[13px]">
-              SMTP_PASS
-            </code>{" "}
-            (and optionally{" "}
-            <code className="rounded-none bg-[#ffebee] px-1 font-mono text-[13px]">
-              EMAIL_FROM
-            </code>
-            ) in <span className="font-medium">.env</span>.
-          </p>
-        ) : (
-          <p className="text-sm font-medium text-[#2e7d32]">
-            SMTP detected — sends from the student detail page will use these
-            templates.
-          </p>
+      {/* SMTP */}
+      <section
+        className={cn(
+          "border border-[#e0e0e0] bg-white shadow-sm",
+          smtpConfigured ? "border-l-4 border-l-[#2e7d32]" : "border-l-4 border-l-[#c62828]",
         )}
+      >
+        <div className="p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-[#212121]">
+                Outbound email (SMTP)
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[#757575]">
+                The server sends mail using your environment variables. Templates
+                below only apply after SMTP is set up.
+              </p>
+            </div>
+            <span
+              className={cn(
+                "shrink-0 border px-3 py-1 text-xs font-bold uppercase tracking-wide",
+                smtpConfigured
+                  ? "border-[#c8e6c9] bg-[#e8f5e9] text-[#2e7d32]"
+                  : "border-[#ffcdd2] bg-[#ffebee] text-[#c62828]",
+              )}
+            >
+              {smtpConfigured ? "Ready" : "Not set"}
+            </span>
+          </div>
+          <div className="mt-4 border-t border-[#eeeeee] pt-4">
+            {!smtpConfigured ? (
+              <ul className="list-inside list-disc space-y-1.5 text-sm text-[#424242]">
+                <li>
+                  Add{" "}
+                  <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
+                    SMTP_HOST
+                  </code>
+                  ,{" "}
+                  <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
+                    SMTP_PORT
+                  </code>
+                  ,{" "}
+                  <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
+                    SMTP_USER
+                  </code>
+                  ,{" "}
+                  <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
+                    SMTP_PASS
+                  </code>{" "}
+                  to <span className="font-semibold">.env</span>
+                </li>
+                <li>
+                  Optional:{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    EMAIL_FROM
+                  </code>
+                  ,{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    NEXT_PUBLIC_APP_URL
+                  </code>{" "}
+                  for links in emails
+                </li>
+              </ul>
+            ) : (
+              <p className="text-sm font-medium text-[#2e7d32]">
+                SMTP is configured. Pipeline actions on a student will send using
+                the templates below.
+              </p>
+            )}
+          </div>
+        </div>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e0e0] pb-2">
-        <h2 className="text-lg font-bold text-[#212121]">
-          Templates ({sortedRows.length})
-        </h2>
+      {/* Template list header */}
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b-2 border-[#e0e0e0] pb-3">
+        <div>
+          <h2 className="text-lg font-bold text-[#212121]">Templates</h2>
+          <p className="mt-1 text-sm text-[#757575]">
+            {PIPELINE_TOTAL} pipeline steps · expand one to edit and preview
+          </p>
+        </div>
         <button
           type="button"
-          className="text-sm text-[#1565c0] underline"
+          className={btnOutline}
           onClick={allExpanded ? collapseAllTemplates : expandAllTemplates}
         >
           {allExpanded ? "Collapse all" : "Expand all"}
@@ -464,23 +555,24 @@ export default function EmailTemplatesPage() {
       {loading ? (
         <TemplatesSkeleton />
       ) : sortedRows.length === 0 ? (
-        <div className="rounded-none border border-dashed border-[#e0e0e0] bg-[#fafafa] px-6 py-12 text-center">
-          <p className="text-sm font-medium text-[#212121]">
-            No templates found
+        <div className="border border-dashed border-[#bdbdbd] bg-[#fafafa] px-6 py-14 text-center">
+          <p className="text-base font-semibold text-[#424242]">
+            No templates loaded
           </p>
-          <p className="mt-1 text-sm text-[#757575]">
-            Defaults are created on first load — try refreshing.
+          <p className="mx-auto mt-2 max-w-md text-sm text-[#757575]">
+            Defaults are created automatically. Try refreshing — check MongoDB
+            if this persists.
           </p>
           <button
             type="button"
-            className={cn(btnGreen, "mt-4")}
+            className={cn(btnGreen, "mt-6")}
             onClick={() => void load()}
           >
             Reload
           </button>
         </div>
       ) : (
-        <ul className="space-y-4">
+        <ul className="space-y-3">
           {sortedRows.map((r) => {
             const meta = EMAIL_TEMPLATE_META[r.key];
             const step = stepBadgeIndex(r.key);
@@ -489,9 +581,9 @@ export default function EmailTemplatesPage() {
               <li key={r.key}>
                 <section
                   className={cn(
-                    "overflow-hidden rounded-none border bg-white shadow-sm",
+                    "overflow-hidden border bg-white shadow-sm transition-shadow",
                     open
-                      ? "border-[#1565c0]"
+                      ? "border-[#1565c0] shadow-[0_0_0_1px_rgba(21,101,192,0.15)]"
                       : "border-[#e0e0e0] hover:border-[#bdbdbd]",
                   )}
                 >
@@ -501,11 +593,11 @@ export default function EmailTemplatesPage() {
                     aria-expanded={open}
                     aria-controls={`email-tpl-panel-${r.key}`}
                     onClick={() => toggleExpanded(r.key)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#fafafa] md:gap-4 md:px-4 md:py-3"
+                    className="flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-[#fafafa] sm:px-5"
                   >
                     <span
                       className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-none text-sm font-bold tabular-nums text-white",
+                        "flex h-11 w-11 shrink-0 items-center justify-center text-sm font-bold tabular-nums text-white",
                         r.enabled ? "bg-[#1565c0]" : "bg-[#9e9e9e]",
                       )}
                       aria-hidden
@@ -514,24 +606,29 @@ export default function EmailTemplatesPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-[#212121]">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
+                          Step {step} of {PIPELINE_TOTAL}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <span className="text-base font-bold text-[#212121]">
                           {r.name}
                         </span>
-                        <span className="rounded-none bg-[#e3f2fd] px-2 py-0.5 font-mono text-[11px] text-[#1565c0]">
+                        <span className="border border-[#bbdefb] bg-[#e3f2fd] px-2 py-0.5 font-mono text-[11px] text-[#1565c0]">
                           {r.key}
                         </span>
                         <span
                           className={cn(
-                            "rounded-none px-2 py-0.5 text-xs",
+                            "border px-2 py-0.5 text-xs font-semibold",
                             r.enabled
-                              ? "bg-[#e8f5e9] text-[#2e7d32]"
-                              : "bg-[#f5f5f5] text-[#757575]",
+                              ? "border-[#c8e6c9] bg-[#e8f5e9] text-[#2e7d32]"
+                              : "border-[#e0e0e0] bg-[#f5f5f5] text-[#757575]",
                           )}
                         >
                           {r.enabled ? "Active" : "Paused"}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs leading-snug text-[#757575]">
+                      <p className="mt-1.5 text-xs leading-relaxed text-[#757575]">
                         {meta?.description ?? r.description}
                       </p>
                     </div>
@@ -542,7 +639,7 @@ export default function EmailTemplatesPage() {
                       id={`email-tpl-panel-${r.key}`}
                       role="region"
                       aria-labelledby={`email-tpl-trigger-${r.key}`}
-                      className="border-t border-[#e0e0e0] bg-[#fafafa] px-4 py-4"
+                      className="border-t border-[#e0e0e0] bg-[#fafafa] px-3 py-5 sm:px-5"
                     >
                       <TemplateEditorPanel
                         r={r}
