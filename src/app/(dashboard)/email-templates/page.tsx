@@ -1,8 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { cn } from "@/lib/cn";
+import { buildEmailPreviewHtml } from "@/lib/email/emailPreviewHtml";
+import { getPreviewSampleVars } from "@/lib/email/previewSampleVars";
+import { renderTemplate } from "@/lib/email/renderTemplate";
 import {
   EMAIL_TEMPLATE_META,
   type EmailTemplateKey,
@@ -74,6 +84,160 @@ const btnOutline =
   "rounded-none border border-[#e0e0e0] bg-white px-4 py-2 text-sm font-medium text-[#424242]";
 const btnGreen =
   "rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white disabled:opacity-60";
+
+function TemplateEditorPanel({
+  r,
+  patchRow,
+  copiedPh,
+  setCopiedPh,
+}: {
+  r: TemplateRow;
+  patchRow: (key: EmailTemplateKey, patch: Partial<TemplateRow>) => void;
+  copiedPh: string | null;
+  setCopiedPh: Dispatch<SetStateAction<string | null>>;
+}) {
+  const meta = EMAIL_TEMPLATE_META[r.key];
+  const previewVars = useMemo(() => getPreviewSampleVars(r.key), [r.key]);
+  const previewSubject = useMemo(
+    () => renderTemplate(r.subject, previewVars),
+    [r.subject, previewVars],
+  );
+  const previewBodyHtml = useMemo(
+    () => renderTemplate(r.bodyHtml, previewVars),
+    [r.bodyHtml, previewVars],
+  );
+  const iframeSrcDoc = useMemo(
+    () => buildEmailPreviewHtml(previewBodyHtml),
+    [previewBodyHtml],
+  );
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-4">
+      <label className="flex cursor-pointer select-none items-center gap-3 rounded-none border border-[#e0e0e0] bg-white px-3 py-2">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded-none border-[#e0e0e0] text-[#1565c0] focus:ring-[#1565c0]"
+          checked={r.enabled}
+          onChange={(e) =>
+            patchRow(r.key, {
+              enabled: e.target.checked,
+            })
+          }
+        />
+        <span className="text-sm text-[#424242]">
+          <span className="font-medium">Enabled</span>
+          <span className="ml-1.5 text-[#757575]">
+            — when off, sends using this template are blocked.
+          </span>
+        </span>
+      </label>
+
+      <div>
+        <label
+          htmlFor={`sub-${r.key}`}
+          className="text-xs font-bold uppercase tracking-wide text-[#757575]"
+        >
+          Email subject
+        </label>
+        <input
+          id={`sub-${r.key}`}
+          className="mt-1 w-full rounded-none border border-[#e0e0e0] bg-white px-2 py-2 text-sm text-[#212121] outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
+          value={r.subject}
+          onChange={(e) => patchRow(r.key, { subject: e.target.value })}
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <div>
+          <label
+            htmlFor={`body-${r.key}`}
+            className="text-xs font-bold uppercase tracking-wide text-[#757575]"
+          >
+            HTML body
+          </label>
+          <textarea
+            id={`body-${r.key}`}
+            className="mt-1 min-h-[240px] w-full resize-y rounded-none border border-[#e0e0e0] bg-white px-2 py-2 font-mono text-[13px] leading-relaxed text-[#212121] outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0] lg:min-h-[320px]"
+            value={r.bodyHtml}
+            onChange={(e) => patchRow(r.key, { bodyHtml: e.target.value })}
+            spellCheck={false}
+          />
+          <p className="mt-1.5 text-[11px] text-[#757575]">
+            Use HTML tags (e.g.{" "}
+            <code className="rounded-none bg-[#eeeeee] px-1">&lt;p&gt;</code>,{" "}
+            <code className="rounded-none bg-[#eeeeee] px-1">&lt;br /&gt;</code>
+            ,{" "}
+            <code className="rounded-none bg-[#eeeeee] px-1">
+              &lt;a href=&quot;…&quot;&gt;
+            </code>
+            ). Preview updates as you type.
+          </p>
+        </div>
+
+        <aside className="space-y-2 lg:sticky lg:top-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-[#757575]">
+            Live preview
+          </p>
+          <p className="text-[11px] leading-snug text-[#757575]">
+            Sample student/parent data — real sends use each lead&apos;s fields.
+          </p>
+          <div className="overflow-hidden rounded-none border border-[#e0e0e0] bg-white shadow-sm">
+            <div className="border-b border-[#e0e0e0] bg-[#f5f5f5] px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-[#757575]">
+                Subject line
+              </p>
+              <p className="mt-1 break-words text-sm font-semibold text-[#212121]">
+                {previewSubject || "(empty subject)"}
+              </p>
+            </div>
+            <iframe
+              title={`Email preview: ${r.name}`}
+              className="block h-[min(420px,50vh)] w-full border-0 bg-[#eceff1] lg:h-[min(480px,55vh)]"
+              srcDoc={iframeSrcDoc}
+              sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            />
+          </div>
+        </aside>
+      </div>
+
+      {meta?.placeholders?.length ? (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-[#757575]">
+            Placeholders
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {meta.placeholders.map((ph) => (
+              <button
+                key={ph}
+                type="button"
+                title="Copy to clipboard"
+                className={cn(
+                  "rounded-none border px-2 py-1 font-mono text-[11px] transition-colors",
+                  copiedPh === ph
+                    ? "border-[#2e7d32] bg-[#e8f5e9] text-[#2e7d32]"
+                    : "border-[#e0e0e0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
+                )}
+                onClick={() => {
+                  void navigator.clipboard.writeText(ph);
+                  setCopiedPh(ph);
+                  window.setTimeout(() => {
+                    setCopiedPh((c) => (c === ph ? null : c));
+                  }, 1600);
+                }}
+              >
+                {copiedPh === ph ? "Copied!" : ph}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-[#757575]">
+            Click a placeholder to copy.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function EmailTemplatesPage() {
   const [rows, setRows] = useState<TemplateRow[]>([]);
@@ -380,114 +544,12 @@ export default function EmailTemplatesPage() {
                       aria-labelledby={`email-tpl-trigger-${r.key}`}
                       className="border-t border-[#e0e0e0] bg-[#fafafa] px-4 py-4"
                     >
-                      <div className="mx-auto max-w-3xl space-y-4">
-                        <label className="flex cursor-pointer select-none items-center gap-3 rounded-none border border-[#e0e0e0] bg-white px-3 py-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded-none border-[#e0e0e0] text-[#1565c0] focus:ring-[#1565c0]"
-                            checked={r.enabled}
-                            onChange={(e) =>
-                              patchRow(r.key, {
-                                enabled: e.target.checked,
-                              })
-                            }
-                          />
-                          <span className="text-sm text-[#424242]">
-                            <span className="font-medium">Enabled</span>
-                            <span className="ml-1.5 text-[#757575]">
-                              — when off, sends using this template are blocked.
-                            </span>
-                          </span>
-                        </label>
-
-                        <div>
-                          <label
-                            htmlFor={`sub-${r.key}`}
-                            className="text-xs font-bold uppercase tracking-wide text-[#757575]"
-                          >
-                            Email subject
-                          </label>
-                          <input
-                            id={`sub-${r.key}`}
-                            className="mt-1 w-full rounded-none border border-[#e0e0e0] bg-white px-2 py-2 text-sm text-[#212121] outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
-                            value={r.subject}
-                            onChange={(e) =>
-                              patchRow(r.key, { subject: e.target.value })
-                            }
-                            autoComplete="off"
-                          />
-                        </div>
-
-                        <div>
-                          <label
-                            htmlFor={`body-${r.key}`}
-                            className="text-xs font-bold uppercase tracking-wide text-[#757575]"
-                          >
-                            HTML body
-                          </label>
-                          <textarea
-                            id={`body-${r.key}`}
-                            className="mt-1 min-h-[220px] w-full resize-y rounded-none border border-[#e0e0e0] bg-white px-2 py-2 font-mono text-[13px] leading-relaxed text-[#212121] outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
-                            value={r.bodyHtml}
-                            onChange={(e) =>
-                              patchRow(r.key, { bodyHtml: e.target.value })
-                            }
-                            spellCheck={false}
-                          />
-                          <p className="mt-1.5 text-[11px] text-[#757575]">
-                            Use HTML tags (e.g.{" "}
-                            <code className="rounded-none bg-[#eeeeee] px-1">
-                              &lt;p&gt;
-                            </code>
-                            ,{" "}
-                            <code className="rounded-none bg-[#eeeeee] px-1">
-                              &lt;br /&gt;
-                            </code>
-                            ,{" "}
-                            <code className="rounded-none bg-[#eeeeee] px-1">
-                              &lt;a href=&quot;…&quot;&gt;
-                            </code>
-                            ).
-                          </p>
-                        </div>
-
-                        {meta?.placeholders?.length ? (
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wide text-[#757575]">
-                              Placeholders
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {meta.placeholders.map((ph) => (
-                                <button
-                                  key={ph}
-                                  type="button"
-                                  title="Copy to clipboard"
-                                  className={cn(
-                                    "rounded-none border px-2 py-1 font-mono text-[11px] transition-colors",
-                                    copiedPh === ph
-                                      ? "border-[#2e7d32] bg-[#e8f5e9] text-[#2e7d32]"
-                                      : "border-[#e0e0e0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
-                                  )}
-                                  onClick={() => {
-                                    void navigator.clipboard.writeText(ph);
-                                    setCopiedPh(ph);
-                                    window.setTimeout(() => {
-                                      setCopiedPh((c) =>
-                                        c === ph ? null : c,
-                                      );
-                                    }, 1600);
-                                  }}
-                                >
-                                  {copiedPh === ph ? "Copied!" : ph}
-                                </button>
-                              ))}
-                            </div>
-                            <p className="mt-2 text-[11px] text-[#757575]">
-                              Click a placeholder to copy.
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
+                      <TemplateEditorPanel
+                        r={r}
+                        patchRow={patchRow}
+                        copiedPh={copiedPh}
+                        setCopiedPh={setCopiedPh}
+                      />
                     </div>
                   ) : null}
                 </section>
