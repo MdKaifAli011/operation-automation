@@ -8,6 +8,7 @@ import {
   IconFileText,
   IconGraduationCap,
   IconLandmark,
+  IconMail,
   IconUserPlus,
   IconWallet,
 } from "@/components/icons/CrmIcons";
@@ -19,6 +20,7 @@ const NAV = [
   { href: "/faculties", label: "Faculties", Icon: IconGraduationCap },
   { href: "/subjects", label: "Subjects", Icon: IconBookOpen },
   { href: "/course-brochure", label: "Course Brochure", Icon: IconFileText },
+  { href: "/email-templates", label: "Email Templates", Icon: IconMail },
   { href: "/bank-details", label: "Bank & A/c Details", Icon: IconLandmark },
   { href: "/enroll-student", label: "Enroll Student", Icon: IconUserPlus },
 ] as const;

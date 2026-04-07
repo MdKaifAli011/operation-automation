@@ -37,6 +37,7 @@ import {
 } from "@/lib/pipeline";
 import { primaryExamForFee } from "@/lib/examFeeDefaults";
 import { extrasForLead } from "@/lib/student-detail";
+import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
 import { SX } from "@/components/student/student-excel-ui";
 import {
   IconCalendar,
@@ -1023,6 +1024,8 @@ function DemoSection({
   );
   const [shareSuccessOpen, setShareSuccessOpen] = useState(false);
   const dismissShareSuccess = useCallback(() => setShareSuccessOpen(false), []);
+  const [sendEmailError, setSendEmailError] = useState<string | null>(null);
+  const [sendEmailBusy, setSendEmailBusy] = useState(false);
 
   const [rowAction, setRowAction] = useState<
     { type: "edit"; index: number } | { type: "send"; index: number } | null
@@ -1034,6 +1037,8 @@ function DemoSection({
     setRowAction(null);
     setEditDraft(null);
     setEditError(null);
+    setSendEmailError(null);
+    setSendEmailBusy(false);
   }, []);
 
   const patchEditDraft = useCallback((patch: Partial<DemoTableRow>) => {
@@ -1057,33 +1062,57 @@ function DemoSection({
     closeRowModal();
   }, [editDraft, rowAction, closeRowModal]);
 
-  const confirmSendRow = useCallback(() => {
+  const confirmSendRow = useCallback(async () => {
     if (rowAction?.type !== "send") return;
     const idx = rowAction.index;
     const row = rows[idx];
+    if (!row) {
+      closeRowModal();
+      return;
+    }
+    const to = lead.email?.trim();
+    if (!to) {
+      setSendEmailError(
+        "Add an email on this lead (top of page) before sending.",
+      );
+      return;
+    }
+    setSendEmailBusy(true);
+    setSendEmailError(null);
+    try {
+      await sendLeadPipelineEmail(lead.id, {
+        templateKey: "demo_invite",
+        demoRowIndex: idx,
+      });
+    } catch (e) {
+      setSendEmailError(
+        e instanceof Error ? e.message : "Could not send email.",
+      );
+      setSendEmailBusy(false);
+      return;
+    }
+    setSendEmailBusy(false);
     closeRowModal();
     setShareSuccessOpen(true);
-    if (row) {
-      const at = new Date().toISOString();
-      const nextRows = rows.map((r, j) =>
-        j === idx ? { ...r, inviteSent: true, inviteSentAt: at } : r,
-      );
-      setRows(nextRows);
-      void onPatchLead({
-        pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-          demo: {
-            rows: nextRows,
-            lastInviteSharedAt: at,
-            lastInviteSummary: demoRowSummaryLine(row),
-          },
-        }),
-        activityLog: appendActivity(
-          lead.activityLog,
-          "demo",
-          `Demo invite shared with family: ${demoRowSummaryLine(row)}`,
-        ),
-      });
-    }
+    const at = new Date().toISOString();
+    const nextRows = rows.map((r, j) =>
+      j === idx ? { ...r, inviteSent: true, inviteSentAt: at } : r,
+    );
+    setRows(nextRows);
+    void onPatchLead({
+      pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+        demo: {
+          rows: nextRows,
+          lastInviteSharedAt: at,
+          lastInviteSummary: demoRowSummaryLine(row),
+        },
+      }),
+      activityLog: appendActivity(
+        lead.activityLog,
+        "demo",
+        `Demo invite emailed to family: ${demoRowSummaryLine(row)}`,
+      ),
+    });
   }, [
     rowAction,
     rows,
@@ -1091,6 +1120,8 @@ function DemoSection({
     onPatchLead,
     lead.pipelineMeta,
     lead.activityLog,
+    lead.email,
+    lead.id,
   ]);
 
   useEffect(() => {
@@ -1354,9 +1385,10 @@ function DemoSection({
                                   ? "Invite marked sent — tap to open again"
                                   : "Share demo invite"
                               }
-                              onClick={() =>
-                                setRowAction({ type: "send", index: i })
-                              }
+                              onClick={() => {
+                                setSendEmailError(null);
+                                setRowAction({ type: "send", index: i });
+                              }}
                             >
                               {r.inviteSent ? (
                                 <>
@@ -1433,6 +1465,8 @@ function DemoSection({
         summary={activeRow ? demoRowSummaryLine(activeRow) : ""}
         onClose={closeRowModal}
         onConfirm={confirmSendRow}
+        sending={sendEmailBusy}
+        error={sendEmailError}
       />
       <DemoScheduleSuccessDialog
         open={scheduleSuccessOpen}
@@ -1442,8 +1476,8 @@ function DemoSection({
         open={shareSuccessOpen}
         onDismiss={dismissShareSuccess}
         headerTitle="Sent"
-        headline="Invite queued"
-        body="The demo join link will be sent to the parent using your usual channel (SMS / WhatsApp / email)."
+        headline="Invite sent"
+        body="The demo invite email was sent to the address on this lead."
         autoCloseMs={DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS}
       />
     </>
@@ -1667,12 +1701,16 @@ function DemoSendRowDialog({
   summary,
   onClose,
   onConfirm,
+  sending,
+  error,
 }: {
   open: boolean;
   lead: Lead;
   summary: string;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
+  sending?: boolean;
+  error?: string | null;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -1744,17 +1782,37 @@ function DemoSendRowDialog({
           {" · "}
           <span className="tabular-nums">{formatLeadPhone(lead)}</span>
         </p>
+        {lead.email?.trim() ? (
+          <p className="mt-2 text-[11px] text-[#546e7a]">
+            Email:{" "}
+            <span className="font-medium text-[#37474f]">{lead.email}</span>
+          </p>
+        ) : (
+          <p className="mt-2 text-[12px] font-medium text-[#b71c1c]">
+            No email on this lead — add one at the top of the page before
+            sending.
+          </p>
+        )}
+        {error ? (
+          <p className="mt-2 text-[12px] text-[#b71c1c]">{error}</p>
+        ) : null}
       </div>
       <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
         <button
           type="button"
           className={SX.btnSecondary}
+          disabled={sending}
           onClick={() => ref.current?.close()}
         >
           Cancel
         </button>
-        <button type="button" className={SX.btnPrimary} onClick={onConfirm}>
-          Send link
+        <button
+          type="button"
+          className={SX.btnPrimary}
+          disabled={sending || !lead.email?.trim()}
+          onClick={() => void onConfirm()}
+        >
+          {sending ? "Sending…" : "Send link"}
         </button>
       </div>
     </dialog>
@@ -2374,6 +2432,8 @@ function BrochureSection({
   const [documentUrl, setDocumentUrl] = useState(br?.documentUrl ?? "");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [brochureEmailBusy, setBrochureEmailBusy] = useState(false);
+  const [brochureEmailErr, setBrochureEmailErr] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement | null>(null);
   const [examBrochureCatalog, setExamBrochureCatalog] =
     useState<ExamBrochureCatalogRow | null>(null);
@@ -2951,6 +3011,7 @@ function BrochureSection({
           </button>
           <button
             type="button"
+            disabled={brochureEmailBusy}
             className={cn(
               "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold transition-colors",
               br?.sentEmail
@@ -2960,20 +3021,42 @@ function BrochureSection({
             onClick={() => {
               const label = brochureFileLabel || "Course brochure";
               const now = new Date().toISOString();
-              void onPatchLead({
-                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                  brochure: {
-                    ...brochurePayload(),
-                    sentEmail: true,
-                    sentEmailAt: now,
-                  },
-                }),
-                activityLog: appendActivity(
-                  lead.activityLog,
-                  "brochure",
-                  `Brochure "${label}" marked sent via email (saved on this lead).`,
-                ),
-              });
+              const to = lead.email?.trim();
+              if (!to) {
+                setBrochureEmailErr(
+                  "Add an email on this lead before sending brochure by email.",
+                );
+                return;
+              }
+              setBrochureEmailErr(null);
+              setBrochureEmailBusy(true);
+              void (async () => {
+                try {
+                  await sendLeadPipelineEmail(lead.id, {
+                    templateKey: "brochure",
+                  });
+                  await onPatchLead({
+                    pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                      brochure: {
+                        ...brochurePayload(),
+                        sentEmail: true,
+                        sentEmailAt: now,
+                      },
+                    }),
+                    activityLog: appendActivity(
+                      lead.activityLog,
+                      "brochure",
+                      `Brochure "${label}" sent by email (saved on this lead).`,
+                    ),
+                  });
+                } catch (e) {
+                  setBrochureEmailErr(
+                    e instanceof Error ? e.message : "Email send failed.",
+                  );
+                } finally {
+                  setBrochureEmailBusy(false);
+                }
+              })();
             }}
           >
             {br?.sentEmail ? (
@@ -2986,11 +3069,16 @@ function BrochureSection({
                   </span>
                 ) : null}
               </>
+            ) : brochureEmailBusy ? (
+              "Sending…"
             ) : (
               "Send via email"
             )}
           </button>
         </div>
+        {brochureEmailErr ? (
+          <p className="mt-2 text-[12px] text-[#b71c1c]">{brochureEmailErr}</p>
+        ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
           Notes save automatically. Generate, upload, or send via WhatsApp /
           email to advance the pipeline.
@@ -3068,6 +3156,10 @@ function FeeSection({
   const [installmentAmounts, setInstallmentAmounts] = useState<number[]>([]);
   const [installmentDates, setInstallmentDates] = useState<string[]>([]);
   const [baseTotal, setBaseTotal] = useState(0);
+  const [feeEmailBusy, setFeeEmailBusy] = useState(false);
+  const [feeEmailErr, setFeeEmailErr] = useState<string | null>(null);
+  const [enrollmentBusy, setEnrollmentBusy] = useState(false);
+  const [enrollmentErr, setEnrollmentErr] = useState<string | null>(null);
   const feesSkipAutosave = useRef(true);
   const leadFeesRef = useRef(lead);
   leadFeesRef.current = lead;
@@ -3629,6 +3721,7 @@ function FeeSection({
           </button>
           <button
             type="button"
+            disabled={feeEmailBusy}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold transition-colors",
               feeFlags?.feeSentEmail
@@ -3636,21 +3729,43 @@ function FeeSection({
                 : SX.btnPrimary,
             )}
             onClick={() => {
+              const to = lead.email?.trim();
+              if (!to) {
+                setFeeEmailErr(
+                  "Add an email on this lead before sending fee details.",
+                );
+                return;
+              }
+              setFeeEmailErr(null);
+              setFeeEmailBusy(true);
               const now = new Date().toISOString();
-              void onPatchLead({
-                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                  fees: {
-                    ...buildFeesMeta(),
-                    feeSentEmail: true,
-                    feeSentEmailAt: now,
-                  },
-                }),
-                activityLog: appendActivity(
-                  lead.activityLog,
-                  "fees",
-                  `Fee structure (₹${finalFee.toLocaleString("en-IN")} final) marked sent by email — saved on lead.`,
-                ),
-              });
+              void (async () => {
+                try {
+                  await sendLeadPipelineEmail(lead.id, {
+                    templateKey: "fees",
+                  });
+                  await onPatchLead({
+                    pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                      fees: {
+                        ...buildFeesMeta(),
+                        feeSentEmail: true,
+                        feeSentEmailAt: now,
+                      },
+                    }),
+                    activityLog: appendActivity(
+                      lead.activityLog,
+                      "fees",
+                      `Fee structure (₹${finalFee.toLocaleString("en-IN")} final) sent by email — saved on lead.`,
+                    ),
+                  });
+                } catch (e) {
+                  setFeeEmailErr(
+                    e instanceof Error ? e.message : "Email send failed.",
+                  );
+                } finally {
+                  setFeeEmailBusy(false);
+                }
+              })();
             }}
           >
             {feeFlags?.feeSentEmail ? (
@@ -3663,12 +3778,15 @@ function FeeSection({
                   </span>
                 ) : null}
               </>
+            ) : feeEmailBusy ? (
+              "Sending…"
             ) : (
               "Email"
             )}
           </button>
           <button
             type="button"
+            disabled={enrollmentBusy}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold transition-colors",
               feeFlags?.enrollmentSent
@@ -3679,21 +3797,43 @@ function FeeSection({
                   ),
             )}
             onClick={() => {
+              const to = lead.email?.trim();
+              if (!to) {
+                setEnrollmentErr(
+                  "Add an email on this lead before sending the enrollment link.",
+                );
+                return;
+              }
+              setEnrollmentErr(null);
+              setEnrollmentBusy(true);
               const now = new Date().toISOString();
-              void onPatchLead({
-                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                  fees: {
-                    ...buildFeesMeta(),
-                    enrollmentSent: true,
-                    enrollmentSentAt: now,
-                  },
-                }),
-                activityLog: appendActivity(
-                  lead.activityLog,
-                  "fees",
-                  "Enrollment form marked sent to family — saved on lead.",
-                ),
-              });
+              void (async () => {
+                try {
+                  await sendLeadPipelineEmail(lead.id, {
+                    templateKey: "enrollment",
+                  });
+                  await onPatchLead({
+                    pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                      fees: {
+                        ...buildFeesMeta(),
+                        enrollmentSent: true,
+                        enrollmentSentAt: now,
+                      },
+                    }),
+                    activityLog: appendActivity(
+                      lead.activityLog,
+                      "fees",
+                      "Enrollment form link emailed to family — saved on lead.",
+                    ),
+                  });
+                } catch (e) {
+                  setEnrollmentErr(
+                    e instanceof Error ? e.message : "Email send failed.",
+                  );
+                } finally {
+                  setEnrollmentBusy(false);
+                }
+              })();
             }}
           >
             {feeFlags?.enrollmentSent ? (
@@ -3706,11 +3846,18 @@ function FeeSection({
                   </span>
                 ) : null}
               </>
+            ) : enrollmentBusy ? (
+              "Sending…"
             ) : (
               "Send enrollment form"
             )}
           </button>
         </div>
+        {feeEmailErr || enrollmentErr ? (
+          <p className="mt-2 text-[12px] text-[#b71c1c]">
+            {[feeEmailErr, enrollmentErr].filter(Boolean).join(" ")}
+          </p>
+        ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
           Scholarship and installments save automatically. Use send actions to
           advance the pipeline.
@@ -3771,6 +3918,8 @@ function ScheduleSection({
   const leadSchedRef = useRef(lead);
   leadSchedRef.current = lead;
   const scheduleSkipAutosave = useRef(true);
+  const [scheduleEmailBusy, setScheduleEmailBusy] = useState(false);
+  const [scheduleEmailErr, setScheduleEmailErr] = useState<string | null>(null);
 
   const [classes, setClasses] = useState<LeadPipelineScheduleClass[]>([]);
   const [weekStart, setWeekStart] = useState(() =>
@@ -4207,6 +4356,7 @@ function ScheduleSection({
           </button>
           <button
             type="button"
+            disabled={scheduleEmailBusy}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
               schedSend?.scheduleSentEmail
@@ -4214,6 +4364,15 @@ function ScheduleSection({
                 : SX.btnPrimary,
             )}
             onClick={() => {
+              const to = lead.email?.trim();
+              if (!to) {
+                setScheduleEmailErr(
+                  "Add an email on this lead before sending the schedule.",
+                );
+                return;
+              }
+              setScheduleEmailErr(null);
+              setScheduleEmailBusy(true);
               const now = new Date().toISOString();
               const prev =
                 lead.pipelineMeta?.schedule &&
@@ -4221,21 +4380,34 @@ function ScheduleSection({
                 !Array.isArray(lead.pipelineMeta.schedule)
                   ? (lead.pipelineMeta.schedule as Record<string, unknown>)
                   : {};
-              void onPatchLead({
-                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                  schedule: {
-                    ...prev,
-                    view,
-                    scheduleSentEmail: true,
-                    scheduleSentEmailAt: now,
-                  },
-                }),
-                activityLog: appendActivity(
-                  lead.activityLog,
-                  "schedule",
-                  "Class schedule sent via email.",
-                ),
-              });
+              void (async () => {
+                try {
+                  await sendLeadPipelineEmail(lead.id, {
+                    templateKey: "schedule",
+                  });
+                  await onPatchLead({
+                    pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                      schedule: {
+                        ...prev,
+                        view,
+                        scheduleSentEmail: true,
+                        scheduleSentEmailAt: now,
+                      },
+                    }),
+                    activityLog: appendActivity(
+                      lead.activityLog,
+                      "schedule",
+                      "Class schedule sent by email.",
+                    ),
+                  });
+                } catch (e) {
+                  setScheduleEmailErr(
+                    e instanceof Error ? e.message : "Email send failed.",
+                  );
+                } finally {
+                  setScheduleEmailBusy(false);
+                }
+              })();
             }}
           >
             {schedSend?.scheduleSentEmail ? (
@@ -4248,11 +4420,16 @@ function ScheduleSection({
                   </span>
                 ) : null}
               </>
+            ) : scheduleEmailBusy ? (
+              "Sending…"
             ) : (
               "Email"
             )}
           </button>
         </div>
+        {scheduleEmailErr ? (
+          <p className="mt-2 text-[12px] text-[#b71c1c]">{scheduleEmailErr}</p>
+        ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
           Table / Calendar choice saves automatically. Send via WhatsApp or
           email to complete the pipeline.
