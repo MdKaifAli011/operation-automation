@@ -15,6 +15,8 @@ const TeacherDemoBookingSchema = new Schema(
       index: true,
     },
     meetRowId: { type: String, required: true, trim: true },
+    /** Normalized subject key (for same teacher/time shared group demos). */
+    subjectKey: { type: String, default: "", trim: true, index: true },
     start: { type: Date, required: true },
     end: { type: Date, required: true },
     /** Original display name for admin/debug */
@@ -25,6 +27,7 @@ const TeacherDemoBookingSchema = new Schema(
 
 TeacherDemoBookingSchema.index({ leadId: 1, meetRowId: 1 }, { unique: true });
 TeacherDemoBookingSchema.index({ teacherKey: 1, start: 1, end: 1 });
+TeacherDemoBookingSchema.index({ teacherKey: 1, subjectKey: 1, start: 1, end: 1 });
 
 export type TeacherDemoBookingDocument = InferSchemaType<
   typeof TeacherDemoBookingSchema

@@ -17,7 +17,67 @@ export type AssignOk = {
   meetBookingId: string;
   meetWindowStartIso: string;
   meetWindowEndIso: string;
+  sharedFromExisting?: boolean;
 };
+
+function normalizeSubjectKey(subject: string): string {
+  return subject.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+type OverlapLean = {
+  leadId: mongoose.Types.ObjectId;
+  meetRowId: string;
+  subjectKey?: string;
+  start: Date;
+  end: Date;
+};
+
+async function attachRowToExistingMeetFromOverlap(
+  overlap: OverlapLean,
+  params: {
+    rowLeadId: mongoose.Types.ObjectId;
+    mrid: string;
+    teacherKey: string;
+    subjectKey: string;
+    teacherTrim: string;
+    teacherWin: { start: Date; end: Date };
+    meetStart: Date;
+    meetEnd: Date;
+  },
+): Promise<AssignOk | null> {
+  const bookedLeadId = String(overlap.leadId);
+  const bookedMeetRowId = String(overlap.meetRowId);
+  const existingMeet = await MeetBookingModel.findOne({
+    leadId: new mongoose.Types.ObjectId(bookedLeadId),
+    meetRowId: bookedMeetRowId,
+  });
+  if (!existingMeet) return null;
+
+  const meetDoc = await MeetBookingModel.create({
+    meetLinkId: existingMeet.meetLinkId,
+    leadId: params.rowLeadId,
+    meetRowId: params.mrid,
+    start: params.meetStart,
+    end: params.meetEnd,
+    meetUrl: existingMeet.meetUrl,
+  });
+  await TeacherDemoBookingModel.create({
+    teacherKey: params.teacherKey,
+    subjectKey: params.subjectKey,
+    teacherDisplay: params.teacherTrim,
+    leadId: params.rowLeadId,
+    meetRowId: params.mrid,
+    start: params.teacherWin.start,
+    end: params.teacherWin.end,
+  });
+  return {
+    meetLinkUrl: existingMeet.meetUrl,
+    meetBookingId: String(meetDoc._id),
+    meetWindowStartIso: params.meetStart.toISOString(),
+    meetWindowEndIso: params.meetEnd.toISOString(),
+    sharedFromExisting: true,
+  };
+}
 
 /**
  * Reserves Google Meet + teacher slot for one demo row.
@@ -28,12 +88,19 @@ export async function assignMeetLinkForDemoRow(params: {
   meetRowId: string;
   isoDate: string;
   timeHmIST: string;
+  /** Subject display name (normalized and stored on the teacher booking row). */
+  subject?: string;
   /** Meet URL hold (minutes from start); defaults from env. */
   durationMinutes?: number;
   /** Teacher display name (required for scheduling). */
   teacher: string;
   /** Teacher block duration; defaults from env (typically 120). */
   teacherBlockMinutes?: number;
+  /**
+   * User confirmed sharing the same Google Meet as another student’s demo in this teacher time window.
+   * Feedback links stay per demo row (per meetRowId).
+   */
+  confirmSharedTeacherSlot?: boolean;
 }): Promise<AssignOk | { error: string; code?: string }> {
   const { leadId, meetRowId, isoDate, timeHmIST } = params;
   if (!mongoose.Types.ObjectId.isValid(leadId)) {
@@ -44,6 +111,7 @@ export async function assignMeetLinkForDemoRow(params: {
   }
 
   const teacherTrim = String(params.teacher ?? "").trim();
+  const subjectTrim = String(params.subject ?? "").trim();
   if (!teacherTrim) {
     return {
       error: "A teacher must be selected before reserving a demo slot.",
@@ -51,6 +119,7 @@ export async function assignMeetLinkForDemoRow(params: {
     };
   }
   const teacherKey = normalizeTeacherKey(teacherTrim);
+  const subjectKey = normalizeSubjectKey(subjectTrim);
   if (!teacherKey) {
     return { error: "A teacher must be selected before reserving a demo slot.", code: "bad_request" };
   }
@@ -73,16 +142,74 @@ export async function assignMeetLinkForDemoRow(params: {
 
   const rowLeadId = new mongoose.Types.ObjectId(leadId);
   const mrid = meetRowId.trim();
+  const { start, end } = meetWin;
 
   await MeetBookingModel.deleteMany({ leadId: rowLeadId, meetRowId: mrid });
   await TeacherDemoBookingModel.deleteMany({ leadId: rowLeadId, meetRowId: mrid });
 
-  const teacherOverlap = await TeacherDemoBookingModel.exists({
+  // Guardrail: do not allow duplicate teacher-slot rows on the same lead.
+  // Group sharing is only for different leads (different students).
+  const duplicateOnSameLead = await TeacherDemoBookingModel.exists({
+    leadId: rowLeadId,
     teacherKey,
     start: { $lt: teacherWin.end },
     end: { $gt: teacherWin.start },
   });
+  if (duplicateOnSameLead) {
+    return {
+      error:
+        "This student already has a demo with the same teacher in this time window. Edit the existing row instead of creating a duplicate.",
+      code: "duplicate_on_same_lead",
+    };
+  }
+
+  const teacherOverlap = (await TeacherDemoBookingModel.findOne({
+    teacherKey,
+    start: { $lt: teacherWin.end },
+    end: { $gt: teacherWin.start },
+  }).lean()) as OverlapLean | null;
+
   if (teacherOverlap) {
+    const otherLeadId = String(teacherOverlap.leadId);
+    if (otherLeadId !== String(rowLeadId)) {
+      const exactWindowMatch =
+        teacherOverlap.start.getTime() === teacherWin.start.getTime() &&
+        teacherOverlap.end.getTime() === teacherWin.end.getTime();
+
+      const attachCtx = {
+        rowLeadId,
+        mrid,
+        teacherKey,
+        subjectKey,
+        teacherTrim,
+        teacherWin,
+        meetStart: start,
+        meetEnd: end,
+      };
+
+      /** Always require explicit confirm when sharing one teacher block across two leads (same Meet, separate feedback). */
+      if (params.confirmSharedTeacherSlot && exactWindowMatch) {
+        const shared = await attachRowToExistingMeetFromOverlap(
+          teacherOverlap,
+          attachCtx,
+        );
+        if (shared) return shared;
+        return {
+          error:
+            "Could not attach to the existing demo — the Meet link for that slot is missing. Try another time or contact support.",
+          code: "shared_slot_missing",
+        };
+      }
+
+      if (exactWindowMatch) {
+        return {
+          error:
+            "This teacher already has a demo in this time slot with another student. You can reuse the same Google Meet link; teacher feedback links stay separate per student.",
+          code: "teacher_busy_joinable",
+        };
+      }
+    }
+
     const mins = teacherDur;
     return {
       error: `This teacher already has a demo in the ${mins}-minute window that starts at this time. Choose another teacher or a different date or time.`,
@@ -101,8 +228,6 @@ export async function assignMeetLinkForDemoRow(params: {
       code: "no_links",
     };
   }
-
-  const { start, end } = meetWin;
 
   for (const link of links) {
     const lid = link._id as mongoose.Types.ObjectId;
@@ -130,6 +255,7 @@ export async function assignMeetLinkForDemoRow(params: {
 
       await TeacherDemoBookingModel.create({
         teacherKey,
+        subjectKey,
         teacherDisplay: teacherTrim,
         leadId: rowLeadId,
         meetRowId: mrid,

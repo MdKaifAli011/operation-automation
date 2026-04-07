@@ -314,7 +314,7 @@ export function LeadManagementPage() {
   };
 
   const filterInput =
-    "mt-1 w-full rounded-none border border-[#d0d0d0] px-2 py-1 text-[13px] shadow-[inset_0_1px_1px_rgba(0,0,0,0.04)]";
+    "mt-1.5 h-9 w-full rounded-none border border-slate-200 bg-white px-3 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
   const statItems = [
     {
@@ -432,13 +432,24 @@ export function LeadManagementPage() {
               <FilterIcon />
             </button>
             {filterOpen && (
-              <div className={SX.leadPopover}>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#616161]">
-                  Date range
-                </p>
-                <div className="mb-3 flex gap-2">
-                  <label className="flex-1 text-[12px]">
-                    <span className="text-[#757575]">From</span>
+              <div
+                className={cn(
+                  SX.leadPopover,
+                  "w-[min(92vw,340px)] rounded-none border-slate-200 p-4 shadow-xl shadow-slate-900/15",
+                )}
+              >
+                <div className="mb-3 border-b border-slate-100 pb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Filters
+                  </p>
+                  <p className="mt-1 text-[12px] text-slate-500">
+                    Narrow the visible lead list
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-[12px]">
+                    <span className="font-medium text-slate-600">From date</span>
                     <input
                       type="date"
                       className={filterInput}
@@ -446,8 +457,8 @@ export function LeadManagementPage() {
                       onChange={(e) => setDateFrom(e.target.value)}
                     />
                   </label>
-                  <label className="flex-1 text-[12px]">
-                    <span className="text-[#757575]">To</span>
+                  <label className="block text-[12px]">
+                    <span className="font-medium text-slate-600">To date</span>
                     <input
                       type="date"
                       className={filterInput}
@@ -456,8 +467,9 @@ export function LeadManagementPage() {
                     />
                   </label>
                 </div>
-                <label className="mb-2 block text-[12px]">
-                  <span className="text-[#757575]">Target exam</span>
+
+                <label className="mt-3 block text-[12px]">
+                  <span className="font-medium text-slate-600">Target exam</span>
                   <select
                     className={filterInput}
                     value={filterCourse}
@@ -471,8 +483,9 @@ export function LeadManagementPage() {
                     ))}
                   </select>
                 </label>
-                <label className="mb-2 block text-[12px]">
-                  <span className="text-[#757575]">Status</span>
+
+                <label className="mt-3 block text-[12px]">
+                  <span className="font-medium text-slate-600">Status</span>
                   <select
                     className={filterInput}
                     value={filterStatus}
@@ -486,18 +499,24 @@ export function LeadManagementPage() {
                     <option value="called_no_response">Called / No Response</option>
                   </select>
                 </label>
-                <button
-                  type="button"
-                  className="mt-1 text-[13px] font-medium text-[#1565c0] underline-offset-2 hover:underline"
-                  onClick={() => {
-                    setDateFrom("");
-                    setDateTo("");
-                    setFilterCourse("");
-                    setFilterStatus("");
-                  }}
-                >
-                  Clear filters
-                </button>
+
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <button
+                    type="button"
+                    className={cn(
+                      SX.btnSecondary,
+                      "h-9 w-full rounded-none border-slate-200 text-[13px]",
+                    )}
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                      setFilterCourse("");
+                      setFilterStatus("");
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                </div>
               </div>
             )}
           </div>

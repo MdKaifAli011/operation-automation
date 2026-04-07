@@ -46,6 +46,7 @@ import {
   IconCalendar,
   IconCalendarLarge,
   IconCheck,
+  IconClipboard,
   IconCloudUpload,
   IconFileText,
   IconLink,
@@ -1332,6 +1333,10 @@ function DemoSection({
   const [feedbackBusyMeetRowId, setFeedbackBusyMeetRowId] = useState<
     string | null
   >(null);
+  const [copiedMeetRowId, setCopiedMeetRowId] = useState<string | null>(null);
+  const [copiedFeedbackMeetRowId, setCopiedFeedbackMeetRowId] = useState<
+    string | null
+  >(null);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [, bumpFeedbackClock] = useState(0);
@@ -1342,10 +1347,11 @@ function DemoSection({
   }, []);
 
   const sendTeacherFeedbackInvite = useCallback(
-    async (meetRowId: string, sendEmail: boolean) => {
+    async (meetRowId: string, sendEmail: boolean): Promise<boolean> => {
       setFeedbackBusyMeetRowId(meetRowId);
       setFeedbackError(null);
       setFeedbackNotice(null);
+      let copied = false;
       try {
         const res = await fetch(
           `/api/leads/${encodeURIComponent(lead.id)}/demo-feedback`,
@@ -1370,6 +1376,7 @@ function DemoSection({
           try {
             await navigator.clipboard.writeText(data.feedbackUrl);
             setFeedbackNotice("Feedback link copied to clipboard.");
+            copied = true;
           } catch {
             setFeedbackNotice(
               `Clipboard unavailable — copy this URL: ${data.feedbackUrl}`,
@@ -1381,16 +1388,30 @@ function DemoSection({
           setFeedbackNotice(data.emailSkippedReason);
         }
         await refreshLead();
+        return copied;
       } catch (e) {
         setFeedbackError(
           e instanceof Error ? e.message : "Could not send feedback link.",
         );
+        return false;
       } finally {
         setFeedbackBusyMeetRowId(null);
       }
     },
     [lead.id, refreshLead],
   );
+
+  useEffect(() => {
+    if (!copiedMeetRowId) return;
+    const t = window.setTimeout(() => setCopiedMeetRowId(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [copiedMeetRowId]);
+
+  useEffect(() => {
+    if (!copiedFeedbackMeetRowId) return;
+    const t = window.setTimeout(() => setCopiedFeedbackMeetRowId(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [copiedFeedbackMeetRowId]);
 
   useEffect(() => {
     void fetch("/api/meet-links", { cache: "no-store" })
@@ -1686,7 +1707,7 @@ function DemoSection({
           if (row.status !== "Scheduled") continue;
           if (!row.teacher?.trim()) continue;
 
-          const slotKey = `${row.isoDate}|${row.timeHmIST}|${row.teacher}`;
+          const slotKey = `${row.isoDate}|${row.timeHmIST}|${row.teacher}|${row.subject}`;
           const prevFail = lastFailedSlotRef.current[meetRowId];
           if (prevFail && prevFail !== slotKey) {
             delete lastFailedSlotRef.current[meetRowId];
@@ -1720,6 +1741,7 @@ function DemoSection({
               meetRowId,
               isoDate: row.isoDate,
               timeHmIST: row.timeHmIST,
+              subject: row.subject,
               durationMinutes: hold,
               teacherBlockMinutes: teacherBlockMin,
               teacher: row.teacher.trim(),
@@ -1738,8 +1760,13 @@ function DemoSection({
 
           if (!res.ok) {
             lastFailedSlotRef.current[meetRowId] = slotKey;
+            const code = typeof data.code === "string" ? data.code : "";
             newErrors[meetRowId] =
-              typeof data.error === "string" ? data.error : "Could not assign Meet link.";
+              code === "teacher_busy_joinable"
+                ? "This teacher’s slot is already used by another student. Open Schedule a trial class for this lead and confirm sharing the Meet link, or pick another time."
+                : typeof data.error === "string"
+                  ? data.error
+                  : "Could not assign Meet link.";
             clearedIds.add(meetRowId);
             continue;
           }
@@ -1794,7 +1821,7 @@ function DemoSection({
   const showAddInHeader = rows.length > 0 && !expanded;
 
   const demoActionBtn =
-    "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-sm border border-[#e0e0e0] bg-white px-2 text-[11px] font-medium text-[#424242] transition-colors hover:border-[#bdbdbd] hover:bg-[#fafafa] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#1565c0]";
+    "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-none border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary";
 
   return (
     <>
@@ -1804,42 +1831,14 @@ function DemoSection({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
               {lead.pipelineSteps >= 1 ? (
-                <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
+                <span className="rounded-none border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
                   Done
                 </span>
               ) : null}
             </div>
-            <div className="mt-0.5 max-w-2xl space-y-1 text-xs leading-snug text-slate-500">
-              <p>
-                Schedule trial classes in{" "}
-                <span className="font-medium text-slate-600">India Standard Time (IST)</span>
-                . Student time shows how the slot reads in their timezone on the
-                invite.
-              </p>
-              <p>
-                Each row reserves{" "}
-                <span className="font-medium text-slate-600">
-                  one teacher and one Google Meet link
-                </span>
-                . The same teacher cannot overlap another demo for{" "}
-                <span className="tabular-nums">{teacherBlockMin}</span> minutes
-                from this start time. Meet links stay held for{" "}
-                <span className="tabular-nums">{holdMin}</span> minutes.
-                Demos left as{" "}
-                <span className="font-medium text-slate-600">Scheduled</span> are
-                marked{" "}
-                <span className="font-medium text-slate-600">Completed</span>{" "}
-                automatically{" "}
-                <span className="tabular-nums">{demoAutoCompleteMin}</span>{" "}
-                minutes after start.{" "}
-                <span className="font-medium text-slate-600">Cancelled</span>{" "}
-                frees the Meet URL and teacher for that slot. About{" "}
-                <span className="tabular-nums">{feedbackAfterMin}</span> minutes
-                after the start, you can email or copy a{" "}
-                <span className="font-medium text-slate-600">one-time teacher feedback</span>{" "}
-                link; it stops working after the teacher submits.
-              </p>
-            </div>
+            <p className="mt-1 text-[12px] text-slate-500">
+              Schedule and manage trial classes with clear status and quick actions.
+            </p>
           </div>
           {showAddInHeader ? (
             <button
@@ -1872,7 +1871,7 @@ function DemoSection({
                 type="button"
                 className={cn(
                   SX.btnSecondary,
-                  "border-[#1565c0] text-[#1565c0] hover:bg-[#e3f2fd]",
+                  "border-primary text-primary hover:bg-primary/10",
                 )}
                 onClick={() => setExpanded(true)}
               >
@@ -1904,7 +1903,7 @@ function DemoSection({
               }}
             />
           ) : (
-            <div className="overflow-auto">
+            <div className="overflow-auto border border-slate-200">
               <table className={cn(SX.dataTable, "min-w-[720px]")}>
                 <thead>
                   <tr>
@@ -1982,15 +1981,15 @@ function DemoSection({
                         >
                           {slot ? (
                             <>
-                              <div className="text-[13px] font-medium leading-tight text-[#212121]">
+                              <div className="text-[13px] font-medium leading-tight text-slate-900">
                                 {format(parseISO(r.isoDate), "d MMM yyyy")}
                               </div>
-                              <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
+                              <div className="mt-0.5 text-[12px] leading-tight text-slate-600">
                                 {formatTime12hInZone(slot, "Asia/Kolkata")} IST
                               </div>
                             </>
                           ) : (
-                            <span className="text-[12px] text-[#b71c1c]">
+                            <span className="text-[12px] text-slate-400">
                               —
                             </span>
                           )}
@@ -2004,10 +2003,10 @@ function DemoSection({
                         >
                           {slot ? (
                             <>
-                              <div className="text-[13px] font-medium leading-tight text-[#424242]">
+                              <div className="text-[13px] font-medium leading-tight text-slate-800">
                                 {formatDateInZone(slot, r.studentTimeZone)}
                               </div>
-                              <div className="mt-0.5 text-[12px] leading-tight text-[#546e7a]">
+                              <div className="mt-0.5 text-[12px] leading-tight text-slate-600">
                                 {formatTime12hInZone(slot, r.studentTimeZone)}{" "}
                                 {zoneShortLabel(r.studentTimeZone)}
                               </div>
@@ -2028,27 +2027,40 @@ function DemoSection({
                               Meet link and teacher slot released for this time.
                             </span>
                           ) : r.meetLinkUrl ? (
-                            <div className="flex flex-col gap-1">
-                              <a
-                                href={r.meetLinkUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="break-all text-[11px] font-medium text-[#1565c0] underline decoration-[#90caf9] underline-offset-2 hover:text-[#0d47a1]"
-                              >
-                                {r.meetLinkUrl}
-                              </a>
+                            <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 className={cn(
                                   demoActionBtn,
-                                  "self-start px-1.5 py-0.5 text-[10px]",
+                                  "h-7 w-7 px-0",
+                                  copiedMeetRowId === meetId &&
+                                    "border-emerald-500 bg-emerald-50 text-emerald-700",
                                 )}
+                                title="Copy meet link"
+                                aria-label="Copy meet link"
                                 onClick={() => {
-                                  void navigator.clipboard.writeText(r.meetLinkUrl!);
+                                  void navigator.clipboard
+                                    .writeText(r.meetLinkUrl!)
+                                    .then(() => {
+                                      setCopiedMeetRowId(meetId ?? null);
+                                      setFeedbackNotice(
+                                        "Meet link copied to clipboard.",
+                                      );
+                                    })
+                                    .catch(() => {
+                                      setFeedbackError(
+                                        "Could not copy meet link. Please try again.",
+                                      );
+                                    });
                                 }}
                               >
-                                Copy link
+                                <IconClipboard className="h-3.5 w-3.5" />
                               </button>
+                              {copiedMeetRowId === meetId ? (
+                                <span className="text-[10px] font-medium text-emerald-700">
+                                  Copied
+                                </span>
+                              ) : null}
                             </div>
                           ) : r.status === "Scheduled" && slotFuture ? (
                             meetId && meetErrors[meetId] ? (
@@ -2094,18 +2106,18 @@ function DemoSection({
                           ) : feedbackCanSend ? (
                             <div className="flex flex-col gap-1.5">
                               {r.teacherFeedbackInviteSentAt ? (
-                                <span className="text-[10px] font-medium text-amber-900">
+                                <span className="inline-flex w-fit rounded-none border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">
                                   Awaiting teacher response
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-slate-600">
+                                <span className="inline-flex w-fit rounded-none border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-600">
                                   Ready to send
                                 </span>
                               )}
                               <div className="flex flex-wrap gap-1">
                                 <button
                                   type="button"
-                                  className={demoActionBtn}
+                                  className={cn(demoActionBtn, "text-[10px]")}
                                   disabled={feedbackBusyMeetRowId === meetId}
                                   onClick={() =>
                                     void sendTeacherFeedbackInvite(meetId, true)
@@ -2115,17 +2127,28 @@ function DemoSection({
                                 </button>
                                 <button
                                   type="button"
-                                  className={demoActionBtn}
+                                  className={cn(demoActionBtn, "h-7 w-7 px-0")}
                                   disabled={feedbackBusyMeetRowId === meetId}
-                                  onClick={() =>
+                                  title="Copy teacher feedback link"
+                                  aria-label="Copy teacher feedback link"
+                                  onClick={() => {
                                     void sendTeacherFeedbackInvite(
                                       meetId,
                                       false,
-                                    )
-                                  }
+                                    ).then((copied) => {
+                                      if (copied) {
+                                        setCopiedFeedbackMeetRowId(meetId);
+                                      }
+                                    });
+                                  }}
                                 >
-                                  Copy link
+                                  <IconClipboard className="h-3.5 w-3.5" />
                                 </button>
+                                {copiedFeedbackMeetRowId === meetId ? (
+                                  <span className="text-[10px] font-medium text-emerald-700">
+                                    Copied
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           ) : (
@@ -2188,7 +2211,7 @@ function DemoSection({
                                 demoActionBtn,
                                 r.inviteSent
                                   ? "border-2 border-emerald-600 bg-emerald-50 font-semibold text-emerald-900 shadow-sm"
-                                  : "text-[#1565c0] hover:border-[#90caf9] hover:bg-[#e3f2fd]",
+                                  : "text-primary hover:border-primary/40 hover:bg-primary/10",
                               )}
                               aria-label={
                                 r.inviteSent
@@ -2229,11 +2252,6 @@ function DemoSection({
                   {feedbackNotice}
                 </p>
               ) : null}
-              <p className="mt-2 text-xs text-slate-500">
-                {!expanded
-                  ? "More demos: use Add another demo in the header."
-                  : "Complete the form below to add a row."}
-              </p>
               {expanded && (
                 <DemoForm
                   lead={lead}
@@ -2266,16 +2284,55 @@ function DemoSection({
               )}
             </div>
           )}
-          <p className="mt-3 text-[11px] leading-snug text-slate-500">
-            Demos save automatically. Use{" "}
-            <span className="font-medium text-slate-600">Cancelled</span> to
-            release the Meet link and teacher immediately; use{" "}
-            <span className="font-medium text-slate-600">Completed</span> when
-            the class has run. Completed is also set automatically after the
-            time shown above.
-          </p>
         </div>
       </section>
+      <div className="mt-2 rounded-none border border-slate-200 bg-slate-50/60 p-3 text-[11px] leading-snug text-slate-600">
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span className="rounded-none border border-slate-200 bg-white px-2 py-0.5">
+            IST scheduling
+          </span>
+          <span className="rounded-none border border-slate-200 bg-white px-2 py-0.5">
+            Teacher block {teacherBlockMin}m
+          </span>
+          <span className="rounded-none border border-slate-200 bg-white px-2 py-0.5">
+            Meet hold {holdMin}m
+          </span>
+          <span className="rounded-none border border-slate-200 bg-white px-2 py-0.5">
+            Auto-complete {demoAutoCompleteMin}m
+          </span>
+          <span className="rounded-none border border-slate-200 bg-white px-2 py-0.5">
+            Feedback after {feedbackAfterMin}m
+          </span>
+        </div>
+        <div className="space-y-1.5 border-l-2 border-slate-200 pl-2.5">
+          <p>
+            Times are entered in{" "}
+            <span className="font-medium text-slate-700">India Standard Time (IST)</span>.
+            The invite also shows how this slot appears in the student timezone.
+          </p>
+          <p>
+            Every row reserves one teacher and one Meet link. The same teacher
+            cannot overlap another demo for{" "}
+            <span className="tabular-nums">{teacherBlockMin}</span> minutes from
+            this start time.
+          </p>
+          <p>
+            Meet links stay held for{" "}
+            <span className="tabular-nums">{holdMin}</span> minutes. Demos left
+            as <span className="font-medium text-slate-700">Scheduled</span> are
+            auto-marked{" "}
+            <span className="font-medium text-slate-700">Completed</span> after{" "}
+            <span className="tabular-nums">{demoAutoCompleteMin}</span> minutes.{" "}
+            <span className="font-medium text-slate-700">Cancelled</span> frees
+            the teacher and Meet slot.
+          </p>
+          <p>
+            Around <span className="tabular-nums">{feedbackAfterMin}</span>{" "}
+            minutes after start, you can email/copy a one-time teacher feedback
+            link. It expires immediately after submission.
+          </p>
+        </div>
+      </div>
       <DemoEditRowDialog
         open={rowAction?.type === "edit"}
         draft={editDraft}
@@ -2981,6 +3038,116 @@ function DemoPreScheduleBlockedDialog({
   );
 }
 
+/** Another student holds this teacher’s slot; user may confirm reusing the same Meet URL (feedback stays per row). */
+function DemoTeacherSlotShareConfirmDialog({
+  pending,
+  busy,
+  onDismiss,
+  onConfirm,
+}: {
+  pending: {
+    message: string;
+    meetRowId: string;
+    isoDate: string;
+    timeHmIST: string;
+    subject: string;
+    teacher: string;
+    hold: number;
+    tBlock: number;
+  } | null;
+  busy: boolean;
+  onDismiss: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = "demo-teacher-slot-share-title";
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (pending) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [pending]);
+
+  useEffect(() => {
+    if (!pending) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdropMouseDown = (e: MouseEvent) => {
+      if (e.target === dlg && !busy) onDismiss();
+    };
+    dlg.addEventListener("mousedown", onBackdropMouseDown);
+    return () => dlg.removeEventListener("mousedown", onBackdropMouseDown);
+  }, [pending, busy, onDismiss]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[210] w-[min(100vw-1.5rem,26rem)] max-h-[min(90vh,520px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onDismiss}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) ref.current?.close();
+      }}
+      aria-labelledby={titleId}
+    >
+      <div className="border-b border-[#ffe082] bg-[#fff8e1] px-3 py-2.5">
+        <h2
+          id={titleId}
+          className="text-[13px] font-bold tracking-tight text-[#e65100]"
+        >
+          Teacher slot already booked
+        </h2>
+      </div>
+      <div className="max-h-[min(60vh,360px)] overflow-y-auto px-3 py-3">
+        <p className="text-[13px] leading-relaxed text-[#37474f]">
+          {pending?.message ?? ""}
+        </p>
+        <p className="mt-3 text-[12px] leading-relaxed text-[#546e7a]">
+          If you continue, this trial class will use the{" "}
+          <span className="font-semibold text-[#37474f]">
+            same Google Meet link
+          </span>{" "}
+          as the other student. The{" "}
+          <span className="font-semibold text-[#37474f]">
+            teacher feedback link stays separate
+          </span>{" "}
+          for each student.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2">
+        <button
+          type="button"
+          className={SX.btnSecondary}
+          disabled={busy}
+          onClick={() => {
+            if (!busy) ref.current?.close();
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={SX.btnPrimary}
+          disabled={busy}
+          onClick={() => {
+            void onConfirm();
+          }}
+        >
+          {busy ? "Reserving…" : "Use same Meet link"}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function DemoForm({
   lead,
   faculties,
@@ -3028,6 +3195,23 @@ function DemoForm({
     () => setPreScheduleBlock(null),
     [],
   );
+  type ShareSlotPayload = {
+    message: string;
+    meetRowId: string;
+    isoDate: string;
+    timeHmIST: string;
+    subject: string;
+    teacher: string;
+    hold: number;
+    tBlock: number;
+  };
+  const [shareSlotConfirm, setShareSlotConfirm] = useState<ShareSlotPayload | null>(
+    null,
+  );
+  const [shareConfirmBusy, setShareConfirmBusy] = useState(false);
+  const dismissShareSlotConfirm = useCallback(() => {
+    setShareSlotConfirm(null);
+  }, []);
   const [meetGateBusy, setMeetGateBusy] = useState(false);
   /** If the tab crosses midnight, raw `demoDate` can lag; never schedule or show a past calendar day. */
   const effectiveDemoDate = demoDate < todayStr ? todayStr : demoDate;
@@ -3051,9 +3235,80 @@ function DemoForm({
   const pickSubject = (s: string) => {
     setScheduleWarnMsg(null);
     setPreScheduleBlock(null);
+    setShareSlotConfirm(null);
     setSubj(s);
     setTeacher(pickDefaultTeacher(s, faculties));
   };
+
+  const confirmSharedTeacherSlotRequest = useCallback(async () => {
+    const p = shareSlotConfirm;
+    if (!p) return;
+    setShareConfirmBusy(true);
+    try {
+      const res = await fetch("/api/meet-links/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: lead.id,
+          meetRowId: p.meetRowId,
+          isoDate: p.isoDate,
+          timeHmIST: p.timeHmIST,
+          subject: p.subject,
+          durationMinutes: p.hold,
+          teacherBlockMinutes: p.tBlock,
+          teacher: p.teacher,
+          confirmSharedTeacherSlot: true,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        meetLinkUrl?: string;
+        meetBookingId?: string;
+        meetWindowStartIso?: string;
+        meetWindowEndIso?: string;
+      };
+      if (!res.ok) {
+        setShareSlotConfirm(null);
+        if (data.code === "shared_slot_missing") {
+          setPreScheduleBlock({
+            title: "Could not reuse Meet link",
+            showMeetLinksCta: false,
+            message:
+              typeof data.error === "string"
+                ? data.error
+                : "The existing slot has no Meet booking to attach to. Try another time.",
+          });
+        } else {
+          setPreScheduleBlock({
+            title: "Could not schedule",
+            showMeetLinksCta: false,
+            message:
+              typeof data.error === "string"
+                ? data.error
+                : "We could not reserve this demo. Please try again.",
+          });
+        }
+        return;
+      }
+      setShareSlotConfirm(null);
+      onSchedule({
+        subject: p.subject,
+        teacher: p.teacher,
+        studentTimeZone,
+        status: "Scheduled",
+        isoDate: p.isoDate,
+        timeHmIST: p.timeHmIST,
+        meetRowId: p.meetRowId,
+        meetLinkUrl: data.meetLinkUrl ?? "",
+        meetBookingId: data.meetBookingId ?? "",
+        meetWindowStartIso: data.meetWindowStartIso ?? "",
+        meetWindowEndIso: data.meetWindowEndIso ?? "",
+      });
+    } finally {
+      setShareConfirmBusy(false);
+    }
+  }, [shareSlotConfirm, lead.id, onSchedule, studentTimeZone]);
 
   return (
     <>
@@ -3152,6 +3407,7 @@ function DemoForm({
                       onChange={(e) => {
                         setScheduleWarnMsg(null);
                         setPreScheduleBlock(null);
+                        setShareSlotConfirm(null);
                         setTeacher(e.target.value);
                       }}
                       aria-label="Teacher"
@@ -3195,6 +3451,7 @@ function DemoForm({
                             onChange={(e) => {
                               setScheduleWarnMsg(null);
                               setPreScheduleBlock(null);
+                              setShareSlotConfirm(null);
                               const v = e.target.value;
                               if (v >= todayStr) setDemoDate(v);
                             }}
@@ -3214,6 +3471,7 @@ function DemoForm({
                             onChange={(e) => {
                               setScheduleWarnMsg(null);
                               setPreScheduleBlock(null);
+                              setShareSlotConfirm(null);
                               setDemoTime(e.target.value);
                             }}
                             className={cn(SX.input, "w-[112px]")}
@@ -3238,6 +3496,7 @@ function DemoForm({
                           onChange={(e) => {
                             setScheduleWarnMsg(null);
                             setPreScheduleBlock(null);
+                            setShareSlotConfirm(null);
                             setStudentTimeZone(e.target.value);
                           }}
                           aria-label="Student timezone for invite preview"
@@ -3280,10 +3539,14 @@ function DemoForm({
             <button
               type="button"
               className={SX.btnPrimary}
-              disabled={!effectiveTeacher.trim() || meetGateBusy}
+              disabled={
+                !effectiveTeacher.trim() || meetGateBusy || shareConfirmBusy
+              }
               onClick={() => {
                 void (async () => {
                   setScheduleWarnMsg(null);
+                  setPreScheduleBlock(null);
+                  setShareSlotConfirm(null);
                   if (!effectiveTeacher.trim()) {
                     setScheduleWarnMsg(
                       "Choose a teacher from your faculty list.",
@@ -3325,6 +3588,7 @@ function DemoForm({
                         meetRowId,
                         isoDate: effectiveDemoDate,
                         timeHmIST: demoTime,
+                        subject: subj,
                         durationMinutes: hold,
                         teacherBlockMinutes: tBlock,
                         teacher: effectiveTeacher.trim(),
@@ -3353,6 +3617,20 @@ function DemoForm({
                           showMeetLinksCta: true,
                           message:
                             "Every Meet link is already reserved for this slot. Add another link or choose a different date or time, then try again.",
+                        });
+                      } else if (code === "teacher_busy_joinable") {
+                        setShareSlotConfirm({
+                          message:
+                            typeof data.error === "string"
+                              ? data.error
+                              : "This teacher already has a trial class in this slot with another student.",
+                          meetRowId,
+                          isoDate: effectiveDemoDate,
+                          timeHmIST: demoTime,
+                          subject: subj,
+                          teacher: effectiveTeacher.trim(),
+                          hold,
+                          tBlock,
                         });
                       } else if (code === "teacher_busy") {
                         setPreScheduleBlock({
@@ -3399,6 +3677,12 @@ function DemoForm({
           </div>
         </div>
       </div>
+      <DemoTeacherSlotShareConfirmDialog
+        pending={shareSlotConfirm}
+        busy={shareConfirmBusy}
+        onDismiss={dismissShareSlotConfirm}
+        onConfirm={confirmSharedTeacherSlotRequest}
+      />
       <DemoScheduleWarningDialog
         message={scheduleWarnMsg}
         onDismiss={dismissScheduleWarn}

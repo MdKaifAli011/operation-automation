@@ -8,9 +8,11 @@ type Body = {
   meetRowId?: unknown;
   isoDate?: unknown;
   timeHmIST?: unknown;
+  subject?: unknown;
   durationMinutes?: unknown;
   teacher?: unknown;
   teacherBlockMinutes?: unknown;
+  confirmSharedTeacherSlot?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -25,6 +27,7 @@ export async function POST(req: Request) {
   const meetRowId = typeof body.meetRowId === "string" ? body.meetRowId.trim() : "";
   const isoDate = typeof body.isoDate === "string" ? body.isoDate.trim() : "";
   const timeHmIST = typeof body.timeHmIST === "string" ? body.timeHmIST.trim() : "";
+  const subject = typeof body.subject === "string" ? body.subject.trim() : "";
   const teacher = typeof body.teacher === "string" ? body.teacher.trim() : "";
 
   let durationMinutes: number | undefined;
@@ -35,6 +38,7 @@ export async function POST(req: Request) {
   if (typeof body.teacherBlockMinutes === "number" && Number.isFinite(body.teacherBlockMinutes)) {
     teacherBlockMinutes = Math.max(15, Math.min(24 * 60, Math.round(body.teacherBlockMinutes)));
   }
+  const confirmSharedTeacherSlot = body.confirmSharedTeacherSlot === true;
 
   if (!leadId || !meetRowId || !isoDate || !timeHmIST) {
     return NextResponse.json(
@@ -55,9 +59,11 @@ export async function POST(req: Request) {
     meetRowId,
     isoDate,
     timeHmIST,
+    subject,
     durationMinutes,
     teacher,
     teacherBlockMinutes,
+    confirmSharedTeacherSlot,
   });
 
   if ("error" in result) {
@@ -66,7 +72,9 @@ export async function POST(req: Request) {
         ? 404
         : result.code === "all_busy" ||
             result.code === "no_links" ||
-            result.code === "teacher_busy"
+            result.code === "teacher_busy" ||
+            result.code === "teacher_busy_joinable" ||
+            result.code === "shared_slot_missing"
           ? 409
           : 400;
     return NextResponse.json({ error: result.error, code: result.code }, { status });
