@@ -178,21 +178,15 @@ export function LeadManagementPage() {
     [filtered],
   );
 
-  /** Ongoing tab · interested pipeline + other tones (excludes New intakes above). */
+  /** Ongoing tab · interested pipeline only (excludes New intakes above). */
   const ongoingSheetLeads = useMemo(
     () => filtered.filter(isLeadInOngoingPipeline),
     [filtered],
   );
 
-  /** Ongoing tab · pipeline: only Interested (Demo → Brochure → …). */
+  /** Ongoing tab · only Interested (Demo → Brochure → …). */
   const ongoingInterestedLeads = useMemo(
     () => ongoingSheetLeads.filter((l) => l.rowTone === "interested"),
-    [ongoingSheetLeads],
-  );
-
-  /** Ongoing tab · other tones on the Ongoing sheet (e.g. called / no response), not Interested. */
-  const ongoingOtherLeads = useMemo(
-    () => ongoingSheetLeads.filter((l) => l.rowTone !== "interested"),
     [ongoingSheetLeads],
   );
 
@@ -226,9 +220,11 @@ export function LeadManagementPage() {
 
   const counts = useMemo(() => {
     const newDaily = leads.filter(isLeadInTodayData).length;
-    const ongoingPipeline = leads.filter(isLeadInOngoingPipeline).length;
-    /** All rows that appear on the Ongoing tab (new + pipeline). */
-    const ongoing = newDaily + ongoingPipeline;
+    const ongoingInterestedOnly = leads.filter(
+      (l) => isLeadInOngoingPipeline(l) && l.rowTone === "interested",
+    ).length;
+    /** Ongoing tab: New & Daily + Interested pipeline only. */
+    const ongoing = newDaily + ongoingInterestedOnly;
     const followup = leads.filter((l) => l.sheetTab === "followup").length;
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
@@ -298,14 +294,14 @@ export function LeadManagementPage() {
 
   const tabCounts = useMemo(
     () => ({
-      ongoing: newAndDailyLeads.length + ongoingSheetLeads.length,
+      ongoing: newAndDailyLeads.length + ongoingInterestedLeads.length,
       not_interested: notInterestedLeads.length,
       followup: followUpLeads.length,
       converted: convertedLeadsThisMonth.length,
     }),
     [
       newAndDailyLeads.length,
-      ongoingSheetLeads.length,
+      ongoingInterestedLeads.length,
       notInterestedLeads.length,
       followUpLeads.length,
       convertedLeadsThisMonth.length,
@@ -707,6 +703,10 @@ export function LeadManagementPage() {
               <section aria-label="Interested ongoing pipeline">
                 <div className={SX.leadSectionHead}>
                   <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
+                  <p className={SX.leadSectionMeta}>
+                    Status <span className="font-medium">Interested</span> only
+                    — other ongoing tones are not listed here.
+                  </p>
                 </div>
                 {ongoingInterestedLeads.length === 0 ? (
                   <div
@@ -735,33 +735,6 @@ export function LeadManagementPage() {
                   />
                 )}
               </section>
-
-              {ongoingOtherLeads.length > 0 && (
-                <section aria-label="Other ongoing leads">
-                  <div className={SX.leadSectionHead}>
-                    <h2 className={SX.leadSectionTitle}>Other (Ongoing)</h2>
-                    <p className={SX.leadSectionMeta}>
-                      {ongoingOtherLeads.length} lead
-                      {ongoingOtherLeads.length === 1 ? "" : "s"} · on the
-                      Ongoing sheet but not yet in the Interested pipeline (e.g.
-                      called / no response)
-                    </p>
-                  </div>
-                  <LeadSheetTable
-                    variant="standard"
-                    showFollowUpColumn={false}
-                    showPipelineColumn={false}
-                    pickDataTypeOnClick
-                    leadSourceOptions={leadSources}
-                    className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                    leads={applyDraftToList(ongoingOtherLeads)}
-                    sheetEditMode={sheetEditMode}
-                    onDraftPatch={onDraftPatch}
-                    onUpdateLead={onUpdateLead}
-                    visibleIds={ongoingOtherLeads.map((l) => l.id)}
-                  />
-                </section>
-              )}
             </div>
           )}
 
