@@ -61,6 +61,7 @@ import { BrochureInlinePreviewFrame } from "@/components/brochure/BrochureInline
 import { normalizeBrochurePreviewUrl } from "@/lib/brochurePreview";
 import { cn } from "@/lib/cn";
 import { computeMeetWindow } from "@/lib/meetLinks/window";
+import { copyTextToClipboard } from "@/lib/copyToClipboard";
 import { randomUuid } from "@/lib/randomUuid";
 import { defaultTimeZoneForCountry } from "@/lib/timezones/countryDefaultTimeZone";
 import {
@@ -1394,13 +1395,13 @@ function DemoSection({
           );
         }
         if (!sendEmail && typeof data.feedbackUrl === "string") {
-          try {
-            await navigator.clipboard.writeText(data.feedbackUrl);
+          const copiedOk = await copyTextToClipboard(data.feedbackUrl);
+          if (copiedOk) {
             setFeedbackNotice("Feedback link copied to clipboard.");
             copied = true;
-          } catch {
+          } else {
             setFeedbackNotice(
-              `Clipboard unavailable — copy this URL: ${data.feedbackUrl}`,
+              `Copy this URL manually: ${data.feedbackUrl}`,
             );
           }
         } else if (sendEmail && data.emailSent) {
@@ -2060,19 +2061,20 @@ function DemoSection({
                                 title="Copy meet link"
                                 aria-label="Copy meet link"
                                 onClick={() => {
-                                  void navigator.clipboard
-                                    .writeText(r.meetLinkUrl!)
-                                    .then(() => {
-                                      setCopiedMeetRowId(meetId ?? null);
-                                      setFeedbackNotice(
-                                        "Meet link copied to clipboard.",
-                                      );
-                                    })
-                                    .catch(() => {
-                                      setFeedbackError(
-                                        "Could not copy meet link. Please try again.",
-                                      );
-                                    });
+                                  void copyTextToClipboard(r.meetLinkUrl!).then(
+                                    (ok) => {
+                                      if (ok) {
+                                        setCopiedMeetRowId(meetId ?? null);
+                                        setFeedbackNotice(
+                                          "Meet link copied to clipboard.",
+                                        );
+                                      } else {
+                                        setFeedbackError(
+                                          "Could not copy meet link. Select HTTPS or copy the URL manually.",
+                                        );
+                                      }
+                                    },
+                                  );
                                 }}
                               >
                                 <IconClipboard className="h-3.5 w-3.5" />

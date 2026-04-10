@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { copyTextToClipboard } from "@/lib/copyToClipboard";
 import { cn } from "@/lib/cn";
 import { buildEmailPreviewHtml } from "@/lib/email/emailPreviewHtml";
 import { getPreviewSampleVars } from "@/lib/email/previewSampleVars";
@@ -265,11 +266,18 @@ function TemplateEditorPanel({
                     : "border-[#e0e0e0] bg-white text-[#424242] shadow-sm hover:border-[#1565c0] hover:bg-[#e3f2fd]",
                 )}
                 onClick={() => {
-                  void navigator.clipboard.writeText(ph);
-                  setCopiedPh(ph);
-                  window.setTimeout(() => {
-                    setCopiedPh((c) => (c === ph ? null : c));
-                  }, 1600);
+                  void copyTextToClipboard(ph).then((ok) => {
+                    if (!ok) {
+                      window.alert(
+                        `Clipboard is not available. Copy this placeholder:\n\n${ph}`,
+                      );
+                      return;
+                    }
+                    setCopiedPh(ph);
+                    window.setTimeout(() => {
+                      setCopiedPh((c) => (c === ph ? null : c));
+                    }, 1600);
+                  });
                 }}
               >
                 {copiedPh === ph ? "Copied ✓" : ph}
