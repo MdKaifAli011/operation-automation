@@ -5,13 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SortDir, SortKey } from "@/lib/types";
 import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { AddStudentLeadDialog } from "./AddStudentLeadDialog";
-import { LeadCsvTemplateButton } from "./LeadCsvTemplateButton";
-import { ExportLeadsButton } from "./ExportLeadsButton";
+import { ExportLeadsDialog } from "./ExportLeadsDialog";
+import { LeadSheetActionsMenu } from "./LeadSheetActionsMenu";
 import { FollowUpDialog } from "./FollowUpDialog";
-import { ImportExcelControl } from "./ImportExcelControl";
+import {
+  ImportExcelControl,
+  type ImportExcelControlHandle,
+} from "./ImportExcelControl";
 import { LeadSheetTable } from "./LeadSheetTable";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
+import { isLeadConvertedInCurrentMonth } from "@/lib/leadConversionMonth";
 
 type LeadMainTab = "ongoing" | "not_interested" | "followup" | "converted";
 
@@ -61,6 +65,8 @@ export function LeadManagementPage() {
   const [leadDraft, setLeadDraft] = useState<Record<string, Partial<Lead>>>(
     {},
   );
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const importExcelRef = useRef<ImportExcelControlHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const refreshLeads = useCallback(async () => {
@@ -192,7 +198,7 @@ export function LeadManagementPage() {
     [filtered],
   );
 
-  /** Converted tab: sheet + full pipeline (all status dots). */
+  /** Converted · full pipeline (before month filter). */
   const convertedLeadsFullPipeline = useMemo(
     () =>
       filtered.filter(
@@ -201,15 +207,20 @@ export function LeadManagementPage() {
     [filtered],
   );
 
+  /** Converted tab + stat: current calendar month only. */
+  const convertedLeadsThisMonth = useMemo(
+    () =>
+      convertedLeadsFullPipeline.filter((l) => isLeadConvertedInCurrentMonth(l)),
+    [convertedLeadsFullPipeline],
+  );
+
   const counts = useMemo(() => {
     const ongoing = leads.filter((l) => l.sheetTab === "ongoing").length;
     const followup = leads.filter((l) => l.sheetTab === "followup").length;
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
     ).length;
-    const converted = leads.filter(
-      (l) => l.sheetTab === "converted" && l.pipelineSteps === 4,
-    ).length;
+    const converted = leads.filter((l) => isLeadConvertedInCurrentMonth(l)).length;
     return { ongoing, followup, notInterested, converted };
   }, [leads]);
 
@@ -277,13 +288,13 @@ export function LeadManagementPage() {
       ongoing: ongoingSheetLeads.length,
       not_interested: notInterestedLeads.length,
       followup: followUpLeads.length,
-      converted: convertedLeadsFullPipeline.length,
+      converted: convertedLeadsThisMonth.length,
     }),
     [
       ongoingSheetLeads.length,
       notInterestedLeads.length,
       followUpLeads.length,
-      convertedLeadsFullPipeline.length,
+      convertedLeadsThisMonth.length,
     ],
   );
 
@@ -316,7 +327,13 @@ export function LeadManagementPage() {
   const filterInput =
     "mt-1.5 h-9 w-full rounded-none border border-slate-200 bg-white px-3 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
-  const statItems = [
+  const statItems: {
+    key: string;
+    label: string;
+    sublabel?: string;
+    value: number;
+    accent: string;
+  }[] = [
     {
       key: "ongoing",
       label: "Ongoing",
@@ -338,10 +355,11 @@ export function LeadManagementPage() {
     {
       key: "conv",
       label: "Converted",
+      sublabel: "Current month",
       value: counts.converted,
       accent: "text-indigo-600",
     },
-  ] as const;
+  ];
 
   return (
     <div className={SX.leadPageRoot}>
@@ -363,11 +381,11 @@ export function LeadManagementPage() {
           Loading leads…
         </p>
       )}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
           Leads
         </h1>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
           <button
             type="button"
             className={cn(
@@ -381,11 +399,23 @@ export function LeadManagementPage() {
             </span>
             Add student
           </button>
-          <ExportLeadsButton leads={leads} />
-          <LeadCsvTemplateButton />
-          <ImportExcelControl onImported={refreshLeads} />
+          <ImportExcelControl
+            ref={importExcelRef}
+            onImported={refreshLeads}
+            showTriggerButton={false}
+          />
+          <LeadSheetActionsMenu
+            onImport={() => importExcelRef.current?.open()}
+            onExportCsv={() => setExportDialogOpen(true)}
+          />
         </div>
       </header>
+
+      <ExportLeadsDialog
+        leads={leads}
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+      />
 
       <div
         className="rounded-none border border-slate-200/80 bg-white px-3 py-3 shadow-sm sm:px-5 sm:py-3.5"
@@ -403,6 +433,11 @@ export function LeadManagementPage() {
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {c.label}
               </span>
+              {c.sublabel ? (
+                <span className="text-[10px] font-medium normal-case tracking-normal text-slate-500">
+                  {c.sublabel}
+                </span>
+              ) : null}
               <span
                 className={cn(
                   "text-2xl font-bold tabular-nums tracking-tight",
@@ -724,6 +759,7 @@ export function LeadManagementPage() {
               <LeadSheetTable
                 showFollowUpColumn={false}
                 showPipelineColumn
+                showNotInterestedRemark
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(notInterestedLeads)}
                 sheetEditMode={sheetEditMode}
@@ -740,24 +776,43 @@ export function LeadManagementPage() {
               aria-label="Converted leads"
             >
               <div className={SX.leadSectionHead}>
-                <h2 className={SX.leadSectionTitle}>Converted</h2>
+                <div className="flex min-w-0 flex-wrap items-baseline gap-2 gap-y-1">
+                  <h2 className={SX.leadSectionTitle}>Converted</h2>
+                  <span className="rounded-none border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
+                    Current month
+                  </span>
+                </div>
                 <p className={SX.leadSectionMeta}>
-                  Students who finished onboarding ·{" "}
-                  {convertedLeadsFullPipeline.length} lead
-                  {convertedLeadsFullPipeline.length === 1 ? "" : "s"} · Status
-                  shows completed pipeline steps
+                  {convertedLeadsThisMonth.length} lead
+                  {convertedLeadsThisMonth.length === 1 ? "" : "s"} who
+                  finished onboarding this calendar month · Status shows
+                  completed pipeline steps
                 </p>
               </div>
-              <LeadSheetTable
-                showFollowUpColumn={false}
-                showPipelineColumn
-                className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                leads={applyDraftToList(convertedLeadsFullPipeline)}
-                sheetEditMode={sheetEditMode}
-                onDraftPatch={onDraftPatch}
-                onUpdateLead={onUpdateLead}
-                visibleIds={convertedLeadsFullPipeline.map((l) => l.id)}
-              />
+              {convertedLeadsThisMonth.length === 0 ? (
+                <div
+                  className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
+                  role="status"
+                >
+                  No converted leads in{" "}
+                  <span className="font-medium text-slate-800">
+                    {format(new Date(), "MMMM yyyy")}
+                  </span>
+                  . Conversions are counted using the schedule completion time
+                  when set, otherwise the last update time on the lead.
+                </div>
+              ) : (
+                <LeadSheetTable
+                  showFollowUpColumn={false}
+                  showPipelineColumn
+                  className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                  leads={applyDraftToList(convertedLeadsThisMonth)}
+                  sheetEditMode={sheetEditMode}
+                  onDraftPatch={onDraftPatch}
+                  onUpdateLead={onUpdateLead}
+                  visibleIds={convertedLeadsThisMonth.map((l) => l.id)}
+                />
+              )}
             </section>
           )}
         </div>

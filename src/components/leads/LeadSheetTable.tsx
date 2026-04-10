@@ -8,7 +8,8 @@ import type { Lead } from "@/lib/types";
 import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { formatTargetExams } from "@/lib/lead-display";
 import { cn } from "@/lib/cn";
-import { formatLeadPhone, telHrefForLead } from "@/lib/phone-display";
+import { SX } from "@/components/student/student-excel-ui";
+import { formatLeadPhone } from "@/lib/phone-display";
 import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 
@@ -47,6 +48,7 @@ const COL_WIDTHS: Record<string, number> = {
   phone: 124,
   status: 112,
   followUp: 104,
+  remark: 168,
   action: 52,
 };
 
@@ -72,6 +74,8 @@ type Props = {
    * Interested, Follow-ups, Converted, and Not interested; keep “New & Daily” without it.
    */
   showPipelineColumn?: boolean;
+  /** Show optional not-interested remark column (Not interested tab). */
+  showNotInterestedRemark?: boolean;
 };
 
 export function LeadSheetTable({
@@ -88,6 +92,7 @@ export function LeadSheetTable({
   variant = "standard",
   showFollowUpColumn = true,
   showPipelineColumn = false,
+  showNotInterestedRemark = false,
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -97,6 +102,8 @@ export function LeadSheetTable({
   const [editing, setEditing] = useState<EditTarget>(null);
   const activeEdit = sheetEditMode ? editing : null;
   const [actionMenu, setActionMenu] = useState<ActionMenuState>(null);
+  const [notInterestedModalLead, setNotInterestedModalLead] =
+    useState<Lead | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
@@ -137,27 +144,20 @@ export function LeadSheetTable({
     visibleIds.length > 0 &&
     visibleIds.every((id) => selectedIds.has(id));
 
-  const applyStatus = (
-    lead: Lead,
-    kind: "interested" | "not_interested" | "followup",
-  ) => {
+  const applyStatus = (lead: Lead, kind: "interested" | "followup") => {
     if (kind === "interested") {
       onUpdateLead(lead.id, {
         rowTone: "interested",
         sheetTab: "ongoing",
         followUpDate: null,
-      });
-    } else if (kind === "not_interested") {
-      onUpdateLead(lead.id, {
-        rowTone: "not_interested",
-        sheetTab: "not_interested",
-        followUpDate: null,
+        notInterestedRemark: null,
       });
     } else {
       onUpdateLead(lead.id, {
         rowTone: "followup_later",
         sheetTab: "followup",
         followUpDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
+        notInterestedRemark: null,
       });
     }
     setActionMenu(null);
@@ -176,6 +176,7 @@ export function LeadSheetTable({
   };
 
   return (
+    <>
     <div
       className={cn(
         "relative overflow-x-auto rounded-lg shadow-sm",
@@ -218,6 +219,9 @@ export function LeadSheetTable({
             <SheetTh w={COL_WIDTHS.dataType}>Data type</SheetTh>
             {showFollowUpColumn && (
               <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
+            )}
+            {showNotInterestedRemark && (
+              <SheetTh w={COL_WIDTHS.remark}>Remark</SheetTh>
             )}
             <SheetTh w={COL_WIDTHS.action} className="px-1 text-center">
               Action
@@ -505,16 +509,9 @@ export function LeadSheetTable({
                       autoFocus
                     />
                   ) : (
-                    <a
-                      href={telHrefForLead(lead) || `tel:${lead.phone.replace(/\D/g, "")}`}
-                      title="Click to call"
-                      className="inline-block max-w-none whitespace-nowrap font-medium text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="tabular-nums whitespace-nowrap">
-                        {formatLeadPhone(lead)}
-                      </span>
-                    </a>
+                    <span className="inline-block max-w-none whitespace-nowrap font-medium tabular-nums text-slate-900">
+                      {formatLeadPhone(lead)}
+                    </span>
                   )}
                 </td>
                 {showPipelineColumn && (
@@ -569,6 +566,26 @@ export function LeadSheetTable({
                       </span>
                     ) : (
                       <span className="text-[#bdbdbd]">—</span>
+                    )}
+                  </td>
+                )}
+                {showNotInterestedRemark && (
+                  <td
+                    style={{ width: COL_WIDTHS.remark, maxWidth: COL_WIDTHS.remark }}
+                    className={cn(
+                      "border border-slate-200/80 px-2 py-1.5 align-top text-[12px] text-slate-700",
+                      tone,
+                    )}
+                  >
+                    {lead.notInterestedRemark?.trim() ? (
+                      <span
+                        className="line-clamp-4 whitespace-pre-wrap break-words"
+                        title={lead.notInterestedRemark.trim()}
+                      >
+                        {lead.notInterestedRemark.trim()}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
                     )}
                   </td>
                 )}
@@ -639,7 +656,10 @@ export function LeadSheetTable({
               type="button"
               role="menuitem"
               className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
-              onClick={() => applyStatus(menuLead, "not_interested")}
+              onClick={() => {
+                setActionMenu(null);
+                setNotInterestedModalLead(menuLead);
+              }}
             >
               Not Interested
             </button>
@@ -662,6 +682,127 @@ export function LeadSheetTable({
           document.body,
         )}
     </div>
+    <NotInterestedRemarkDialog
+      lead={notInterestedModalLead}
+      onClose={() => setNotInterestedModalLead(null)}
+      onConfirm={(remark) => {
+        if (!notInterestedModalLead) return;
+        const trimmed = remark.trim();
+        onUpdateLead(notInterestedModalLead.id, {
+          rowTone: "not_interested",
+          sheetTab: "not_interested",
+          followUpDate: null,
+          notInterestedRemark: trimmed.length > 0 ? trimmed.slice(0, 2000) : null,
+        });
+        setNotInterestedModalLead(null);
+      }}
+    />
+    </>
+  );
+}
+
+function NotInterestedRemarkDialog({
+  lead,
+  onClose,
+  onConfirm,
+}: {
+  lead: Lead | null;
+  onClose: () => void;
+  onConfirm: (remark: string) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [remark, setRemark] = useState("");
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (lead) {
+      if (!d.open) d.showModal();
+      setRemark(lead.notInterestedRemark?.trim() ?? "");
+    } else if (d.open) {
+      d.close();
+    }
+  }, [lead]);
+
+  useEffect(() => {
+    if (!lead) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdrop = (e: MouseEvent) => {
+      if (e.target === dlg) onClose();
+    };
+    dlg.addEventListener("mousedown", onBackdrop);
+    return () => dlg.removeEventListener("mousedown", onBackdrop);
+  }, [lead, onClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[210] w-[min(100vw-1.5rem,24rem)] max-h-[min(90vh,420px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-slate-200 bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="ni-remark-title"
+    >
+      <div className="border-b border-slate-100 bg-slate-50/90 px-4 py-3">
+        <h2
+          id="ni-remark-title"
+          className="text-[14px] font-bold tracking-tight text-slate-900"
+        >
+          Not interested
+        </h2>
+        <p className="mt-1 text-[12px] leading-snug text-slate-600">
+          {lead ? (
+            <>
+              Mark{" "}
+              <span className="font-medium text-slate-800">
+                {lead.studentName}
+              </span>{" "}
+              as not interested. Add an optional remark below.
+            </>
+          ) : null}
+        </p>
+      </div>
+      <div className="px-4 py-3">
+        <label
+          htmlFor="ni-remark-field"
+          className="text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+        >
+          Remark{" "}
+          <span className="font-normal normal-case text-slate-400">(optional)</span>
+        </label>
+        <textarea
+          id="ni-remark-field"
+          rows={4}
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+          maxLength={2000}
+          placeholder="e.g. budget, location, enrolled elsewhere…"
+          className="mt-1.5 w-full resize-y rounded-none border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25"
+        />
+        <p className="mt-1 text-[10px] text-slate-400">
+          {remark.length}/2000
+        </p>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3">
+        <button type="button" className={SX.btnSecondary} onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={SX.btnPrimary}
+          onClick={() => onConfirm(remark)}
+        >
+          Not Interested
+        </button>
+      </div>
+    </dialog>
   );
 }
 

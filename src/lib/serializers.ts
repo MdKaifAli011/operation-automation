@@ -5,6 +5,7 @@ import { computePipelineStepsFromMeta } from "@/lib/pipeline";
 export function serializeLead(
   doc: {
     _id: Types.ObjectId | string;
+    updatedAt?: Date | string;
     date: string;
     followUpDate: string | null;
     studentName: string;
@@ -22,6 +23,7 @@ export function serializeLead(
     activityLog?: unknown;
     workspaceNotes?: string;
     callHistory?: unknown;
+    notInterestedRemark?: string | null;
   },
 ): Lead {
   const email = doc.email?.trim();
@@ -43,8 +45,13 @@ export function serializeLead(
     meta != null
       ? computePipelineStepsFromMeta(meta)
       : (doc.pipelineSteps ?? 0);
+  const updatedAtIso =
+    doc.updatedAt != null
+      ? new Date(doc.updatedAt as Date | string).toISOString()
+      : undefined;
   return {
     id: String(doc._id),
+    updatedAt: updatedAtIso,
     date: doc.date,
     followUpDate: doc.followUpDate ?? null,
     studentName: doc.studentName,
@@ -62,6 +69,11 @@ export function serializeLead(
     activityLog,
     callHistory,
     workspaceNotes: doc.workspaceNotes?.trim() || null,
+    notInterestedRemark:
+      typeof doc.notInterestedRemark === "string" &&
+      doc.notInterestedRemark.trim().length > 0
+        ? doc.notInterestedRemark.trim()
+        : null,
   };
 }
 

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
   LEAD_CSV_EXPORT_HEADERS,
   matrixToStringGrid,
@@ -12,9 +19,18 @@ import { formatTargetExams } from "@/lib/lead-display";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
+export type ImportExcelControlHandle = {
+  open: () => void;
+};
+
 type Props = {
   /** Refetch leads after a successful import. */
   onImported: () => void | Promise<void>;
+  /**
+   * When false, the outline trigger is hidden; open the dialog via ref
+   * `open()` (e.g. from the leads ⋮ menu).
+   */
+  showTriggerButton?: boolean;
 };
 
 type ParseIssue = { row: number; message: string };
@@ -46,8 +62,14 @@ async function fileToGrid(file: File): Promise<string[][]> {
 const field =
   "mt-1.5 w-full rounded-none border border-slate-200 bg-white px-3 py-2.5 text-[13px] text-slate-800 shadow-sm shadow-slate-900/[0.03] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
-export function ImportExcelControl({ onImported }: Props) {
-  const ref = useRef<HTMLDialogElement>(null);
+export const ImportExcelControl = forwardRef<
+  ImportExcelControlHandle,
+  Props
+>(function ImportExcelControl(
+  { onImported, showTriggerButton = true },
+  ref,
+) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [pickedName, setPickedName] = useState<string | null>(null);
@@ -59,7 +81,7 @@ export function ImportExcelControl({ onImported }: Props) {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const d = ref.current;
+    const d = dialogRef.current;
     if (!d) return;
     if (open) d.showModal();
     else d.close();
@@ -67,7 +89,7 @@ export function ImportExcelControl({ onImported }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    const dlg = ref.current;
+    const dlg = dialogRef.current;
     if (!dlg) return;
     const onBackdrop = (e: MouseEvent) => {
       if (e.target === dlg && !busy) setOpen(false);
@@ -121,14 +143,22 @@ export function ImportExcelControl({ onImported }: Props) {
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
-  const openDialog = () => {
+  const openDialog = useCallback(() => {
     resetForm();
     setOpen(true);
-  };
+  }, [resetForm]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: openDialog,
+    }),
+    [openDialog],
+  );
 
   const closeDialog = () => {
     if (busy) return;
-    ref.current?.close();
+    dialogRef.current?.close();
     setOpen(false);
     resetForm();
   };
@@ -185,21 +215,23 @@ export function ImportExcelControl({ onImported }: Props) {
 
   return (
     <>
-      <button
-        type="button"
-        className={cn(
-          SX.leadBtnOutline,
-          "h-9 gap-1.5 px-3 text-[13px] font-semibold text-slate-800",
-        )}
-        onClick={openDialog}
-        title="Upload CSV or Excel — preview rows, then confirm import"
-      >
-        <UploadIcon className="text-slate-500" />
-        Import Excel / CSV
-      </button>
+      {showTriggerButton ? (
+        <button
+          type="button"
+          className={cn(
+            SX.leadBtnOutline,
+            "h-9 gap-1.5 px-3 text-[13px] font-semibold text-slate-800",
+          )}
+          onClick={openDialog}
+          title="Upload CSV or Excel — preview rows, then confirm import"
+        >
+          <UploadIcon className="text-slate-500" />
+          Import Excel / CSV
+        </button>
+      ) : null}
 
       <dialog
-        ref={ref}
+        ref={dialogRef}
         className={cn(
           "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-0.75rem,48rem)] max-h-[min(92vh,760px)] -translate-x-1/2 -translate-y-1/2",
           "overflow-hidden rounded-none border border-slate-200 bg-white p-0 shadow-2xl shadow-slate-900/15",
@@ -447,9 +479,9 @@ export function ImportExcelControl({ onImported }: Props) {
       </dialog>
     </>
   );
-}
+});
 
-function UploadIcon({ className }: { className?: string }) {
+export function UploadIcon({ className }: { className?: string }) {
   return (
     <svg
       width="16"

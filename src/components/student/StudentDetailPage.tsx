@@ -503,12 +503,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                 </dt>
                 <dd className="mt-1 text-[13px] font-medium tabular-nums text-slate-900">
                   {lead.phone ? (
-                    <a
-                      href={`tel:${lead.phone}`}
-                      className="hover:text-primary hover:underline"
-                    >
-                      {formatLeadPhone(lead)}
-                    </a>
+                    <span>{formatLeadPhone(lead)}</span>
                   ) : (
                     <span className="text-slate-400">—</span>
                   )}
@@ -541,6 +536,21 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                 </dd>
               </div>
             </dl>
+
+            {lead.sheetTab === "not_interested" &&
+            lead.notInterestedRemark?.trim() ? (
+              <div
+                className="mt-4 rounded-none border border-rose-100 bg-rose-50/70 px-3 py-2.5"
+                role="note"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-900/90">
+                  Not interested remark
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-800">
+                  {lead.notInterestedRemark.trim()}
+                </p>
+              </div>
+            ) : null}
 
             <div className={SX.studentHeroSubline}>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

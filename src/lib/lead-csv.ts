@@ -303,6 +303,21 @@ export function buildLeadCsvTemplate(): string {
   return [headerLine, sample.map((c) => csvEscape(c)).join(",")].join("\r\n");
 }
 
+/** Browser-only: triggers download of the import template CSV. Call from client components only. */
+export function downloadLeadCsvTemplateFile(): void {
+  if (typeof document === "undefined") return;
+  const csv = buildLeadCsvTemplate();
+  const blob = new Blob(["\ufeff", csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `leads-import-template_${format(new Date(), "yyyy-MM-dd")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /** Detect `;` vs `,` from first line (Excel “CSV UTF-8” in some locales uses `;`). */
 function detectCsvDelimiter(t: string): "," | ";" {
   const line = t.split(/\r\n|\r|\n/, 1)[0] ?? "";

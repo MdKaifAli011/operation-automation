@@ -58,12 +58,13 @@ function filterLeadsForExport(
 type Props = {
   /** Full lead list — export modal applies its own filters on top. */
   leads: Lead[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
-export function ExportLeadsButton({ leads }: Props) {
+export function ExportLeadsDialog({ leads, open, onOpenChange }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const todayStr = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
-  const [open, setOpen] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [course, setCourse] = useState("");
@@ -75,7 +76,17 @@ export function ExportLeadsButton({ leads }: Props) {
     const d = ref.current;
     if (!d) return;
     if (open) d.showModal();
-    else d.close();
+    else if (d.open) d.close();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setDateFrom("");
+    setDateTo("");
+    setCourse("");
+    setCountry("");
+    setListFilterEnabled(false);
+    setSheet("ongoing");
   }, [open]);
 
   useEffect(() => {
@@ -83,11 +94,11 @@ export function ExportLeadsButton({ leads }: Props) {
     const dlg = ref.current;
     if (!dlg) return;
     const onBackdrop = (e: MouseEvent) => {
-      if (e.target === dlg) setOpen(false);
+      if (e.target === dlg) onOpenChange(false);
     };
     dlg.addEventListener("mousedown", onBackdrop);
     return () => dlg.removeEventListener("mousedown", onBackdrop);
-  }, [open]);
+  }, [open, onOpenChange]);
 
   const countries = useMemo(() => {
     const set = new Set<string>();
@@ -137,19 +148,9 @@ export function ExportLeadsButton({ leads }: Props) {
   const fromDateMax =
     dateTo && dateTo <= todayStr ? dateTo : todayStr;
 
-  const openDialog = () => {
-    setDateFrom("");
-    setDateTo("");
-    setCourse("");
-    setCountry("");
-    setListFilterEnabled(false);
-    setSheet("ongoing");
-    setOpen(true);
-  };
-
   const closeDialog = () => {
     ref.current?.close();
-    setOpen(false);
+    onOpenChange(false);
   };
 
   const runExport = () => {
@@ -188,21 +189,7 @@ export function ExportLeadsButton({ leads }: Props) {
   const canExport = !dateError && matchingLeads.length > 0;
 
   return (
-    <>
-      <button
-        type="button"
-        className={cn(
-          SX.leadBtnOutline,
-          "h-9 gap-2 whitespace-nowrap px-3 text-[13px] font-semibold text-slate-800",
-        )}
-        onClick={openDialog}
-        title="Choose list (optional), dates, course, and country, then download CSV"
-      >
-        <DownloadIcon className="text-slate-500" />
-        Export CSV
-      </button>
-
-      <dialog
+    <dialog
         ref={ref}
         className={cn(
           "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-1.5rem,26rem)] max-h-[min(92vh,720px)] -translate-x-1/2 -translate-y-1/2",
@@ -210,7 +197,7 @@ export function ExportLeadsButton({ leads }: Props) {
           "backdrop:bg-slate-900/45 backdrop:backdrop-blur-[2px]",
           "open:flex open:flex-col",
         )}
-        onClose={() => setOpen(false)}
+        onClose={() => onOpenChange(false)}
         aria-labelledby="export-leads-title"
       >
         <div className="border-b border-slate-100 bg-gradient-to-br from-sky-50/80 via-white to-white px-4 py-3">
@@ -393,11 +380,10 @@ export function ExportLeadsButton({ leads }: Props) {
           </button>
         </div>
       </dialog>
-    </>
   );
 }
 
-function DownloadIcon({ className }: { className?: string }) {
+export function DownloadIcon({ className }: { className?: string }) {
   return (
     <svg
       width="16"

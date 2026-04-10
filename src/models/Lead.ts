@@ -75,6 +75,13 @@ const LeadSchema = new Schema(
       enum: sheetTabs,
       default: "ongoing",
     },
+    /** Optional reason when marked not interested (lead sheet). */
+    notInterestedRemark: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 2000,
+    },
   },
   { timestamps: true },
 );

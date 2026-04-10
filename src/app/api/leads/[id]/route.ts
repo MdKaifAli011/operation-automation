@@ -24,6 +24,7 @@ const PATCH_KEYS = new Set([
   "callHistory",
   "rowTone",
   "sheetTab",
+  "notInterestedRemark",
 ]);
 
 function buildPatch(body: unknown): Record<string, unknown> | null {
@@ -62,6 +63,14 @@ function buildPatch(body: unknown): Record<string, unknown> | null {
     }
     if (key === "workspaceNotes") {
       if (typeof v === "string") out[key] = v;
+      continue;
+    }
+    if (key === "notInterestedRemark") {
+      if (v === null || v === "") out[key] = null;
+      else if (typeof v === "string") {
+        const t = v.trim().slice(0, 2000);
+        out[key] = t.length > 0 ? t : null;
+      }
       continue;
     }
     if (

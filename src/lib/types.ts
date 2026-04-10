@@ -33,6 +33,8 @@ export type CallHistoryEntry = {
 
 export type Lead = {
   id: string;
+  /** MongoDB `updatedAt` (ISO), when present — used for conversion month stats. */
+  updatedAt?: string;
   date: string; // ISO date — lead created / intake date
   /** When sheet is follow-up: date to call or student returns (ISO yyyy-MM-dd). */
   followUpDate: string | null;
@@ -63,6 +65,8 @@ export type Lead = {
   workspaceNotes?: string | null;
   /** Logged calls (newest first). */
   callHistory?: CallHistoryEntry[];
+  /** Optional remark when the lead was marked not interested. */
+  notInterestedRemark?: string | null;
 };
 
 export type Faculty = {
