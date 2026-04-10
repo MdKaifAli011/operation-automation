@@ -22,18 +22,9 @@ import {
 } from "@/lib/leadSheetRouting";
 import { useLeadSources } from "@/hooks/useLeadSources";
 
-type LeadMainTab =
-  | "today"
-  | "ongoing"
-  | "not_interested"
-  | "followup"
-  | "converted";
+type LeadMainTab = "ongoing" | "not_interested" | "followup" | "converted";
 
-function sortLeads(
-  list: Lead[],
-  key: SortKey,
-  dir: SortDir,
-): Lead[] {
+function sortLeads(list: Lead[], key: SortKey, dir: SortDir): Lead[] {
   const mul = dir === "asc" ? 1 : -1;
   return [...list].sort((a, b) => {
     let cmp = 0;
@@ -59,7 +50,7 @@ export function LeadManagementPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mainTab, setMainTab] = useState<LeadMainTab>("today");
+  const [mainTab, setMainTab] = useState<LeadMainTab>("ongoing");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [search, setSearch] = useState("");
@@ -72,9 +63,7 @@ export function LeadManagementPage() {
   const [followUpId, setFollowUpId] = useState<string | null>(null);
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [sheetEditMode, setSheetEditMode] = useState(false);
-  const [leadDraft, setLeadDraft] = useState<Record<string, Partial<Lead>>>(
-    {},
-  );
+  const [leadDraft, setLeadDraft] = useState<Record<string, Partial<Lead>>>({});
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const importExcelRef = useRef<ImportExcelControlHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -181,13 +170,13 @@ export function LeadManagementPage() {
     sortDir,
   ]);
 
-  /** Today's Data · new intakes (status New) until marked Interested. */
-  const todayLeads = useMemo(
+  /** New & Daily · new intakes (status New) until marked Interested (first block on Ongoing tab). */
+  const newAndDailyLeads = useMemo(
     () => filtered.filter(isLeadInTodayData),
     [filtered],
   );
 
-  /** Ongoing Students · excludes fresh New rows (those stay on Today's Data). */
+  /** Ongoing tab · interested pipeline + other tones (excludes New intakes above). */
   const ongoingSheetLeads = useMemo(
     () => filtered.filter(isLeadInOngoingPipeline),
     [filtered],
@@ -227,19 +216,25 @@ export function LeadManagementPage() {
   /** Converted tab + stat: current calendar month only. */
   const convertedLeadsThisMonth = useMemo(
     () =>
-      convertedLeadsFullPipeline.filter((l) => isLeadConvertedInCurrentMonth(l)),
+      convertedLeadsFullPipeline.filter((l) =>
+        isLeadConvertedInCurrentMonth(l),
+      ),
     [convertedLeadsFullPipeline],
   );
 
   const counts = useMemo(() => {
-    const todayData = leads.filter(isLeadInTodayData).length;
-    const ongoing = leads.filter(isLeadInOngoingPipeline).length;
+    const newDaily = leads.filter(isLeadInTodayData).length;
+    const ongoingPipeline = leads.filter(isLeadInOngoingPipeline).length;
+    /** All rows that appear on the Ongoing tab (new + pipeline). */
+    const ongoing = newDaily + ongoingPipeline;
     const followup = leads.filter((l) => l.sheetTab === "followup").length;
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
     ).length;
-    const converted = leads.filter((l) => isLeadConvertedInCurrentMonth(l)).length;
-    return { todayData, ongoing, followup, notInterested, converted };
+    const converted = leads.filter((l) =>
+      isLeadConvertedInCurrentMonth(l),
+    ).length;
+    return { ongoing, followup, notInterested, converted };
   }, [leads]);
 
   const onUpdateLead = useCallback(
@@ -275,14 +270,12 @@ export function LeadManagementPage() {
   }, []);
 
   const applyDraftToList = useCallback(
-    (list: Lead[]) =>
-      list.map((l) => ({ ...l, ...(leadDraft[l.id] ?? {}) })),
+    (list: Lead[]) => list.map((l) => ({ ...l, ...(leadDraft[l.id] ?? {}) })),
     [leadDraft],
   );
 
   const hasSheetDraft = useMemo(
-    () =>
-      Object.values(leadDraft).some((p) => p && Object.keys(p).length > 0),
+    () => Object.values(leadDraft).some((p) => p && Object.keys(p).length > 0),
     [leadDraft],
   );
 
@@ -303,14 +296,13 @@ export function LeadManagementPage() {
 
   const tabCounts = useMemo(
     () => ({
-      today: todayLeads.length,
-      ongoing: ongoingSheetLeads.length,
+      ongoing: newAndDailyLeads.length + ongoingSheetLeads.length,
       not_interested: notInterestedLeads.length,
       followup: followUpLeads.length,
       converted: convertedLeadsThisMonth.length,
     }),
     [
-      todayLeads.length,
+      newAndDailyLeads.length,
       ongoingSheetLeads.length,
       notInterestedLeads.length,
       followUpLeads.length,
@@ -355,28 +347,22 @@ export function LeadManagementPage() {
     accent: string;
   }[] = [
     {
-      key: "today",
-      label: "Today's Data",
-      value: counts.todayData,
-      accent: "text-sky-700",
-    },
-    {
       key: "ongoing",
       label: "Ongoing",
       value: counts.ongoing,
       accent: "text-primary",
     },
     {
-      key: "followup",
-      label: "Follow-up",
-      value: counts.followup,
-      accent: "text-emerald-600",
-    },
-    {
       key: "ni",
       label: "Not interested",
       value: counts.notInterested,
       accent: "text-rose-600",
+    },
+    {
+      key: "followup",
+      label: "Follow-up",
+      value: counts.followup,
+      accent: "text-emerald-600",
     },
     {
       key: "conv",
@@ -510,7 +496,9 @@ export function LeadManagementPage() {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="block text-[12px]">
-                    <span className="font-medium text-slate-600">From date</span>
+                    <span className="font-medium text-slate-600">
+                      From date
+                    </span>
                     <input
                       type="date"
                       className={filterInput}
@@ -530,7 +518,9 @@ export function LeadManagementPage() {
                 </div>
 
                 <label className="mt-3 block text-[12px]">
-                  <span className="font-medium text-slate-600">Target exam</span>
+                  <span className="font-medium text-slate-600">
+                    Target exam
+                  </span>
                   <select
                     className={filterInput}
                     value={filterCourse}
@@ -557,7 +547,9 @@ export function LeadManagementPage() {
                     <option value="interested">Interested</option>
                     <option value="not_interested">Not Interested</option>
                     <option value="followup_later">Follow-up Later</option>
-                    <option value="called_no_response">Called / No Response</option>
+                    <option value="called_no_response">
+                      Called / No Response
+                    </option>
                   </select>
                 </label>
 
@@ -658,7 +650,10 @@ export function LeadManagementPage() {
             ) : (
               <button
                 type="button"
-                className={cn(SX.leadBtnOutline, "h-9 px-3 text-[13px] font-semibold")}
+                className={cn(
+                  SX.leadBtnOutline,
+                  "h-9 px-3 text-[13px] font-semibold",
+                )}
                 onClick={() => setSheetEditMode(true)}
               >
                 Edit sheet
@@ -668,7 +663,6 @@ export function LeadManagementPage() {
         </div>
 
         <div className={SX.leadTabBar}>
-          {tabBtn("today", "Today's Data")}
           {tabBtn("ongoing", "Ongoing")}
           {tabBtn("not_interested", "Not Interested")}
           {tabBtn("followup", "Follow-ups")}
@@ -676,51 +670,46 @@ export function LeadManagementPage() {
         </div>
 
         <div className={SX.leadSheetBody}>
-          {mainTab === "today" && (
-            <section
-              className="px-3 py-4 md:px-4 md:py-5"
-              aria-label="Today's Data leads"
-            >
-              <div className={SX.leadSectionHead}>
-                <h2 className={SX.leadSectionTitle}>Today&apos;s Data</h2>
-                <p className={SX.leadSectionMeta}>
-                  {todayLeads.length} lead
-                  {todayLeads.length === 1 ? "" : "s"} · new intakes and imports
-                  with status <span className="font-medium">New</span> · use the
-                  row <span className="font-medium">⋯</span> menu and choose{" "}
-                  <span className="font-medium">Interested</span> to move a lead
-                  to <span className="font-medium">Ongoing Students</span>
-                </p>
-              </div>
-              {todayLeads.length === 0 ? (
-                <div
-                  className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
-                  role="status"
-                >
-                  No new intakes here. <span className="font-medium">Add student</span>{" "}
-                  or import a file — leads stay on this list until you mark them{" "}
-                  <span className="font-medium">Interested</span>.
-                </div>
-              ) : (
-                <LeadSheetTable
-                  variant="standard"
-                  showFollowUpColumn={false}
-                  showPipelineColumn={false}
-                  pickDataTypeOnClick
-                  leadSourceOptions={leadSources}
-                  className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                  leads={applyDraftToList(todayLeads)}
-                  sheetEditMode={sheetEditMode}
-                  onDraftPatch={onDraftPatch}
-                  onUpdateLead={onUpdateLead}
-                  visibleIds={todayLeads.map((l) => l.id)}
-                />
-              )}
-            </section>
-          )}
-
           {mainTab === "ongoing" && (
             <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
+              <section aria-label="New and Daily leads">
+                <div className={SX.leadSectionHead}>
+                  <h2 className={SX.leadSectionTitle}>New &amp; Daily</h2>
+                  <p className={SX.leadSectionMeta}>
+                    {newAndDailyLeads.length} lead
+                    {newAndDailyLeads.length === 1 ? "" : "s"} · intakes and
+                    imports with status <span className="font-medium">New</span>{" "}
+                    · use the row <span className="font-medium">⋯</span> menu and
+                    choose <span className="font-medium">Interested</span> to
+                    move them to the pipeline below
+                  </p>
+                </div>
+                {newAndDailyLeads.length === 0 ? (
+                  <div
+                    className="mt-3 border border-slate-200 bg-slate-50 px-4 py-6 text-center text-[13px] text-slate-600"
+                    role="status"
+                  >
+                    No rows here yet.{" "}
+                    <span className="font-medium">Add student</span> or import —
+                    new leads appear in this block first.
+                  </div>
+                ) : (
+                  <LeadSheetTable
+                    variant="standard"
+                    showFollowUpColumn={false}
+                    showPipelineColumn={false}
+                    pickDataTypeOnClick
+                    leadSourceOptions={leadSources}
+                    className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                    leads={applyDraftToList(newAndDailyLeads)}
+                    sheetEditMode={sheetEditMode}
+                    onDraftPatch={onDraftPatch}
+                    onUpdateLead={onUpdateLead}
+                    visibleIds={newAndDailyLeads.map((l) => l.id)}
+                  />
+                )}
+              </section>
+
               <section aria-label="Interested ongoing pipeline">
                 <div className={SX.leadSectionHead}>
                   <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
@@ -736,11 +725,11 @@ export function LeadManagementPage() {
                     className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
                     role="status"
                   >
-                    No interested leads here yet. Work leads from{" "}
-                    <span className="font-medium">Today&apos;s Data</span> and choose{" "}
-                    <span className="font-medium">Interested</span> in the row{" "}
-                    <span className="font-medium">⋯</span> menu to add them to this
-                    pipeline.
+                    No interested leads here yet. From{" "}
+                    <span className="font-medium">New &amp; Daily</span> above,
+                    choose <span className="font-medium">Interested</span> in the
+                    row <span className="font-medium">⋯</span> menu to add them to
+                    this pipeline.
                   </div>
                 ) : (
                   <LeadSheetTable
@@ -765,9 +754,9 @@ export function LeadManagementPage() {
                     <h2 className={SX.leadSectionTitle}>Other (Ongoing)</h2>
                     <p className={SX.leadSectionMeta}>
                       {ongoingOtherLeads.length} lead
-                      {ongoingOtherLeads.length === 1 ? "" : "s"} · on the Ongoing
-                      sheet but not yet in the Interested pipeline (e.g. called /
-                      no response)
+                      {ongoingOtherLeads.length === 1 ? "" : "s"} · on the
+                      Ongoing sheet but not yet in the Interested pipeline (e.g.
+                      called / no response)
                     </p>
                   </div>
                   <LeadSheetTable
@@ -789,7 +778,10 @@ export function LeadManagementPage() {
           )}
 
           {mainTab === "followup" && (
-            <section className="px-3 py-4 md:px-4 md:py-5" aria-label="Follow-up leads">
+            <section
+              className="px-3 py-4 md:px-4 md:py-5"
+              aria-label="Follow-up leads"
+            >
               <div className={SX.leadSectionHead}>
                 <h2 className={SX.leadSectionTitle}>Follow-ups</h2>
                 <p className={SX.leadSectionMeta}>
@@ -852,9 +844,9 @@ export function LeadManagementPage() {
                 </div>
                 <p className={SX.leadSectionMeta}>
                   {convertedLeadsThisMonth.length} lead
-                  {convertedLeadsThisMonth.length === 1 ? "" : "s"} who
-                  finished onboarding this calendar month · Status shows
-                  completed pipeline steps
+                  {convertedLeadsThisMonth.length === 1 ? "" : "s"} who finished
+                  onboarding this calendar month · Status shows completed
+                  pipeline steps
                 </p>
               </div>
               {convertedLeadsThisMonth.length === 0 ? (

@@ -178,8 +178,9 @@ export function AddStudentLeadDialog({
       <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
         <h2 className="text-[15px] font-bold text-slate-900">Add student lead</h2>
         <p className="mt-0.5 text-[12px] text-slate-600">
-          Creates a lead on <span className="font-medium">Today&apos;s Data</span>.
-          Choose source, then edit in the grid or open their workspace.
+          Creates a lead in <span className="font-medium">New &amp; Daily</span> on
+          the Ongoing tab. Choose source, then edit in the grid or open their
+          workspace.
         </p>
       </div>
 
@@ -304,7 +305,7 @@ export function AddStudentLeadDialog({
               ))}
             </select>
             <p className="mt-1 text-[11px] text-slate-500">
-              Configure abbreviations and labels in Settings → Lead sources.
+              Configure options in Settings → Lead sources.
             </p>
           </label>
 

@@ -923,7 +923,6 @@ function Stepper({
 }) {
   const doneCount = Math.min(Math.max(completed, 0), PIPELINE_TOTAL);
   const pct = (doneCount / PIPELINE_TOTAL) * 100;
-  const activeLabel = STEPS.find((s) => s.n === activeStep)?.label ?? "—";
 
   return (
     <div className="border-b border-slate-100 bg-white">
@@ -1006,11 +1005,11 @@ function Stepper({
 
         <div
           className="flex shrink-0 items-center justify-between gap-2.5 sm:flex-col sm:items-end sm:border-l sm:border-slate-200 sm:pl-3"
-          title={`${doneCount} of ${PIPELINE_TOTAL} onboarding steps completed`}
+          title={`Status: ${doneCount} of ${PIPELINE_TOTAL} onboarding steps completed`}
         >
           <p className="min-w-0 text-[11px] leading-tight text-slate-600 sm:text-right sm:text-xs">
-            <span className="sr-only">Currently viewing: </span>
-            <span className="font-semibold text-slate-900">{activeLabel}</span>
+            <span className="sr-only">Pipeline status: </span>
+            <span className="font-semibold text-slate-900">Status</span>
             <span className="text-slate-300" aria-hidden>
               {" "}
               ·{" "}
