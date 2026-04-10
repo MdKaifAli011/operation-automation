@@ -61,6 +61,7 @@ import { BrochureInlinePreviewFrame } from "@/components/brochure/BrochureInline
 import { normalizeBrochurePreviewUrl } from "@/lib/brochurePreview";
 import { cn } from "@/lib/cn";
 import { computeMeetWindow } from "@/lib/meetLinks/window";
+import { randomUuid } from "@/lib/randomUuid";
 import { defaultTimeZoneForCountry } from "@/lib/timezones/countryDefaultTimeZone";
 import {
   ensureSelectedTimeZoneOption,
@@ -1611,7 +1612,7 @@ function DemoSection({
     setRows(
       r.map((row) => ({
         ...row,
-        meetRowId: row.meetRowId?.trim() || crypto.randomUUID(),
+        meetRowId: row.meetRowId?.trim() || randomUuid(),
       })),
     );
   }, [lead.id, lead.pipelineMeta]);
@@ -3578,7 +3579,7 @@ function DemoForm({
                     );
                     return;
                   }
-                  const meetRowId = crypto.randomUUID();
+                  const meetRowId = randomUuid();
                   const hold =
                     typeof meetHoldDurationMinutes === "number" &&
                     Number.isFinite(meetHoldDurationMinutes) &&
