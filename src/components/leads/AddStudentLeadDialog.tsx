@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import {
   LEAD_COUNTRY_OPTIONS,
@@ -68,6 +68,9 @@ export function AddStudentLeadDialog({
   ]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /** After blur, show "required" if national number still empty. */
+  const [nationalBlurredOnce, setNationalBlurredOnce] = useState(false);
+  const [nationalFocused, setNationalFocused] = useState(false);
   const [dataType, setDataType] = useState(
     () => leadSourceOptions[0]?.value ?? "Organic",
   );
@@ -78,7 +81,29 @@ export function AddStudentLeadDialog({
       if (leadSourceOptions.some((o) => o.value === prev)) return prev;
       return leadSourceOptions[0]?.value ?? "Organic";
     });
+    setNationalBlurredOnce(false);
+    setNationalFocused(false);
   }, [open, leadSourceOptions]);
+
+  const nationalDigits = useMemo(
+    () => digitsOnly(nationalNumber),
+    [nationalNumber],
+  );
+
+  const phoneFieldError = useMemo(() => {
+    if (nationalDigits.length > 0) {
+      return validateNationalNumber(country, nationalDigits);
+    }
+    if (nationalBlurredOnce && !nationalFocused) {
+      return "Enter the phone number.";
+    }
+    return null;
+  }, [
+    country,
+    nationalDigits,
+    nationalBlurredOnce,
+    nationalFocused,
+  ]);
 
   const nationalHint =
     optionForCountry(country)?.nationalHint ?? "Local number";
@@ -106,7 +131,8 @@ export function AddStudentLeadDialog({
     const national = digitsOnly(nationalNumber);
     const phoneErr = validateNationalNumber(country, national);
     if (phoneErr) {
-      setError(phoneErr);
+      setNationalBlurredOnce(true);
+      setError(null);
       return;
     }
     if (targetExams.length === 0) {
@@ -163,6 +189,11 @@ export function AddStudentLeadDialog({
   const inputBase =
     "box-border rounded-none border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30";
   const fieldFull = cn(inputBase, "mt-1 w-full min-w-0 max-w-full");
+  const phoneFeedbackId = `${formId}-phone-feedback`;
+  const phoneInvalid = Boolean(phoneFieldError);
+  const phoneInputRing = phoneInvalid
+    ? "border-rose-400 focus:border-rose-500 focus:ring-rose-200/80"
+    : "";
 
   return (
     <dialog
@@ -228,14 +259,16 @@ export function AddStudentLeadDialog({
           </label>
 
           <div className="block min-w-0 text-[12px] font-medium text-slate-700">
-            <span>
+            <span id={`${formId}-phone-label`}>
               Phone <span className="text-rose-600">*</span>
             </span>
-          
+
             <div
               className="mt-1 flex w-full min-w-0 max-w-full flex-nowrap items-stretch gap-2"
               role="group"
-              aria-label="Phone number"
+              aria-labelledby={`${formId}-phone-label`}
+              aria-describedby={phoneFeedbackId}
+              aria-invalid={phoneInvalid}
             >
               <label className="sr-only" htmlFor={`${formId}-dial`}>
                 Country code
@@ -244,6 +277,7 @@ export function AddStudentLeadDialog({
                 id={`${formId}-dial`}
                 className={cn(
                   inputBase,
+                  phoneInputRing,
                   "mt-0 w-[4.25rem] shrink-0 tabular-nums sm:w-20",
                 )}
                 value={dialCode}
@@ -255,6 +289,7 @@ export function AddStudentLeadDialog({
                 placeholder="+91"
                 inputMode="tel"
                 autoComplete="tel-country-code"
+                aria-invalid={phoneInvalid}
               />
               <div className="min-w-0 flex-1">
                 <label className="sr-only" htmlFor={`${formId}-national`}>
@@ -262,19 +297,45 @@ export function AddStudentLeadDialog({
                 </label>
                 <input
                   id={`${formId}-national`}
-                  className={cn(inputBase, "mt-0 w-full min-w-0 tabular-nums")}
+                  className={cn(
+                    inputBase,
+                    phoneInputRing,
+                    "mt-0 w-full min-w-0 tabular-nums",
+                  )}
                   value={nationalNumber}
                   onChange={(e) => {
                     setError(null);
                     setNationalNumber(digitsOnly(e.target.value));
                   }}
-                  onFocus={() => setError(null)}
+                  onFocus={() => {
+                    setError(null);
+                    setNationalFocused(true);
+                  }}
+                  onBlur={() => {
+                    setNationalFocused(false);
+                    setNationalBlurredOnce(true);
+                  }}
                   placeholder={nationalHint}
                   inputMode="numeric"
                   autoComplete="tel-national"
+                  aria-invalid={phoneInvalid}
+                  aria-errormessage={
+                    phoneFieldError ? phoneFeedbackId : undefined
+                  }
                 />
               </div>
             </div>
+            <p
+              id={phoneFeedbackId}
+              className={cn(
+                "mt-1 text-[11px]",
+                phoneFieldError ? "text-rose-700" : "text-slate-500",
+              )}
+              role={phoneFieldError ? "alert" : undefined}
+              aria-live={phoneFieldError ? "polite" : undefined}
+            >
+              {phoneFieldError ?? `Expected: ${nationalHint}.`}
+            </p>
           </div>
 
           <label className="block min-w-0 text-[12px] font-medium text-slate-700">

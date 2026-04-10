@@ -152,7 +152,7 @@ export async function PATCH(req: Request, context: Ctx) {
         return NextResponse.json(
           {
             error:
-              "Complete the previous pipeline step before advancing (Demo → Brochure → Fees → Schedule).",
+              "Complete the previous pipeline step before advancing (Demo → Documents → Fees → Schedule).",
           },
           { status: 400 },
         );

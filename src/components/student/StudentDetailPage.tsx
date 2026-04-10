@@ -9,6 +9,7 @@ import {
   format,
   formatDistanceToNow,
   isBefore,
+  isValid,
   parseISO,
   startOfWeek,
 } from "date-fns";
@@ -28,7 +29,15 @@ import type {
   Lead,
   PipelineActivity,
 } from "@/lib/types";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import { GRADE_OPTIONS, TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import {
+  LEAD_COUNTRY_OPTIONS,
+  dialCodeForCountry,
+  digitsOnly,
+  normalizeDialCodeInput,
+  optionForCountry,
+  validateNationalNumber,
+} from "@/lib/country-phone";
 import { formatTargetExams } from "@/lib/lead-display";
 import { formatLeadPhone } from "@/lib/phone-display";
 import {
@@ -63,6 +72,7 @@ import { cn } from "@/lib/cn";
 import { computeMeetWindow } from "@/lib/meetLinks/window";
 import { copyTextToClipboard } from "@/lib/copyToClipboard";
 import { randomUuid } from "@/lib/randomUuid";
+import { useLeadSources } from "@/hooks/useLeadSources";
 import { defaultTimeZoneForCountry } from "@/lib/timezones/countryDefaultTimeZone";
 import {
   ensureSelectedTimeZoneOption,
@@ -80,7 +90,7 @@ import {
 
 const STEPS = [
   { id: "step-1", n: 1, label: "Demo" },
-  { id: "step-2", n: 2, label: "Brochure" },
+  { id: "step-2", n: 2, label: "Documents" },
   { id: "step-3", n: 3, label: "Fees" },
   { id: "step-4", n: 4, label: "Schedule" },
 ] as const;
@@ -298,9 +308,33 @@ function formatActivityTime(iso: string): string {
   }
 }
 
+function leadDateForInput(leadDate: string): string {
+  if (/^\d{4}-\d{2}-\d{2}/.test(leadDate)) return leadDate.slice(0, 10);
+  const parsed = parseISO(leadDate);
+  return isValid(parsed) ? format(parsed, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+}
+
+type HeroEditDraft = {
+  studentName: string;
+  parentName: string;
+  email: string;
+  country: string;
+  dialCode: string;
+  nationalNumber: string;
+  date: string;
+  grade: string;
+  dataType: string;
+  targetExams: string[];
+};
+
+const HERO_EDIT_INPUT =
+  "box-border w-full min-w-0 rounded-none border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30";
+
 type Props = { lead: Lead };
 
 export function StudentDetailPage({ lead: initialLead }: Props) {
+  const heroFormId = useId();
+  const leadSources = useLeadSources();
   const [lead, setLead] = useState(initialLead);
   const leadRef = useRef(lead);
   leadRef.current = lead;
@@ -368,6 +402,21 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
   const skipNotesAutosave = useRef(true);
+
+  const [heroEditing, setHeroEditing] = useState(false);
+  const [heroDraft, setHeroDraft] = useState<HeroEditDraft | null>(null);
+  const [heroSaving, setHeroSaving] = useState(false);
+  const [heroError, setHeroError] = useState<string | null>(null);
+  const [heroNationalBlurredOnce, setHeroNationalBlurredOnce] = useState(false);
+  const [heroNationalFocused, setHeroNationalFocused] = useState(false);
+
+  useEffect(() => {
+    setHeroEditing(false);
+    setHeroDraft(null);
+    setHeroError(null);
+    setHeroNationalBlurredOnce(false);
+    setHeroNationalFocused(false);
+  }, [lead.id]);
 
   useEffect(() => {
     skipNotesAutosave.current = true;
@@ -442,6 +491,117 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
     };
   }, []);
 
+  const heroNationalDigits = useMemo(
+    () => (heroDraft ? digitsOnly(heroDraft.nationalNumber) : ""),
+    [heroDraft],
+  );
+
+  const heroPhoneFieldError = useMemo(() => {
+    if (!heroDraft) return null;
+    if (heroNationalDigits.length > 0) {
+      return validateNationalNumber(heroDraft.country, heroNationalDigits);
+    }
+    if (heroNationalBlurredOnce && !heroNationalFocused) {
+      return "Enter the phone number.";
+    }
+    return null;
+  }, [
+    heroDraft,
+    heroNationalDigits,
+    heroNationalBlurredOnce,
+    heroNationalFocused,
+  ]);
+
+  const cancelHeroEdit = useCallback(() => {
+    setHeroEditing(false);
+    setHeroDraft(null);
+    setHeroError(null);
+  }, []);
+
+  const beginHeroEdit = useCallback(() => {
+    setHeroError(null);
+    setHeroNationalBlurredOnce(false);
+    setHeroNationalFocused(false);
+    const country = LEAD_COUNTRY_OPTIONS.some((c) => c.value === lead.country)
+      ? lead.country
+      : LEAD_COUNTRY_OPTIONS[0]!.value;
+    const dataType = leadSources.some((s) => s.value === lead.dataType)
+      ? lead.dataType
+      : (leadSources[0]?.value ?? lead.dataType);
+    const gradeOk = (GRADE_OPTIONS as readonly string[]).includes(lead.grade);
+    setHeroDraft({
+      studentName: lead.studentName,
+      parentName:
+        lead.parentName.trim() === "—" ? "" : lead.parentName,
+      email: lead.email?.trim() ?? "",
+      country,
+      dialCode: dialCodeForCountry(country),
+      nationalNumber: digitsOnly(lead.phone),
+      date: leadDateForInput(lead.date),
+      grade: gradeOk ? lead.grade : "12th",
+      dataType,
+      targetExams: [...lead.targetExams],
+    });
+    setHeroEditing(true);
+  }, [lead, leadSources]);
+
+  const saveHeroEdit = useCallback(async () => {
+    if (!heroDraft) return;
+    const name = heroDraft.studentName.trim();
+    if (!name) {
+      setHeroError("Student name is required.");
+      return;
+    }
+    const national = digitsOnly(heroDraft.nationalNumber);
+    const phoneErr = validateNationalNumber(heroDraft.country, national);
+    if (phoneErr) {
+      setHeroNationalBlurredOnce(true);
+      setHeroError(phoneErr);
+      return;
+    }
+    if (heroDraft.targetExams.length === 0) {
+      setHeroError("Select at least one target exam.");
+      return;
+    }
+    if (!leadSources.some((s) => s.value === heroDraft.dataType)) {
+      setHeroError("Choose a valid lead source.");
+      return;
+    }
+    setHeroError(null);
+    setHeroSaving(true);
+    try {
+      const cur = leadRef.current;
+      await patchLead({
+        studentName: name,
+        parentName: heroDraft.parentName.trim() || "—",
+        email: heroDraft.email.trim(),
+        country: heroDraft.country.trim(),
+        phone: national,
+        date: heroDraft.date,
+        grade: heroDraft.grade,
+        dataType: heroDraft.dataType,
+        targetExams: [...heroDraft.targetExams],
+        activityLog: appendActivity(
+          cur.activityLog,
+          "note",
+          "Student profile updated",
+        ),
+      });
+      setHeroEditing(false);
+      setHeroDraft(null);
+    } catch (e) {
+      setHeroError(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setHeroSaving(false);
+    }
+  }, [heroDraft, leadSources, patchLead]);
+
+  const heroPhoneFeedbackId = `${heroFormId}-phone-feedback`;
+  const heroPhoneInvalid = Boolean(heroPhoneFieldError);
+  const heroNationalHint = heroDraft
+    ? (optionForCountry(heroDraft.country)?.nationalHint ?? "Local number")
+    : "Local number";
+
   const badgeClass =
     lead.rowTone === "interested"
       ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-100"
@@ -483,61 +643,374 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
 
           <div className={SX.studentHeroBody}>
             <div className={SX.studentHeroTitleRow}>
-              <h1 className={SX.studentHeroName}>{lead.studentName}</h1>
-              <span
-                className={cn(
-                  "shrink-0 rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
-                  badgeClass,
+              {heroEditing && heroDraft ? (
+                <input
+                  className={cn(
+                    SX.studentHeroName,
+                    "min-w-0 max-w-full flex-1 border border-slate-200 bg-white px-2 py-1.5 sm:max-w-[min(100%,36rem)]",
+                  )}
+                  value={heroDraft.studentName}
+                  onChange={(e) =>
+                    setHeroDraft({ ...heroDraft, studentName: e.target.value })
+                  }
+                  aria-label="Student name"
+                  autoComplete="name"
+                />
+              ) : (
+                <h1 className={SX.studentHeroName}>{lead.studentName}</h1>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                    badgeClass,
+                  )}
+                >
+                  {extras.statusLabel}
+                </span>
+                {heroEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      className={SX.btnSecondary}
+                      disabled={heroSaving}
+                      onClick={cancelHeroEdit}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className={SX.btnPrimary}
+                      disabled={heroSaving}
+                      onClick={() => void saveHeroEdit()}
+                    >
+                      {heroSaving ? "Saving…" : "Save"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className={cn(
+                      SX.btnSecondary,
+                      "inline-flex items-center gap-1.5",
+                    )}
+                    onClick={beginHeroEdit}
+                  >
+                    <IconPencil className="h-3.5 w-3.5 shrink-0" />
+                    Edit details
+                  </button>
                 )}
-              >
-                {extras.statusLabel}
-              </span>
+              </div>
             </div>
 
-            <dl
-              className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-100 pt-5 sm:grid-cols-4 sm:gap-x-8"
-              role="group"
-              aria-label="Primary contact details"
-            >
-              <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                  Phone
-                </dt>
-                <dd className="mt-1 text-[13px] font-medium tabular-nums text-slate-900">
-                  {lead.phone ? (
-                    <span>{formatLeadPhone(lead)}</span>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </dd>
+            {heroEditing && heroDraft ? (
+              <div
+                className="mt-5 space-y-4 border-t border-slate-100 pt-5"
+                role="group"
+                aria-label="Edit student details"
+              >
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-8">
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Country
+                    <select
+                      className={cn(HERO_EDIT_INPUT, "mt-1 cursor-pointer")}
+                      value={heroDraft.country}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setHeroError(null);
+                        setHeroDraft({
+                          ...heroDraft,
+                          country: next,
+                          dialCode: dialCodeForCountry(next),
+                        });
+                      }}
+                    >
+                      {LEAD_COUNTRY_OPTIONS.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.value} ({c.dialCode})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Lead date
+                    <input
+                      type="date"
+                      className={cn(HERO_EDIT_INPUT, "mt-1 tabular-nums")}
+                      value={heroDraft.date}
+                      onChange={(e) =>
+                        setHeroDraft({ ...heroDraft, date: e.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                  <span id={`${heroFormId}-phone-label`}>Phone</span>
+                  <div
+                    className={cn(
+                      "mt-1 flex w-full min-w-0 flex-nowrap items-stretch gap-2",
+                      heroPhoneInvalid &&
+                        "[&_input]:border-rose-400 [&_input]:focus:border-rose-500 [&_input]:focus:ring-rose-200/80",
+                    )}
+                    role="group"
+                    aria-labelledby={`${heroFormId}-phone-label`}
+                    aria-describedby={heroPhoneFeedbackId}
+                    aria-invalid={heroPhoneInvalid}
+                  >
+                    <label className="sr-only" htmlFor={`${heroFormId}-dial`}>
+                      Country code
+                    </label>
+                    <input
+                      id={`${heroFormId}-dial`}
+                      className={cn(
+                        HERO_EDIT_INPUT,
+                        "mt-0 w-[4.25rem] shrink-0 tabular-nums sm:w-20",
+                      )}
+                      value={heroDraft.dialCode}
+                      onChange={(e) => {
+                        setHeroError(null);
+                        setHeroDraft({
+                          ...heroDraft,
+                          dialCode: normalizeDialCodeInput(e.target.value),
+                        });
+                      }}
+                      onBlur={() =>
+                        setHeroDraft((d) =>
+                          d
+                            ? {
+                                ...d,
+                                dialCode: normalizeDialCodeInput(d.dialCode),
+                              }
+                            : d,
+                        )
+                      }
+                      placeholder="+91"
+                      inputMode="tel"
+                      autoComplete="tel-country-code"
+                      aria-invalid={heroPhoneInvalid}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <label
+                        className="sr-only"
+                        htmlFor={`${heroFormId}-national`}
+                      >
+                        Mobile number
+                      </label>
+                      <input
+                        id={`${heroFormId}-national`}
+                        className={cn(
+                          HERO_EDIT_INPUT,
+                          "mt-0 w-full min-w-0 tabular-nums",
+                        )}
+                        value={heroDraft.nationalNumber}
+                        onChange={(e) => {
+                          setHeroError(null);
+                          setHeroDraft({
+                            ...heroDraft,
+                            nationalNumber: digitsOnly(e.target.value),
+                          });
+                        }}
+                        onFocus={() => {
+                          setHeroError(null);
+                          setHeroNationalFocused(true);
+                        }}
+                        onBlur={() => {
+                          setHeroNationalFocused(false);
+                          setHeroNationalBlurredOnce(true);
+                        }}
+                        placeholder={heroNationalHint}
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        aria-invalid={heroPhoneInvalid}
+                        aria-errormessage={
+                          heroPhoneFieldError ? heroPhoneFeedbackId : undefined
+                        }
+                      />
+                    </div>
+                  </div>
+                  <p
+                    id={heroPhoneFeedbackId}
+                    className={cn(
+                      "mt-1 text-[11px]",
+                      heroPhoneFieldError ? "text-rose-700" : "text-slate-500",
+                    )}
+                    role={heroPhoneFieldError ? "alert" : undefined}
+                    aria-live={heroPhoneFieldError ? "polite" : undefined}
+                  >
+                    {heroPhoneFieldError ?? `Expected: ${heroNationalHint}.`}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-8">
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Parent / guardian
+                    <input
+                      className={cn(HERO_EDIT_INPUT, "mt-1")}
+                      value={heroDraft.parentName}
+                      onChange={(e) =>
+                        setHeroDraft({ ...heroDraft, parentName: e.target.value })
+                      }
+                      placeholder="Optional"
+                      autoComplete="name"
+                    />
+                  </label>
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Email
+                    <input
+                      type="email"
+                      className={cn(HERO_EDIT_INPUT, "mt-1")}
+                      value={heroDraft.email}
+                      onChange={(e) =>
+                        setHeroDraft({ ...heroDraft, email: e.target.value })
+                      }
+                      placeholder="name@example.com"
+                      autoComplete="email"
+                    />
+                  </label>
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Grade / class
+                    <select
+                      className={cn(HERO_EDIT_INPUT, "mt-1 cursor-pointer")}
+                      value={heroDraft.grade}
+                      onChange={(e) =>
+                        setHeroDraft({ ...heroDraft, grade: e.target.value })
+                      }
+                    >
+                      {GRADE_OPTIONS.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Source
+                    <select
+                      className={cn(HERO_EDIT_INPUT, "mt-1 cursor-pointer")}
+                      value={heroDraft.dataType}
+                      onChange={(e) =>
+                        setHeroDraft({ ...heroDraft, dataType: e.target.value })
+                      }
+                      aria-label="Lead source"
+                    >
+                      {leadSources.map((o) => (
+                        <option
+                          key={`${o.abbrev}-${o.value}`}
+                          value={o.value}
+                        >
+                          {o.abbrev} — {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <fieldset className="min-w-0 border border-slate-200 p-3">
+                  <legend className="px-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Target exams
+                  </legend>
+                  <p className="mb-2 text-[11px] text-slate-500">
+                    Select one or more.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {TARGET_EXAM_OPTIONS.map((exam) => (
+                      <label
+                        key={exam}
+                        className="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-slate-800"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={heroDraft.targetExams.includes(exam)}
+                          onChange={() => {
+                            setHeroDraft((d) => {
+                              if (!d) return d;
+                              const has = d.targetExams.includes(exam);
+                              const next = has
+                                ? d.targetExams.filter((x) => x !== exam)
+                                : [...d.targetExams, exam];
+                              return {
+                                ...d,
+                                targetExams: next.length ? next : d.targetExams,
+                              };
+                            });
+                          }}
+                          className="rounded border-slate-300"
+                        />
+                        {exam}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {heroError ? (
+                  <p className="text-[12px] text-rose-700" role="alert">
+                    {heroError}
+                  </p>
+                ) : null}
               </div>
-              <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                  Target exams
-                </dt>
-                <dd className="mt-1">
-                  <span className={SX.studentHeroCourseBadge}>
-                    {formatTargetExams(lead.targetExams)}
-                  </span>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                  Country
-                </dt>
-                <dd className="mt-1 text-[13px] font-medium text-slate-900">
-                  {extras.country}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                  Lead date
-                </dt>
-                <dd className="mt-1 text-[13px] font-medium tabular-nums text-slate-900">
-                  {format(parseISO(lead.date), "dd/MM/yyyy")}
-                </dd>
-              </div>
-            </dl>
+            ) : (
+              <dl
+                className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-100 pt-5 sm:grid-cols-4 sm:gap-x-8"
+                role="group"
+                aria-label="Primary contact details"
+              >
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Phone
+                  </dt>
+                  <dd className="mt-1 text-[13px] font-medium tabular-nums text-slate-900">
+                    {lead.phone ? (
+                      <span>{formatLeadPhone(lead)}</span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Target exams
+                  </dt>
+                  <dd className="mt-1">
+                    <span className={SX.studentHeroCourseBadge}>
+                      {formatTargetExams(lead.targetExams)}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Country
+                  </dt>
+                  <dd className="mt-1 text-[13px] font-medium text-slate-900">
+                    {extras.country}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Lead date
+                  </dt>
+                  <dd className="mt-1 text-[13px] font-medium tabular-nums text-slate-900">
+                    {format(parseISO(lead.date), "dd/MM/yyyy")}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Grade
+                  </dt>
+                  <dd className="mt-1 text-[13px] font-medium text-slate-900">
+                    {lead.grade}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Source
+                  </dt>
+                  <dd className="mt-1 text-[13px] font-medium text-slate-900">
+                    {lead.dataType}
+                  </dd>
+                </div>
+              </dl>
+            )}
 
             {lead.sheetTab === "not_interested" &&
             lead.notInterestedRemark?.trim() ? (
@@ -556,16 +1029,20 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
 
             <div className={SX.studentHeroSubline}>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>
-                  <span className={SX.studentHeroSubLabel}>Parent</span>{" "}
-                  <span className={SX.studentHeroSubVal}>
-                    {lead.parentName || "—"}
-                  </span>
-                </span>
-                <span
-                  className="hidden h-3 w-px bg-slate-200 sm:inline-block"
-                  aria-hidden
-                />
+                {!heroEditing ? (
+                  <>
+                    <span>
+                      <span className={SX.studentHeroSubLabel}>Parent</span>{" "}
+                      <span className={SX.studentHeroSubVal}>
+                        {lead.parentName || "—"}
+                      </span>
+                    </span>
+                    <span
+                      className="hidden h-3 w-px bg-slate-200 sm:inline-block"
+                      aria-hidden
+                    />
+                  </>
+                ) : null}
                 <span>
                   <span className={SX.studentHeroSubLabel}>Sheet</span>{" "}
                   <span className={SX.studentHeroSubVal}>{sheetTabLabel}</span>
@@ -581,16 +1058,17 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                   </span>
                 </span>
               </div>
-              <p className="mt-2">
-                <span className={SX.studentHeroSubLabel}>Email</span>{" "}
-                <a
-                  href={`mailto:${extras.email}`}
-                  className="font-medium text-primary hover:underline"
-                  title={extras.email}
-                >
-                  {extras.email}
-                </a>
-              </p>
+              {!heroEditing ? (
+                <p className="mt-2">
+                  <span className={SX.studentHeroSubLabel}>Email</span>{" "}
+                  <span
+                    className={SX.studentHeroSubVal}
+                    title={extras.email}
+                  >
+                    {extras.email}
+                  </span>
+                </p>
+              ) : null}
             </div>
             {lead.followUpDate && (
               <p className="mt-2 text-[12px] font-medium text-[#e65100]">

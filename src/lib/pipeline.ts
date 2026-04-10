@@ -2,7 +2,7 @@ import type { Lead, PipelineActivity } from "./types";
 
 export const PIPELINE_STEP_LABELS = [
   "Demo",
-  "Brochure",
+  "Documents",
   "Fees",
   "Schedule",
 ] as const;
