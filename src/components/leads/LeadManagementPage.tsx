@@ -20,6 +20,7 @@ import {
   isLeadInOngoingPipeline,
   isLeadInTodayData,
 } from "@/lib/leadSheetRouting";
+import { useLeadSources } from "@/hooks/useLeadSources";
 
 type LeadMainTab =
   | "today"
@@ -77,6 +78,7 @@ export function LeadManagementPage() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const importExcelRef = useRef<ImportExcelControlHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const leadSources = useLeadSources();
 
   const refreshLeads = useCallback(async () => {
     const res = await fetch("/api/leads", { cache: "no-store" });
@@ -705,6 +707,7 @@ export function LeadManagementPage() {
                   showFollowUpColumn={false}
                   showPipelineColumn={false}
                   pickDataTypeOnClick
+                  leadSourceOptions={leadSources}
                   className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                   leads={applyDraftToList(todayLeads)}
                   sheetEditMode={sheetEditMode}
@@ -745,6 +748,7 @@ export function LeadManagementPage() {
                     showFollowUpColumn={false}
                     showPipelineColumn
                     pickDataTypeOnClick
+                    leadSourceOptions={leadSources}
                     className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                     leads={applyDraftToList(ongoingInterestedLeads)}
                     sheetEditMode={sheetEditMode}
@@ -771,6 +775,7 @@ export function LeadManagementPage() {
                     showFollowUpColumn={false}
                     showPipelineColumn={false}
                     pickDataTypeOnClick
+                    leadSourceOptions={leadSources}
                     className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                     leads={applyDraftToList(ongoingOtherLeads)}
                     sheetEditMode={sheetEditMode}
@@ -885,6 +890,7 @@ export function LeadManagementPage() {
         open={addStudentOpen}
         onClose={() => setAddStudentOpen(false)}
         onAdded={refreshLeads}
+        leadSourceOptions={leadSources}
       />
 
       <FollowUpDialog

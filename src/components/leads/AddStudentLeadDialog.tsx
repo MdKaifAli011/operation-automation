@@ -13,22 +13,27 @@ import {
 } from "@/lib/country-phone";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
+import {
+  DEFAULT_LEAD_SOURCE_OPTIONS,
+  type LeadSourceOption,
+} from "@/lib/leadSources";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onAdded: () => void | Promise<void>;
+  /** From Settings → Lead sources (OL/WT/REF/PD). */
+  leadSourceOptions?: LeadSourceOption[];
 };
 
 const DEFAULT_COUNTRY = LEAD_COUNTRY_OPTIONS[0]!.value;
-/** Defaults when the short form omits source / grade (API + grid). */
-const DEFAULT_DATA_TYPE = "Organic";
 const DEFAULT_GRADE = "12th";
 
 export function AddStudentLeadDialog({
   open,
   onClose,
   onAdded,
+  leadSourceOptions = DEFAULT_LEAD_SOURCE_OPTIONS,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const formId = useId();
@@ -63,6 +68,17 @@ export function AddStudentLeadDialog({
   ]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [dataType, setDataType] = useState(
+    () => leadSourceOptions[0]?.value ?? "Organic",
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setDataType((prev) => {
+      if (leadSourceOptions.some((o) => o.value === prev)) return prev;
+      return leadSourceOptions[0]?.value ?? "Organic";
+    });
+  }, [open, leadSourceOptions]);
 
   const nationalHint =
     optionForCountry(country)?.nationalHint ?? "Local number";
@@ -108,7 +124,7 @@ export function AddStudentLeadDialog({
           followUpDate: null,
           studentName: name,
           parentName: parentName.trim() || "—",
-          dataType: DEFAULT_DATA_TYPE,
+          dataType,
           grade: DEFAULT_GRADE,
           targetExams: [...targetExams],
           country: country.trim() || DEFAULT_COUNTRY,
@@ -134,6 +150,7 @@ export function AddStudentLeadDialog({
       setParentName("");
       setTargetExams([TARGET_EXAM_OPTIONS[0]]);
       setCountry(DEFAULT_COUNTRY);
+      setDataType(leadSourceOptions[0]?.value ?? "Organic");
       close();
     } catch {
       setError("Network error. Try again.");
@@ -161,8 +178,8 @@ export function AddStudentLeadDialog({
       <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
         <h2 className="text-[15px] font-bold text-slate-900">Add student lead</h2>
         <p className="mt-0.5 text-[12px] text-slate-600">
-          Creates a new row on the ongoing sheet. You can edit details in the grid
-          or open their workspace.
+          Creates a lead on <span className="font-medium">Today&apos;s Data</span>.
+          Choose source, then edit in the grid or open their workspace.
         </p>
       </div>
 
@@ -267,6 +284,28 @@ export function AddStudentLeadDialog({
               onChange={(e) => setParentName(e.target.value)}
               placeholder="Optional"
             />
+          </label>
+
+          <label className="block min-w-0 text-[12px] font-medium text-slate-700">
+            Source <span className="text-rose-600">*</span>
+            <select
+              className={cn(fieldFull, "cursor-pointer")}
+              value={dataType}
+              onChange={(e) => {
+                setDataType(e.target.value);
+                setError(null);
+              }}
+              aria-label="Lead source"
+            >
+              {leadSourceOptions.map((o) => (
+                <option key={`${o.abbrev}-${o.value}`} value={o.value}>
+                  {o.abbrev} — {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Configure abbreviations and labels in Settings → Lead sources.
+            </p>
           </label>
 
           <fieldset className="min-w-0 border border-slate-200 p-3">

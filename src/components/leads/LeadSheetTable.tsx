@@ -13,9 +13,10 @@ import { formatLeadPhone } from "@/lib/phone-display";
 import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 import {
-  DATA_TYPE_PICK_OPTIONS,
+  DEFAULT_LEAD_SOURCE_OPTIONS,
   dataTypeToShortLabel,
-} from "@/lib/leadDataTypeShort";
+  type LeadSourceOption,
+} from "@/lib/leadSources";
 
 type ColKey =
   | "date"
@@ -86,6 +87,8 @@ type Props = {
    * Saves immediately; does not require sheet edit mode.
    */
   pickDataTypeOnClick?: boolean;
+  /** Configured in Settings → Lead sources; drives OL/WT/… labels and stored values. */
+  leadSourceOptions?: LeadSourceOption[];
 };
 
 export function LeadSheetTable({
@@ -104,6 +107,7 @@ export function LeadSheetTable({
   showPipelineColumn = false,
   showNotInterestedRemark = false,
   pickDataTypeOnClick = false,
+  leadSourceOptions = DEFAULT_LEAD_SOURCE_OPTIONS,
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -225,6 +229,12 @@ export function LeadSheetTable({
 
   const isDaily = variant === "daily";
 
+  const sourcePickTitle = useMemo(
+    () =>
+      `Set source — ${leadSourceOptions.map((o) => `${o.abbrev} ${o.label}`).join(" · ")}`,
+    [leadSourceOptions],
+  );
+
   const startEdit = (leadId: string, field: ColKey) => {
     if (!sheetEditMode) return;
     setEditing({ leadId, field });
@@ -275,7 +285,7 @@ export function LeadSheetTable({
               w={COL_WIDTHS.dataType}
               title={
                 pickDataTypeOnClick
-                  ? "Click cell: OL Organic · WT Walk-in · REF Referral · PD Paid"
+                  ? `Click to set source: ${leadSourceOptions.map((o) => `${o.abbrev} ${o.label}`).join(" · ")}`
                   : undefined
               }
             >
@@ -600,7 +610,11 @@ export function LeadSheetTable({
                       setSelectedCell({ leadId: lead.id, field: "dataType" })
                     }
                     tone={tone}
-                    shortLabel={dataTypeToShortLabel(lead.dataType)}
+                    title={sourcePickTitle}
+                    shortLabel={dataTypeToShortLabel(
+                      lead.dataType,
+                      leadSourceOptions,
+                    )}
                     onOpenPicker={(rect) => {
                       setActionMenu(null);
                       const vw =
@@ -743,9 +757,9 @@ export function LeadSheetTable({
             <p className="border-b border-slate-100 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               Source
             </p>
-            {DATA_TYPE_PICK_OPTIONS.map(({ abbrev, value }) => (
+            {leadSourceOptions.map(({ abbrev, value, label }) => (
               <button
-                key={abbrev}
+                key={`${abbrev}-${value}`}
                 type="button"
                 role="menuitem"
                 className={cn(
@@ -762,7 +776,7 @@ export function LeadSheetTable({
                   {abbrev}
                 </span>
                 <span className="min-w-0 text-[12px] text-slate-600">
-                  {value}
+                  {label}
                 </span>
               </button>
             ))}
@@ -951,6 +965,7 @@ function DataTypePickCell({
   selected,
   onSelect,
   tone,
+  title,
   shortLabel,
   onOpenPicker,
 }: {
@@ -958,6 +973,7 @@ function DataTypePickCell({
   selected: boolean;
   onSelect: () => void;
   tone: string;
+  title: string;
   shortLabel: string;
   onOpenPicker: (rect: DOMRect) => void;
 }) {
@@ -977,7 +993,7 @@ function DataTypePickCell({
           "text-slate-800 transition-colors hover:border-slate-300 hover:bg-white/80",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
         )}
-        title="Set source: OL Organic · WT Walk-in · REF Referral · PD Paid"
+        title={title}
         onClick={(e) => {
           e.stopPropagation();
           onSelect();

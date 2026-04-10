@@ -1154,8 +1154,8 @@ function DemoTeacherFeedbackViewDialog({
         <div className="max-h-[min(70vh,480px)] overflow-y-auto px-3 py-3 text-[13px] leading-relaxed">
           <p className="text-[12px] text-slate-600">
             {row.subject} · {row.teacher} ·{" "}
-            {row.isoDate ? format(parseISO(row.isoDate), "d MMM yyyy") : ""}{" "}
-            · {row.timeHmIST} IST
+            {row.isoDate ? format(parseISO(row.isoDate), "d MMM yyyy") : ""} ·{" "}
+            {row.timeHmIST} IST
           </p>
           {row.teacherFeedbackSubmittedAt ? (
             <p className="mt-1 text-[11px] text-slate-500">
@@ -1412,9 +1412,7 @@ function DemoSection({
             setFeedbackNotice("Feedback link copied to clipboard.");
             copied = true;
           } else {
-            setFeedbackNotice(
-              `Copy this URL manually: ${data.feedbackUrl}`,
-            );
+            setFeedbackNotice(`Copy this URL manually: ${data.feedbackUrl}`);
           }
         } else if (sendEmail && data.emailSent) {
           setFeedbackNotice("Feedback email sent to the teacher.");
@@ -1816,7 +1814,11 @@ function DemoSection({
 
         if (gen !== assignGenRef.current) return;
 
-        if (Object.keys(newErrors).length > 0 || updates.size > 0 || clearedIds.size > 0) {
+        if (
+          Object.keys(newErrors).length > 0 ||
+          updates.size > 0 ||
+          clearedIds.size > 0
+        ) {
           setMeetErrors((prev) => {
             const next = { ...prev };
             for (const id of updates.keys()) delete next[id];
@@ -1871,7 +1873,8 @@ function DemoSection({
               ) : null}
             </div>
             <p className="mt-1 text-[12px] text-slate-500">
-              Schedule and manage trial classes with clear status and quick actions.
+              Schedule and manage trial classes with clear status and quick
+              actions.
             </p>
           </div>
           {showAddInHeader ? (
@@ -1957,7 +1960,9 @@ function DemoSection({
                     const slot = parseIstSlot(r.isoDate, r.timeHmIST);
                     const meetId = r.meetRowId?.trim();
                     const slotFuture =
-                      slot != null && !Number.isNaN(slot.getTime()) && slot.getTime() >= Date.now();
+                      slot != null &&
+                      !Number.isNaN(slot.getTime()) &&
+                      slot.getTime() >= Date.now();
                     const nowCoarse = new Date();
                     const feedbackEligibleAt =
                       r.status !== "Cancelled" &&
@@ -2042,7 +2047,10 @@ function DemoSection({
                               </div>
                               <div className="mt-0.5 text-[12px] leading-tight text-slate-600">
                                 {formatTime12hInZone(slot, r.studentTimeZone)}{" "}
-                                {timeZoneShortLabelForMessages(r.studentTimeZone, slot)}
+                                {timeZoneShortLabelForMessages(
+                                  r.studentTimeZone,
+                                  slot,
+                                )}
                               </div>
                             </>
                           ) : (
@@ -2108,7 +2116,9 @@ function DemoSection({
                               </span>
                             )
                           ) : (
-                            <span className="text-[12px] text-slate-400">—</span>
+                            <span className="text-[12px] text-slate-400">
+                              —
+                            </span>
                           )}
                         </td>
                         <td
@@ -2119,7 +2129,9 @@ function DemoSection({
                           )}
                         >
                           {r.status === "Cancelled" ? (
-                            <span className="text-[12px] text-slate-400">—</span>
+                            <span className="text-[12px] text-slate-400">
+                              —
+                            </span>
                           ) : r.teacherFeedbackSubmittedAt ? (
                             <button
                               type="button"
@@ -2129,7 +2141,9 @@ function DemoSection({
                               View feedback
                             </button>
                           ) : !meetId || !feedbackEligibleAt ? (
-                            <span className="text-[12px] text-slate-400">—</span>
+                            <span className="text-[12px] text-slate-400">
+                              —
+                            </span>
                           ) : feedbackCountdownMin !== null ? (
                             <span className="text-[11px] leading-snug text-slate-500">
                               Form unlocks in{" "}
@@ -2187,7 +2201,9 @@ function DemoSection({
                               </div>
                             </div>
                           ) : (
-                            <span className="text-[12px] text-slate-400">—</span>
+                            <span className="text-[12px] text-slate-400">
+                              —
+                            </span>
                           )}
                         </td>
                         <td
@@ -2342,8 +2358,11 @@ function DemoSection({
         <div className="space-y-1.5 border-l-2 border-slate-200 pl-2.5">
           <p>
             Times are entered in{" "}
-            <span className="font-medium text-slate-700">India Standard Time (IST)</span>.
-            The invite also shows how this slot appears in the student timezone.
+            <span className="font-medium text-slate-700">
+              India Standard Time (IST)
+            </span>
+            . The invite also shows how this slot appears in the student
+            timezone.
           </p>
           <p>
             Every row reserves one teacher and one Meet link. The same teacher
@@ -3232,9 +3251,8 @@ function DemoForm({
     hold: number;
     tBlock: number;
   };
-  const [shareSlotConfirm, setShareSlotConfirm] = useState<ShareSlotPayload | null>(
-    null,
-  );
+  const [shareSlotConfirm, setShareSlotConfirm] =
+    useState<ShareSlotPayload | null>(null);
   const [shareConfirmBusy, setShareConfirmBusy] = useState(false);
   const dismissShareSlotConfirm = useCallback(() => {
     setShareSlotConfirm(null);
@@ -3356,9 +3374,10 @@ function DemoForm({
               Schedule in{" "}
               <span className="font-medium text-slate-700">IST</span> (left).
               The student timezone (right) defaults from this lead&apos;s
-              country (<span className="font-medium text-slate-700">{lead.country}</span>
-              ). Pick any IANA zone from the list; override anytime. See sidebar:
-              Time zones for country → default mapping.
+              country (
+              <span className="font-medium text-slate-700">{lead.country}</span>
+              ). Pick any IANA zone from the list; override anytime. See
+              sidebar: Time zones for country → default mapping.
             </p>
           </div>
         </div>
@@ -3853,10 +3872,7 @@ function BrochureSection({
     const u = stored || link;
     if (!u) return "";
     return normalizeBrochurePreviewUrl(u);
-  }, [
-    examBrochureCatalog?.storedFileUrl,
-    examBrochureCatalog?.linkUrl,
-  ]);
+  }, [examBrochureCatalog?.storedFileUrl, examBrochureCatalog?.linkUrl]);
   /** No per-student upload: lead document URL overrides course default. */
   const defaultOrLeadPreviewSrc = hasUploadedBrochure
     ? ""
@@ -3883,7 +3899,8 @@ function BrochureSection({
     !defaultOrLeadPreviewSrc &&
     Boolean(brochurePrimaryExam) &&
     Boolean(
-      examBrochureCatalog?.title?.trim() || examBrochureCatalog?.summary?.trim(),
+      examBrochureCatalog?.title?.trim() ||
+      examBrochureCatalog?.summary?.trim(),
     );
   const showNoDefaultBrochureHint =
     !hasUploadedBrochure &&
@@ -3965,7 +3982,10 @@ function BrochureSection({
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
             The exam brochure from{" "}
-            <Link href="/course-brochure" className="font-medium text-primary underline">
+            <Link
+              href="/course-brochure"
+              className="font-medium text-primary underline"
+            >
               Course Brochures
             </Link>{" "}
             previews here by default. Upload a file for this student to replace
@@ -3993,8 +4013,8 @@ function BrochureSection({
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="min-w-0 flex-1 truncate text-[12px] text-slate-500">
-                    This student&apos;s file — remove to show the course
-                    default again.
+                    This student&apos;s file — remove to show the course default
+                    again.
                   </p>
                   <button
                     type="button"
@@ -4003,10 +4023,9 @@ function BrochureSection({
                       setUploadError(null);
                       void (async () => {
                         try {
-                          await fetch(
-                            `/api/leads/${lead.id}/brochure-upload`,
-                            { method: "DELETE" },
-                          );
+                          await fetch(`/api/leads/${lead.id}/brochure-upload`, {
+                            method: "DELETE",
+                          });
                           setStoredFileUrl(null);
                           setSavedName(null);
                           const L = leadBrRef.current;
@@ -4130,8 +4149,8 @@ function BrochureSection({
                     >
                       Course Brochures
                     </Link>
-                    . Add a link there to preview the default here, or upload for
-                    this student.
+                    . Add a link there to preview the default here, or upload
+                    for this student.
                   </p>
                 ) : null}
                 <label

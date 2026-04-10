@@ -1,3 +1,5 @@
+import { DEFAULT_LEAD_SOURCE_OPTIONS } from "@/lib/leadSources";
+
 /** Target exams shown in leads grid (multi-select). */
 export const TARGET_EXAM_OPTIONS = [
   "NEET",
@@ -10,13 +12,10 @@ export const TARGET_EXAM_OPTIONS = [
 /** @deprecated Use TARGET_EXAM_OPTIONS — kept for older screens. */
 export const COURSE_OPTIONS = TARGET_EXAM_OPTIONS;
 
-export const DATA_TYPE_OPTIONS = [
-  "Organic",
-  "Paid",
-  "Referral",
-  "Walk-in",
-  "Partner",
-] as const;
+/** Default stored values for lead source — prefer loading from `/api/settings/lead-sources` in UI. */
+export const DATA_TYPE_OPTIONS = DEFAULT_LEAD_SOURCE_OPTIONS.map(
+  (o) => o.value,
+) as readonly string[];
 
 export const GRADE_OPTIONS = [
   "6th",
