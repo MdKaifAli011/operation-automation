@@ -5256,7 +5256,6 @@ function FeeSection({
         )}
       </div>
       <div className={SX.sectionBody}>
-        <InstituteBankDetailsPanel />
         <div className="overflow-auto border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.02]">
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>
@@ -5504,6 +5503,8 @@ function FeeSection({
             payment.
           </p>
         </div>
+
+        <InstituteBankDetailsPanel />
 
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#d0d0d0] pt-3">
           <span className="mr-1 text-[13px] font-semibold text-[#424242]">
