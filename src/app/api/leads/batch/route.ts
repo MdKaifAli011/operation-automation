@@ -15,6 +15,7 @@ const ROW_TONES: Lead["rowTone"][] = [
 ];
 
 const SHEET_TABS: Lead["sheetTab"][] = [
+  "today",
   "ongoing",
   "followup",
   "not_interested",
@@ -27,10 +28,27 @@ function safeRowTone(v: unknown): Lead["rowTone"] {
     : "new";
 }
 
-function safeSheetTab(v: unknown): Lead["sheetTab"] {
-  return typeof v === "string" && SHEET_TABS.includes(v as Lead["sheetTab"])
-    ? (v as Lead["sheetTab"])
-    : "ongoing";
+function defaultSheetTab(
+  rowTone: Lead["rowTone"],
+  followUpDate: string | null,
+): Lead["sheetTab"] {
+  if (rowTone === "not_interested") return "not_interested";
+  if (followUpDate) return "followup";
+  if (rowTone === "new") return "today";
+  return "ongoing";
+}
+
+function safeSheetTab(
+  v: unknown,
+  rowTone: Lead["rowTone"],
+  followUpDate: string | null,
+): Lead["sheetTab"] {
+  if (typeof v !== "string" || !SHEET_TABS.includes(v as Lead["sheetTab"])) {
+    return defaultSheetTab(rowTone, followUpDate);
+  }
+  const explicit = v as Lead["sheetTab"];
+  if (rowTone === "new" && explicit === "ongoing") return "today";
+  return explicit;
 }
 
 /** Import rows: same shape as a Lead without id — empty/missing cells use defaults (never drop a row). */
@@ -54,17 +72,19 @@ function normalizeImportRow(
     typeof row.dataType === "string" ? row.dataType.trim() : "";
   const rawGrade = typeof row.grade === "string" ? row.grade.trim() : "";
 
+  const followUpDate =
+    row.followUpDate === null || row.followUpDate === ""
+      ? null
+      : typeof row.followUpDate === "string"
+        ? row.followUpDate
+        : null;
+  const rowTone = safeRowTone(row.rowTone);
   return {
     date:
       typeof row.date === "string" && row.date.length >= 8
         ? row.date
         : new Date().toISOString().slice(0, 10),
-    followUpDate:
-      row.followUpDate === null || row.followUpDate === ""
-        ? null
-        : typeof row.followUpDate === "string"
-          ? row.followUpDate
-          : null,
+    followUpDate,
     studentName: studentName || "Unknown",
     parentName:
       typeof row.parentName === "string" ? row.parentName.trim() : "",
@@ -83,8 +103,8 @@ function normalizeImportRow(
       row.pipelineSteps <= 4
         ? row.pipelineSteps
         : 0,
-    rowTone: safeRowTone(row.rowTone),
-    sheetTab: safeSheetTab(row.sheetTab),
+    rowTone,
+    sheetTab: safeSheetTab(row.sheetTab, rowTone, followUpDate),
   };
 }
 

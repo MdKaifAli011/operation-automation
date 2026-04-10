@@ -115,7 +115,7 @@ export function AddStudentLeadDialog({
           phone: national,
           pipelineSteps: 0,
           rowTone: "new",
-          sheetTab: "ongoing",
+          sheetTab: "today",
         }),
       });
       const body = await res.json().catch(() => ({}));

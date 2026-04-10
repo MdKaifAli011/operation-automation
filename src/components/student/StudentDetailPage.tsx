@@ -452,13 +452,15 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
           : "bg-sky-50 text-sky-900 ring-1 ring-sky-100";
 
   const sheetTabLabel =
-    lead.sheetTab === "ongoing"
-      ? "Ongoing"
-      : lead.sheetTab === "followup"
-        ? "Follow-up"
-        : lead.sheetTab === "not_interested"
-          ? "Not Interested"
-          : "Converted";
+    lead.sheetTab === "today"
+      ? "Today's Data"
+      : lead.sheetTab === "ongoing"
+        ? "Ongoing"
+        : lead.sheetTab === "followup"
+          ? "Follow-up"
+          : lead.sheetTab === "not_interested"
+            ? "Not Interested"
+            : "Converted";
 
   const pipeDone = Math.min(Math.max(completed, 0), PIPELINE_TOTAL);
 

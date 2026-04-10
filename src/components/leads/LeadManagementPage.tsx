@@ -16,8 +16,17 @@ import { LeadSheetTable } from "./LeadSheetTable";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import { isLeadConvertedInCurrentMonth } from "@/lib/leadConversionMonth";
+import {
+  isLeadInOngoingPipeline,
+  isLeadInTodayData,
+} from "@/lib/leadSheetRouting";
 
-type LeadMainTab = "ongoing" | "not_interested" | "followup" | "converted";
+type LeadMainTab =
+  | "today"
+  | "ongoing"
+  | "not_interested"
+  | "followup"
+  | "converted";
 
 function sortLeads(
   list: Lead[],
@@ -49,7 +58,7 @@ export function LeadManagementPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mainTab, setMainTab] = useState<LeadMainTab>("ongoing");
+  const [mainTab, setMainTab] = useState<LeadMainTab>("today");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [search, setSearch] = useState("");
@@ -170,9 +179,15 @@ export function LeadManagementPage() {
     sortDir,
   ]);
 
-  /** All leads still on the ongoing sheet (interested + new imports + other statuses). */
+  /** Today's Data · new intakes (status New) until marked Interested. */
+  const todayLeads = useMemo(
+    () => filtered.filter(isLeadInTodayData),
+    [filtered],
+  );
+
+  /** Ongoing Students · excludes fresh New rows (those stay on Today's Data). */
   const ongoingSheetLeads = useMemo(
-    () => filtered.filter((l) => l.sheetTab === "ongoing"),
+    () => filtered.filter(isLeadInOngoingPipeline),
     [filtered],
   );
 
@@ -182,7 +197,7 @@ export function LeadManagementPage() {
     [ongoingSheetLeads],
   );
 
-  /** Ongoing tab · imports & intakes land here (status New, etc.) until marked Interested. */
+  /** Ongoing tab · other tones on the Ongoing sheet (e.g. called / no response), not Interested. */
   const ongoingOtherLeads = useMemo(
     () => ongoingSheetLeads.filter((l) => l.rowTone !== "interested"),
     [ongoingSheetLeads],
@@ -215,13 +230,14 @@ export function LeadManagementPage() {
   );
 
   const counts = useMemo(() => {
-    const ongoing = leads.filter((l) => l.sheetTab === "ongoing").length;
+    const todayData = leads.filter(isLeadInTodayData).length;
+    const ongoing = leads.filter(isLeadInOngoingPipeline).length;
     const followup = leads.filter((l) => l.sheetTab === "followup").length;
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
     ).length;
     const converted = leads.filter((l) => isLeadConvertedInCurrentMonth(l)).length;
-    return { ongoing, followup, notInterested, converted };
+    return { todayData, ongoing, followup, notInterested, converted };
   }, [leads]);
 
   const onUpdateLead = useCallback(
@@ -285,12 +301,14 @@ export function LeadManagementPage() {
 
   const tabCounts = useMemo(
     () => ({
+      today: todayLeads.length,
       ongoing: ongoingSheetLeads.length,
       not_interested: notInterestedLeads.length,
       followup: followUpLeads.length,
       converted: convertedLeadsThisMonth.length,
     }),
     [
+      todayLeads.length,
       ongoingSheetLeads.length,
       notInterestedLeads.length,
       followUpLeads.length,
@@ -334,6 +352,12 @@ export function LeadManagementPage() {
     value: number;
     accent: string;
   }[] = [
+    {
+      key: "today",
+      label: "Today's Data",
+      value: counts.todayData,
+      accent: "text-sky-700",
+    },
     {
       key: "ongoing",
       label: "Ongoing",
@@ -642,6 +666,7 @@ export function LeadManagementPage() {
         </div>
 
         <div className={SX.leadTabBar}>
+          {tabBtn("today", "Today's Data")}
           {tabBtn("ongoing", "Ongoing")}
           {tabBtn("not_interested", "Not Interested")}
           {tabBtn("followup", "Follow-ups")}
@@ -649,40 +674,50 @@ export function LeadManagementPage() {
         </div>
 
         <div className={SX.leadSheetBody}>
+          {mainTab === "today" && (
+            <section
+              className="px-3 py-4 md:px-4 md:py-5"
+              aria-label="Today's Data leads"
+            >
+              <div className={SX.leadSectionHead}>
+                <h2 className={SX.leadSectionTitle}>Today&apos;s Data</h2>
+                <p className={SX.leadSectionMeta}>
+                  {todayLeads.length} lead
+                  {todayLeads.length === 1 ? "" : "s"} · new intakes and imports
+                  with status <span className="font-medium">New</span> · use the
+                  row <span className="font-medium">⋯</span> menu and choose{" "}
+                  <span className="font-medium">Interested</span> to move a lead
+                  to <span className="font-medium">Ongoing Students</span>
+                </p>
+              </div>
+              {todayLeads.length === 0 ? (
+                <div
+                  className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
+                  role="status"
+                >
+                  No new intakes here. <span className="font-medium">Add student</span>{" "}
+                  or import a file — leads stay on this list until you mark them{" "}
+                  <span className="font-medium">Interested</span>.
+                </div>
+              ) : (
+                <LeadSheetTable
+                  variant="standard"
+                  showFollowUpColumn={false}
+                  showPipelineColumn={false}
+                  pickDataTypeOnClick
+                  className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                  leads={applyDraftToList(todayLeads)}
+                  sheetEditMode={sheetEditMode}
+                  onDraftPatch={onDraftPatch}
+                  onUpdateLead={onUpdateLead}
+                  visibleIds={todayLeads.map((l) => l.id)}
+                />
+              )}
+            </section>
+          )}
+
           {mainTab === "ongoing" && (
             <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
-              <section aria-label="New and Daily leads">
-                <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>New &amp; Daily</h2>
-                  <p className={SX.leadSectionMeta}>
-                    {ongoingOtherLeads.length} lead
-                    {ongoingOtherLeads.length === 1 ? "" : "s"} · intakes and
-                    imports not yet in the Interested pipeline
-                  </p>
-                </div>
-                {ongoingOtherLeads.length === 0 ? (
-                  <div
-                    className="mt-3 border border-slate-200 bg-slate-50 px-4 py-6 text-center text-[13px] text-slate-600"
-                    role="status"
-                  >
-                    No rows here yet. Imported leads with status{" "}
-                    <span className="font-medium">New</span> show in this block.
-                  </div>
-                ) : (
-                  <LeadSheetTable
-                    variant="standard"
-                    showFollowUpColumn={false}
-                    showPipelineColumn={false}
-                    className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                    leads={applyDraftToList(ongoingOtherLeads)}
-                    sheetEditMode={sheetEditMode}
-                    onDraftPatch={onDraftPatch}
-                    onUpdateLead={onUpdateLead}
-                    visibleIds={ongoingOtherLeads.map((l) => l.id)}
-                  />
-                )}
-              </section>
-
               <section aria-label="Interested ongoing pipeline">
                 <div className={SX.leadSectionHead}>
                   <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
@@ -698,9 +733,10 @@ export function LeadManagementPage() {
                     className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
                     role="status"
                   >
-                    No interested leads here yet. Use the row{" "}
-                    <span className="font-medium">⋯</span> menu and choose{" "}
-                    <span className="font-medium">Interested</span> to move a lead into this
+                    No interested leads here yet. Work leads from{" "}
+                    <span className="font-medium">Today&apos;s Data</span> and choose{" "}
+                    <span className="font-medium">Interested</span> in the row{" "}
+                    <span className="font-medium">⋯</span> menu to add them to this
                     pipeline.
                   </div>
                 ) : (
@@ -708,6 +744,7 @@ export function LeadManagementPage() {
                     variant="standard"
                     showFollowUpColumn={false}
                     showPipelineColumn
+                    pickDataTypeOnClick
                     className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                     leads={applyDraftToList(ongoingInterestedLeads)}
                     sheetEditMode={sheetEditMode}
@@ -717,6 +754,32 @@ export function LeadManagementPage() {
                   />
                 )}
               </section>
+
+              {ongoingOtherLeads.length > 0 && (
+                <section aria-label="Other ongoing leads">
+                  <div className={SX.leadSectionHead}>
+                    <h2 className={SX.leadSectionTitle}>Other (Ongoing)</h2>
+                    <p className={SX.leadSectionMeta}>
+                      {ongoingOtherLeads.length} lead
+                      {ongoingOtherLeads.length === 1 ? "" : "s"} · on the Ongoing
+                      sheet but not yet in the Interested pipeline (e.g. called /
+                      no response)
+                    </p>
+                  </div>
+                  <LeadSheetTable
+                    variant="standard"
+                    showFollowUpColumn={false}
+                    showPipelineColumn={false}
+                    pickDataTypeOnClick
+                    className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                    leads={applyDraftToList(ongoingOtherLeads)}
+                    sheetEditMode={sheetEditMode}
+                    onDraftPatch={onDraftPatch}
+                    onUpdateLead={onUpdateLead}
+                    visibleIds={ongoingOtherLeads.map((l) => l.id)}
+                  />
+                </section>
+              )}
             </div>
           )}
 

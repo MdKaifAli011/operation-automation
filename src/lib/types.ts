@@ -1,6 +1,11 @@
 import type { LeadPipelineMeta } from "@/lib/leadPipelineMetaTypes";
 
-export type SheetTabId = "ongoing" | "followup" | "not_interested" | "converted";
+export type SheetTabId =
+  | "today"
+  | "ongoing"
+  | "followup"
+  | "not_interested"
+  | "converted";
 
 export type RowTone =
   | "interested"

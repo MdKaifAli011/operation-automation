@@ -240,6 +240,7 @@ export function parseRowToneValue(raw: string): RowTone {
 function parseSheetTabValue(raw: string): SheetTabId | null {
   const t = raw.trim().toLowerCase().replace(/[\s_-]+/g, "");
   if (!t) return null;
+  if (t === "today" || t === "todaysdata" || t === "intake") return "today";
   if (t === "ongoing" || t === "open") return "ongoing";
   if (t === "followup" || t === "followups" || t === "follow-up" || t === "follow")
     return "followup";
@@ -393,9 +394,11 @@ function inferSheetTab(
   followUpDate: string | null,
   explicit: SheetTabId | null,
 ): SheetTabId {
-  if (explicit) return explicit;
   if (rowTone === "not_interested") return "not_interested";
   if (followUpDate) return "followup";
+  /** New intakes always go to Today's Data (ignore spreadsheet `ongoing` + New). */
+  if (rowTone === "new") return "today";
+  if (explicit) return explicit;
   return "ongoing";
 }
 

@@ -152,6 +152,7 @@ const TONES: RowTone[] = [
   "not_interested",
 ];
 const SHEETS: SheetTabId[] = [
+  "today",
   "ongoing",
   "ongoing",
   "followup",
@@ -197,6 +198,10 @@ function buildLeads() {
   for (let i = 0; i < 28; i++) {
     const date = dates[i] ?? "2026-04-01";
     const sheetTab = SHEETS[i % SHEETS.length];
+    let rowTone: RowTone = TONES[i % TONES.length];
+    if (sheetTab === "today") {
+      rowTone = "new";
+    }
     const pipelineSteps =
       sheetTab === "converted"
         ? 4
@@ -222,7 +227,7 @@ function buildLeads() {
       phone: `98${String(76543210 + i * 10007).padStart(8, "0").slice(-8)}`,
       email,
       pipelineSteps,
-      rowTone: TONES[i % TONES.length],
+      rowTone,
       sheetTab,
     });
   }

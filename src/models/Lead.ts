@@ -1,7 +1,13 @@
 import mongoose, { Schema, type InferSchemaType } from "mongoose";
 import { PipelineMetaSchema } from "@/models/leadPipelineMetaSchema";
 
-const sheetTabs = ["ongoing", "followup", "not_interested", "converted"] as const;
+const sheetTabs = [
+  "today",
+  "ongoing",
+  "followup",
+  "not_interested",
+  "converted",
+] as const;
 const rowTones = [
   "interested",
   "not_interested",

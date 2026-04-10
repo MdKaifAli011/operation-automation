@@ -54,10 +54,39 @@ function parseCreateBody(body: unknown): Partial<Lead> | null {
         ? (b.rowTone as Lead["rowTone"])
         : "new",
     sheetTab:
-      typeof b.sheetTab === "string"
+      typeof b.sheetTab === "string" && (b.sheetTab as string).trim()
         ? (b.sheetTab as Lead["sheetTab"])
-        : "ongoing",
+        : undefined,
   };
+}
+
+function finalizeCreateBody(parsed: Partial<Lead>): Partial<Lead> {
+  const rowTone = parsed.rowTone ?? "new";
+  const followUpDate = parsed.followUpDate ?? null;
+  const explicitTab = parsed.sheetTab;
+  let sheetTab: Lead["sheetTab"];
+  if (rowTone === "not_interested") {
+    sheetTab = "not_interested";
+  } else if (followUpDate) {
+    sheetTab = "followup";
+  } else if (rowTone === "new") {
+    /** Always intake to Today's Data — do not allow `ongoing` + New from the API. */
+    sheetTab = "today";
+  } else if (
+    explicitTab &&
+    [
+      "today",
+      "ongoing",
+      "followup",
+      "not_interested",
+      "converted",
+    ].includes(explicitTab)
+  ) {
+    sheetTab = explicitTab;
+  } else {
+    sheetTab = "ongoing";
+  }
+  return { ...parsed, rowTone, sheetTab };
 }
 
 export async function GET() {
@@ -87,7 +116,7 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const doc = await LeadModel.create(parsed);
+    const doc = await LeadModel.create(finalizeCreateBody(parsed));
     return NextResponse.json(
       serializeLead(doc.toObject() as Parameters<typeof serializeLead>[0]),
       { status: 201 },

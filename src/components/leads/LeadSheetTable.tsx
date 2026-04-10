@@ -12,6 +12,10 @@ import { SX } from "@/components/student/student-excel-ui";
 import { formatLeadPhone } from "@/lib/phone-display";
 import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
+import {
+  DATA_TYPE_PICK_OPTIONS,
+  dataTypeToShortLabel,
+} from "@/lib/leadDataTypeShort";
 
 type ColKey =
   | "date"
@@ -30,6 +34,7 @@ type TextColKey =
   | "country";
 
 const ACTION_MENU_W = 180;
+const DATA_TYPE_MENU_W = 200;
 
 type ActionMenuState = { leadId: string; top: number; left: number } | null;
 
@@ -76,6 +81,11 @@ type Props = {
   showPipelineColumn?: boolean;
   /** Show optional not-interested remark column (Not interested tab). */
   showNotInterestedRemark?: boolean;
+  /**
+   * Ongoing tab: click Data type cell to pick OL / WT / REF / PD (maps to stored channel).
+   * Saves immediately; does not require sheet edit mode.
+   */
+  pickDataTypeOnClick?: boolean;
 };
 
 export function LeadSheetTable({
@@ -93,6 +103,7 @@ export function LeadSheetTable({
   showFollowUpColumn = true,
   showPipelineColumn = false,
   showNotInterestedRemark = false,
+  pickDataTypeOnClick = false,
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -102,10 +113,16 @@ export function LeadSheetTable({
   const [editing, setEditing] = useState<EditTarget>(null);
   const activeEdit = sheetEditMode ? editing : null;
   const [actionMenu, setActionMenu] = useState<ActionMenuState>(null);
+  const [dataTypeMenu, setDataTypeMenu] = useState<{
+    leadId: string;
+    top: number;
+    left: number;
+  } | null>(null);
   const [notInterestedModalLead, setNotInterestedModalLead] =
     useState<Lead | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
+  const dataTypeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!actionMenu) return;
@@ -118,6 +135,36 @@ export function LeadSheetTable({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [actionMenu]);
+
+  useEffect(() => {
+    if (!dataTypeMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (dataTypeMenuRef.current?.contains(e.target as Node)) return;
+      setDataTypeMenu(null);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [dataTypeMenu]);
+
+  useEffect(() => {
+    if (!dataTypeMenu) return;
+    const close = () => setDataTypeMenu(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [dataTypeMenu]);
+
+  useEffect(() => {
+    if (!dataTypeMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDataTypeMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dataTypeMenu]);
 
   useEffect(() => {
     if (!actionMenu) return;
@@ -168,6 +215,14 @@ export function LeadSheetTable({
     [actionMenu, leads],
   );
 
+  const dataTypeMenuLead = useMemo(
+    () =>
+      dataTypeMenu
+        ? leads.find((l) => l.id === dataTypeMenu.leadId)
+        : undefined,
+    [dataTypeMenu, leads],
+  );
+
   const isDaily = variant === "daily";
 
   const startEdit = (leadId: string, field: ColKey) => {
@@ -216,7 +271,16 @@ export function LeadSheetTable({
             {showPipelineColumn && (
               <SheetTh w={COL_WIDTHS.status}>Status</SheetTh>
             )}
-            <SheetTh w={COL_WIDTHS.dataType}>Data type</SheetTh>
+            <SheetTh
+              w={COL_WIDTHS.dataType}
+              title={
+                pickDataTypeOnClick
+                  ? "Click cell: OL Organic · WT Walk-in · REF Referral · PD Paid"
+                  : undefined
+              }
+            >
+              Data type
+            </SheetTh>
             {showFollowUpColumn && (
               <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
             )}
@@ -525,27 +589,58 @@ export function LeadSheetTable({
                     <PipelineDots completed={lead.pipelineSteps} />
                   </td>
                 )}
-                <TextCell
-                  lead={lead}
-                  field="dataType"
-                  width={COL_WIDTHS.dataType}
-                  selected={
-                    selectedCell?.leadId === lead.id &&
-                    selectedCell.field === "dataType"
-                  }
-                  onSelect={() =>
-                    setSelectedCell({ leadId: lead.id, field: "dataType" })
-                  }
-                  editing={
-                    activeEdit?.leadId === lead.id &&
-                    activeEdit.field === "dataType"
-                  }
-                  onEdit={() => startEdit(lead.id, "dataType")}
-                  onDraftPatch={onDraftPatch}
-                  onCancelEdit={() => setEditing(null)}
-                  tone={tone}
-                  sheetEditMode={sheetEditMode}
-                />
+                {pickDataTypeOnClick ? (
+                  <DataTypePickCell
+                    width={COL_WIDTHS.dataType}
+                    selected={
+                      selectedCell?.leadId === lead.id &&
+                      selectedCell.field === "dataType"
+                    }
+                    onSelect={() =>
+                      setSelectedCell({ leadId: lead.id, field: "dataType" })
+                    }
+                    tone={tone}
+                    shortLabel={dataTypeToShortLabel(lead.dataType)}
+                    onOpenPicker={(rect) => {
+                      setActionMenu(null);
+                      const vw =
+                        typeof window !== "undefined"
+                          ? window.innerWidth
+                          : rect.right;
+                      const left = Math.min(
+                        Math.max(8, rect.left),
+                        vw - DATA_TYPE_MENU_W - 8,
+                      );
+                      setDataTypeMenu({
+                        leadId: lead.id,
+                        top: rect.bottom + 4,
+                        left,
+                      });
+                    }}
+                  />
+                ) : (
+                  <TextCell
+                    lead={lead}
+                    field="dataType"
+                    width={COL_WIDTHS.dataType}
+                    selected={
+                      selectedCell?.leadId === lead.id &&
+                      selectedCell.field === "dataType"
+                    }
+                    onSelect={() =>
+                      setSelectedCell({ leadId: lead.id, field: "dataType" })
+                    }
+                    editing={
+                      activeEdit?.leadId === lead.id &&
+                      activeEdit.field === "dataType"
+                    }
+                    onEdit={() => startEdit(lead.id, "dataType")}
+                    onDraftPatch={onDraftPatch}
+                    onCancelEdit={() => setEditing(null)}
+                    tone={tone}
+                    sheetEditMode={sheetEditMode}
+                  />
+                )}
                 {showFollowUpColumn && (
                   <td
                     style={{ width: COL_WIDTHS.followUp }}
@@ -606,6 +701,7 @@ export function LeadSheetTable({
                         setActionMenu(null);
                         return;
                       }
+                      setDataTypeMenu(null);
                       const vw =
                         typeof window !== "undefined"
                           ? window.innerWidth
@@ -629,6 +725,50 @@ export function LeadSheetTable({
           })}
         </tbody>
       </table>
+      {typeof document !== "undefined" &&
+        dataTypeMenu &&
+        dataTypeMenuLead &&
+        createPortal(
+          <div
+            ref={dataTypeMenuRef}
+            role="menu"
+            aria-label="Set data type"
+            className="fixed z-[201] rounded-none border border-slate-200 bg-white py-1 text-left text-sm shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+            style={{
+              top: dataTypeMenu.top,
+              left: dataTypeMenu.left,
+              width: DATA_TYPE_MENU_W,
+            }}
+          >
+            <p className="border-b border-slate-100 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Source
+            </p>
+            {DATA_TYPE_PICK_OPTIONS.map(({ abbrev, value }) => (
+              <button
+                key={abbrev}
+                type="button"
+                role="menuitem"
+                className={cn(
+                  "flex w-full items-baseline gap-2 px-2.5 py-2 text-left transition-colors hover:bg-slate-50",
+                  dataTypeMenuLead.dataType === value &&
+                    "bg-primary/5 text-slate-900",
+                )}
+                onClick={() => {
+                  onUpdateLead(dataTypeMenuLead.id, { dataType: value });
+                  setDataTypeMenu(null);
+                }}
+              >
+                <span className="w-7 shrink-0 font-mono text-[12px] font-bold tabular-nums text-slate-800">
+                  {abbrev}
+                </span>
+                <span className="min-w-0 text-[12px] text-slate-600">
+                  {value}
+                </span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
       {typeof document !== "undefined" &&
         actionMenu &&
         menuLead &&
@@ -806,18 +946,65 @@ function NotInterestedRemarkDialog({
   );
 }
 
+function DataTypePickCell({
+  width,
+  selected,
+  onSelect,
+  tone,
+  shortLabel,
+  onOpenPicker,
+}: {
+  width: number;
+  selected: boolean;
+  onSelect: () => void;
+  tone: string;
+  shortLabel: string;
+  onOpenPicker: (rect: DOMRect) => void;
+}) {
+  return (
+    <td
+      style={{ width, minWidth: width }}
+      className={cn(
+        "border border-slate-200/80 px-1 py-1.5",
+        selected && "grid-cell-focus",
+        tone,
+      )}
+    >
+      <button
+        type="button"
+        className={cn(
+          "w-full rounded border border-transparent px-1 py-0.5 text-left text-[12px] font-semibold tabular-nums tracking-tight",
+          "text-slate-800 transition-colors hover:border-slate-300 hover:bg-white/80",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+        )}
+        title="Set source: OL Organic · WT Walk-in · REF Referral · PD Paid"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+          onOpenPicker(e.currentTarget.getBoundingClientRect());
+        }}
+      >
+        {shortLabel}
+      </button>
+    </td>
+  );
+}
+
 function SheetTh({
   children,
   w,
   className,
+  title,
 }: {
   children: React.ReactNode;
   w: number;
   className?: string;
+  title?: string;
 }) {
   return (
     <th
       style={{ width: w, minWidth: w }}
+      title={title}
       className={cn(
         "sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm",
         className,

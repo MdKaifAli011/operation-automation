@@ -12,6 +12,7 @@ const SHEET_EXPORT_OPTIONS: {
   value: SheetTabId | "converted_full";
   label: string;
 }[] = [
+  { value: "today", label: "Today's Data" },
   { value: "ongoing", label: "Ongoing" },
   { value: "followup", label: "Follow-ups" },
   { value: "not_interested", label: "Not interested" },
