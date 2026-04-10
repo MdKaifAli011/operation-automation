@@ -675,14 +675,6 @@ export function LeadManagementPage() {
               <section aria-label="New and Daily leads">
                 <div className={SX.leadSectionHead}>
                   <h2 className={SX.leadSectionTitle}>New &amp; Daily</h2>
-                  <p className={SX.leadSectionMeta}>
-                    {newAndDailyLeads.length} lead
-                    {newAndDailyLeads.length === 1 ? "" : "s"} · intakes and
-                    imports with status <span className="font-medium">New</span>{" "}
-                    · use the row <span className="font-medium">⋯</span> menu and
-                    choose <span className="font-medium">Interested</span> to
-                    move them to the pipeline below
-                  </p>
                 </div>
                 {newAndDailyLeads.length === 0 ? (
                   <div
@@ -713,12 +705,6 @@ export function LeadManagementPage() {
               <section aria-label="Interested ongoing pipeline">
                 <div className={SX.leadSectionHead}>
                   <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
-                  <p className={SX.leadSectionMeta}>
-                    {ongoingInterestedLeads.length} lead
-                    {ongoingInterestedLeads.length === 1 ? "" : "s"} · Demo →
-                    Brochure → Fees → Schedule — use the Status column for step
-                    progress
-                  </p>
                 </div>
                 {ongoingInterestedLeads.length === 0 ? (
                   <div
