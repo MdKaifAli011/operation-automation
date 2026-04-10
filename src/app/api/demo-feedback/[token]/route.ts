@@ -41,9 +41,12 @@ export async function GET(_req: Request, context: Ctx) {
     const lead = await LeadModel.findById(doc.leadId)
       .select({
         studentName: 1,
+        parentName: 1,
         grade: 1,
         targetExams: 1,
         dataType: 1,
+        phone: 1,
+        email: 1,
         pipelineMeta: 1,
       })
       .lean();
@@ -61,11 +64,14 @@ export async function GET(_req: Request, context: Ctx) {
       (r) => String(r.meetRowId ?? "").trim() === String(doc.meetRowId).trim(),
     );
     const studentName = String((lead as { studentName?: string }).studentName ?? "Student");
+    const parentName = String((lead as { parentName?: string }).parentName ?? "").trim();
     const grade = String((lead as { grade?: string }).grade ?? "").trim();
     const targetExams = Array.isArray((lead as { targetExams?: string[] }).targetExams)
       ? (lead as { targetExams: string[] }).targetExams.map((x) => String(x ?? "").trim()).filter(Boolean)
       : [];
     const dataType = String((lead as { dataType?: string }).dataType ?? "").trim();
+    const phone = String((lead as { phone?: string }).phone ?? "").trim();
+    const email = String((lead as { email?: string }).email ?? "").trim();
     const demoSummary = row
       ? `${row.subject ?? "Demo"} · ${row.isoDate ? format(parseISO(String(row.isoDate)), "d MMM yyyy") : ""} · ${row.timeHmIST ?? ""} IST`
       : "Trial class";
@@ -75,11 +81,14 @@ export async function GET(_req: Request, context: Ctx) {
     return NextResponse.json({
       submitted: false,
       studentName,
+      parentName: parentName || undefined,
       teacherName: String(doc.teacherName ?? ""),
       demoSummary,
       grade: grade || undefined,
       targetExams: targetExams.length ? targetExams : undefined,
       dataType: dataType || undefined,
+      phone: phone || undefined,
+      email: email || undefined,
       suggestedExamTrack: suggestedExamTrack || undefined,
     });
   } catch (e) {

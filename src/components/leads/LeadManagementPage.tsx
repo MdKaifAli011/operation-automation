@@ -3,7 +3,6 @@
 import { addDays, format } from "date-fns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SortDir, SortKey } from "@/lib/types";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
 import { AddStudentLeadDialog } from "./AddStudentLeadDialog";
 import { ExportLeadsDialog } from "./ExportLeadsDialog";
 import { LeadSheetActionsMenu } from "./LeadSheetActionsMenu";
@@ -21,6 +20,7 @@ import {
   isLeadInTodayData,
 } from "@/lib/leadSheetRouting";
 import { useLeadSources } from "@/hooks/useLeadSources";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 
 type LeadMainTab = "ongoing" | "not_interested" | "followup" | "converted";
 
@@ -68,6 +68,8 @@ export function LeadManagementPage() {
   const importExcelRef = useRef<ImportExcelControlHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const leadSources = useLeadSources();
+  const { activeValues: targetExamFilterOptions, labelFor: targetExamLabel } =
+    useTargetExamOptions();
 
   const refreshLeads = useCallback(async () => {
     const res = await fetch("/api/leads", { cache: "no-store" });
@@ -382,9 +384,9 @@ export function LeadManagementPage() {
         >
           {loadError}{" "}
           <span className="text-slate-600">
-            Add <code className="text-xs">MONGODB_URI</code> to{" "}
-            <code className="text-xs">.env.local</code> and run{" "}
-            <code className="text-xs">npm run seed</code> to insert sample data.
+            Check <code className="text-xs">MONGODB_URI</code> in{" "}
+            <code className="text-xs">.env.local</code> and that MongoDB is
+            reachable.
           </span>
         </div>
       )}
@@ -527,9 +529,9 @@ export function LeadManagementPage() {
                     onChange={(e) => setFilterCourse(e.target.value)}
                   >
                     <option value="">All</option>
-                    {TARGET_EXAM_OPTIONS.map((c) => (
+                    {targetExamFilterOptions.map((c) => (
                       <option key={c} value={c}>
-                        {c}
+                        {targetExamLabel(c)}
                       </option>
                     ))}
                   </select>

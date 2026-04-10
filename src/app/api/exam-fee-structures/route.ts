@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import { getActiveTargetExamValues } from "@/lib/serverTargetExams";
 import ExamFeeStructureModel from "@/models/ExamFeeStructure";
 
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ export type ExamFeeStructureRow = {
 /** GET: one row per known exam; merge with DB (missing → baseFee 0). */
 export async function GET() {
   try {
+    const examList = await getActiveTargetExamValues();
     await connectDB();
     const docs = await ExamFeeStructureModel.find({}).lean();
     const byExam = new Map<string, { baseFee: number; notes: string; updatedAt?: Date }>();
@@ -25,7 +26,7 @@ export async function GET() {
         updatedAt: d.updatedAt,
       });
     }
-    const rows: ExamFeeStructureRow[] = TARGET_EXAM_OPTIONS.map((exam) => {
+    const rows: ExamFeeStructureRow[] = examList.map((exam) => {
       const hit = byExam.get(exam);
       return {
         exam,
@@ -60,10 +61,10 @@ export async function PUT(req: Request) {
       );
     }
     await connectDB();
+    const allowed = new Set<string>(await getActiveTargetExamValues());
     for (const raw of items) {
       const exam =
         typeof raw.exam === "string" ? raw.exam.trim() : "";
-      const allowed = new Set<string>([...TARGET_EXAM_OPTIONS]);
       if (!exam || !allowed.has(exam)) {
         continue;
       }
@@ -73,7 +74,7 @@ export async function PUT(req: Request) {
       await ExamFeeStructureModel.findOneAndUpdate(
         { exam },
         { $set: { exam, baseFee, notes } },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: "after" },
       );
     }
     const docs = await ExamFeeStructureModel.find({}).lean();
@@ -85,7 +86,8 @@ export async function PUT(req: Request) {
         updatedAt: d.updatedAt,
       });
     }
-    const rows: ExamFeeStructureRow[] = TARGET_EXAM_OPTIONS.map((exam) => {
+    const examList = await getActiveTargetExamValues();
+    const rows: ExamFeeStructureRow[] = examList.map((exam) => {
       const hit = byExam.get(exam);
       return {
         exam,

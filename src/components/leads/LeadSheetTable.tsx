@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Lead } from "@/lib/types";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import { formatTargetExams } from "@/lib/lead-display";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
@@ -13,7 +13,6 @@ import { formatLeadPhone } from "@/lib/phone-display";
 import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 import {
-  DEFAULT_LEAD_SOURCE_OPTIONS,
   dataTypeToShortLabel,
   type LeadSourceOption,
 } from "@/lib/leadSources";
@@ -107,7 +106,7 @@ export function LeadSheetTable({
   showPipelineColumn = false,
   showNotInterestedRemark = false,
   pickDataTypeOnClick = false,
-  leadSourceOptions = DEFAULT_LEAD_SOURCE_OPTIONS,
+  leadSourceOptions = [],
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -1147,6 +1146,12 @@ function TargetExamsEditor({
   onCommit: (exams: string[]) => void;
   onCancel: () => void;
 }) {
+  const { activeValues, labelFor } = useTargetExamOptions();
+  const choiceSet = useMemo(() => {
+    const s = new Set<string>(activeValues);
+    for (const x of value) if (x) s.add(x);
+    return [...s].sort((a, b) => a.localeCompare(b));
+  }, [activeValues, value]);
   const [sel, setSel] = useState<Set<string>>(() => new Set(value));
   const toggle = (c: string) => {
     setSel((s) => {
@@ -1162,7 +1167,7 @@ function TargetExamsEditor({
         Select one or more
       </p>
       <div className="flex max-h-[140px] flex-wrap gap-x-3 gap-y-1.5 overflow-y-auto">
-        {TARGET_EXAM_OPTIONS.map((c) => (
+        {choiceSet.map((c) => (
           <label
             key={c}
             className="flex cursor-pointer items-center gap-1.5 text-[12px] text-slate-800"
@@ -1173,7 +1178,7 @@ function TargetExamsEditor({
               checked={sel.has(c)}
               onChange={() => toggle(c)}
             />
-            {c}
+            {labelFor(c)}
           </label>
         ))}
       </div>

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
+import { migrateLegacyBankProfileIfNeeded } from "@/lib/migrateLegacyBankProfile";
 import {
   DEFAULT_INSTITUTE,
-  MAX_BANK_ACCOUNTS,
-  type BankAccountRecord,
   type InstituteProfilePayload,
   type InstituteRecord,
 } from "@/lib/instituteProfileTypes";
@@ -38,27 +37,6 @@ function parseInstitute(raw: unknown): InstituteRecord {
   };
 }
 
-function parseBankAccount(raw: unknown): BankAccountRecord | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  const id = str(o.id, 64);
-  if (!id) return null;
-  const accountType =
-    o.accountType === "Savings" ? "Savings" : "Current";
-  return {
-    id,
-    label: str(o.label, 120),
-    bankName: str(o.bankName, 120),
-    accountHolderName: str(o.accountHolderName, 120),
-    accountNumber: str(o.accountNumber, 40).replace(/\s+/g, ""),
-    ifsc: str(o.ifsc, 20).toUpperCase(),
-    branch: str(o.branch, 120),
-    accountType,
-    upi: str(o.upi, 120),
-    isActive: o.isActive !== false,
-  };
-}
-
 function parsePayload(body: unknown):
   | { ok: true; data: InstituteProfilePayload }
   | { ok: false; error: string } {
@@ -66,49 +44,19 @@ function parsePayload(body: unknown):
     return { ok: false, error: "Invalid JSON body." };
   }
   const b = body as Record<string, unknown>;
-  const institute = parseInstitute(b.institute);
-  const rawAccounts = b.bankAccounts;
-  if (rawAccounts !== undefined && !Array.isArray(rawAccounts)) {
-    return { ok: false, error: "bankAccounts must be an array." };
-  }
-  const bankAccounts: BankAccountRecord[] = [];
-  const seen = new Set<string>();
-  if (Array.isArray(rawAccounts)) {
-    for (const row of rawAccounts) {
-      const acc = parseBankAccount(row);
-      if (!acc) continue;
-      if (seen.has(acc.id)) continue;
-      seen.add(acc.id);
-      bankAccounts.push(acc);
-    }
-  }
-  if (bankAccounts.length > MAX_BANK_ACCOUNTS) {
-    return {
-      ok: false,
-      error: `At most ${MAX_BANK_ACCOUNTS} bank accounts allowed.`,
-    };
-  }
   return {
     ok: true,
-    data: { institute, bankAccounts },
+    data: { institute: parseInstitute(b.institute) },
   };
 }
 
-function docToPayload(doc: {
-  institute?: unknown;
-  bankAccounts?: unknown;
-}): InstituteProfilePayload {
-  const institute = parseInstitute(doc.institute);
-  const bankAccounts = Array.isArray(doc.bankAccounts)
-    ? doc.bankAccounts
-        .map((row) => parseBankAccount(row))
-        .filter((x): x is BankAccountRecord => x !== null)
-    : [];
-  return { institute, bankAccounts };
+function docToPayload(doc: { institute?: unknown }): InstituteProfilePayload {
+  return { institute: parseInstitute(doc.institute) };
 }
 
 export async function GET() {
   try {
+    await migrateLegacyBankProfileIfNeeded();
     await connectDB();
     const doc = await InstituteProfileSettingsModel.findOne({
       key: SETTINGS_KEY,
@@ -121,13 +69,12 @@ export async function GET() {
         updatedAt: null as string | null,
       });
     }
-    const { institute, bankAccounts, updatedAt } = doc as {
+    const { institute, updatedAt } = doc as {
       institute?: InstituteRecord;
-      bankAccounts?: BankAccountRecord[];
       updatedAt?: Date;
     };
     return NextResponse.json({
-      ...docToPayload({ institute, bankAccounts }),
+      ...docToPayload({ institute }),
       updatedAt:
         updatedAt instanceof Date ? updatedAt.toISOString() : null,
     });
@@ -153,11 +100,14 @@ export async function PUT(req: Request) {
       {
         $set: {
           institute: parsed.data.institute,
-          bankAccounts: parsed.data.bankAccounts,
         },
-        $unset: { paymentOptions: "" },
+        $unset: {
+          paymentOptions: "",
+          bankAccounts: "",
+          defaultFeeBankAccountId: "",
+        },
       },
-      { upsert: true, new: true, runValidators: true },
+      { upsert: true, returnDocument: "after", runValidators: true },
     )
       .lean()
       .exec();
@@ -167,13 +117,12 @@ export async function PUT(req: Request) {
         { status: 500 },
       );
     }
-    const { institute, bankAccounts, updatedAt } = doc as {
+    const { institute, updatedAt } = doc as {
       institute?: InstituteRecord;
-      bankAccounts?: BankAccountRecord[];
       updatedAt?: Date;
     };
     return NextResponse.json({
-      ...docToPayload({ institute, bankAccounts }),
+      ...docToPayload({ institute }),
       updatedAt:
         updatedAt instanceof Date ? updatedAt.toISOString() : null,
     });

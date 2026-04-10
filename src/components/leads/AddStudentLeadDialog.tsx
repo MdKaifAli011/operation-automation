@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import {
   LEAD_COUNTRY_OPTIONS,
   dialCodeForCountry,
@@ -13,10 +13,7 @@ import {
 } from "@/lib/country-phone";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
-import {
-  DEFAULT_LEAD_SOURCE_OPTIONS,
-  type LeadSourceOption,
-} from "@/lib/leadSources";
+import type { LeadSourceOption } from "@/lib/leadSources";
 
 type Props = {
   open: boolean;
@@ -33,10 +30,12 @@ export function AddStudentLeadDialog({
   open,
   onClose,
   onAdded,
-  leadSourceOptions = DEFAULT_LEAD_SOURCE_OPTIONS,
+  leadSourceOptions = [],
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const formId = useId();
+  const { activeValues: targetExamValues, labelFor: targetExamLabel } =
+    useTargetExamOptions();
 
   useEffect(() => {
     const d = ref.current;
@@ -63,9 +62,7 @@ export function AddStudentLeadDialog({
   );
   const [nationalNumber, setNationalNumber] = useState("");
   const [parentName, setParentName] = useState("");
-  const [targetExams, setTargetExams] = useState<string[]>([
-    TARGET_EXAM_OPTIONS[0],
-  ]);
+  const [targetExams, setTargetExams] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /** After blur, show "required" if national number still empty. */
@@ -84,6 +81,13 @@ export function AddStudentLeadDialog({
     setNationalBlurredOnce(false);
     setNationalFocused(false);
   }, [open, leadSourceOptions]);
+
+  useEffect(() => {
+    if (targetExamValues.length === 0) return;
+    setTargetExams((prev) =>
+      prev.length === 0 ? [targetExamValues[0]!] : prev,
+    );
+  }, [targetExamValues]);
 
   const nationalDigits = useMemo(
     () => digitsOnly(nationalNumber),
@@ -174,7 +178,9 @@ export function AddStudentLeadDialog({
       setNationalNumber("");
       setDialCode(dialCodeForCountry(DEFAULT_COUNTRY));
       setParentName("");
-      setTargetExams([TARGET_EXAM_OPTIONS[0]]);
+      setTargetExams(
+        targetExamValues.length > 0 ? [targetExamValues[0]!] : [],
+      );
       setCountry(DEFAULT_COUNTRY);
       setDataType(leadSourceOptions[0]?.value ?? "Organic");
       close();
@@ -381,7 +387,7 @@ export function AddStudentLeadDialog({
               Select one or more (e.g. JEE, NEET).
             </p>
             <div className="flex flex-wrap gap-2">
-              {TARGET_EXAM_OPTIONS.map((exam) => (
+              {targetExamValues.map((exam) => (
                 <label
                   key={exam}
                   className="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-slate-800"
@@ -392,7 +398,7 @@ export function AddStudentLeadDialog({
                     onChange={() => toggleTarget(exam)}
                     className="rounded border-slate-300"
                   />
-                  {exam}
+                  {targetExamLabel(exam)}
                 </label>
               ))}
             </div>

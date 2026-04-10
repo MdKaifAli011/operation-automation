@@ -22,14 +22,19 @@ import {
   useRef,
   useState,
 } from "react";
-import type { LeadPipelineScheduleClass } from "@/lib/leadPipelineMetaTypes";
+import type { ExamSubjectEntry } from "@/lib/examSubjectTypes";
+import type {
+  DemoTableRowPersisted,
+  LeadPipelineDemo,
+  LeadPipelineScheduleClass,
+} from "@/lib/leadPipelineMetaTypes";
 import type {
   CallHistoryEntry,
   Faculty,
   Lead,
   PipelineActivity,
 } from "@/lib/types";
-import { GRADE_OPTIONS, TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import { GRADE_OPTIONS } from "@/lib/constants";
 import {
   LEAD_COUNTRY_OPTIONS,
   dialCodeForCountry,
@@ -38,7 +43,8 @@ import {
   optionForCountry,
   validateNationalNumber,
 } from "@/lib/country-phone";
-import { formatTargetExams } from "@/lib/lead-display";
+import { useExamSubjectCatalog } from "@/hooks/useExamSubjectCatalog";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import { formatLeadPhone } from "@/lib/phone-display";
 import {
   PIPELINE_STEP_LABELS,
@@ -47,6 +53,7 @@ import {
   canGoToNextPipelineStep,
   mergePipelineMeta,
 } from "@/lib/pipeline";
+import { pickBrochureDocByExam } from "@/lib/examBrochureTemplates";
 import { primaryExamForFee } from "@/lib/examFeeDefaults";
 import { extrasForLead } from "@/lib/student-detail";
 import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
@@ -156,16 +163,6 @@ function validateScheduledDemoSlot(
   return null;
 }
 
-const DEMO_EDIT_SUBJECTS = [
-  "Biology",
-  "Physics",
-  "Chemistry",
-  "Mathematics",
-  "English",
-  "GK",
-  "Reasoning",
-] as const;
-
 function demoRowSummaryLine(r: DemoTableRow): string {
   const slot = parseIstSlot(r.isoDate, r.timeHmIST);
   const ist = slot
@@ -219,32 +216,137 @@ function StudentTimeZoneSelect({
   );
 }
 
-function pickDefaultTeacher(subj: string, faculties: Faculty[]): string {
-  if (faculties.length > 0) {
-    const L = (s: string) => s.toLowerCase();
-    const bySub = (kw: string) =>
-      faculties.find((f) => f.subjects.some((x) => L(x).includes(kw)));
-    if (subj === "Biology") {
-      const m = bySub("bio") ?? faculties.find((f) => f.name.includes("Meena"));
-      if (m) return m.name;
+function facultiesTeachingSubject(
+  course: string,
+  subj: string,
+  faculties: Faculty[],
+  examSubjectNameById: Map<string, string>,
+): Faculty[] {
+  const c = course.trim();
+  const s = subj.trim();
+  if (!c || !s) return [];
+  const sl = s.toLowerCase();
+  const matched: Faculty[] = [];
+  for (const f of faculties) {
+    if (!f.active) continue;
+    for (const a of f.assignments ?? []) {
+      if (a.examValue !== c) continue;
+      const name = examSubjectNameById.get(a.subjectId)?.trim();
+      if (name && name.toLowerCase() === sl) {
+        matched.push(f);
+        break;
+      }
     }
-    if (subj === "Physics") {
-      const m = bySub("phys") ?? faculties.find((f) => f.name.includes("Ravi"));
-      if (m) return m.name;
-    }
-    if (subj === "Chemistry") {
-      const m = bySub("chem");
-      if (m) return m.name;
-    }
-    if (subj === "Mathematics") {
-      const m = bySub("math");
-      if (m) return m.name;
-    }
-    const m =
-      bySub("english") ?? bySub("reason") ?? bySub("cuet") ?? faculties[0];
-    return m.name;
   }
-  return "";
+  if (matched.length > 0) return matched;
+  for (const f of faculties) {
+    if (!f.active) continue;
+    const subs = f.subjects ?? [];
+    if (!subs.some((x) => String(x).trim().toLowerCase() === sl)) continue;
+    if (f.courses?.length && !f.courses.includes(c)) continue;
+    matched.push(f);
+  }
+  return matched;
+}
+
+function pickDefaultTeacher(
+  subj: string,
+  course: string,
+  faculties: Faculty[],
+  examSubjectNameById: Map<string, string>,
+): string {
+  const active = faculties.filter((f) => f.active);
+  const pool = facultiesTeachingSubject(
+    course,
+    subj,
+    active,
+    examSubjectNameById,
+  );
+  const list = pool.length > 0 ? pool : active;
+  return list[0]?.name ?? faculties[0]?.name ?? "";
+}
+
+function catalogSubjectNamesForExam(
+  exam: string,
+  byExam: Map<string, ExamSubjectEntry[]>,
+): string[] {
+  const list = byExam.get(exam.trim()) ?? [];
+  return list
+    .filter((e) => e.isActive !== false)
+    .map((e) => e.name.trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** Legacy: subjects from free-text faculty tags + course filter. */
+function subjectsForDemoCourseLegacy(faculties: Faculty[], course: string): string[] {
+  const c = course.trim();
+  if (!c) return [];
+  const relevant = faculties.filter(
+    (f) => !f.courses?.length || f.courses.includes(c),
+  );
+  const set = new Set<string>();
+  for (const f of relevant) {
+    for (const s of f.subjects ?? []) {
+      const t = String(s).trim();
+      if (t) set.add(t);
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+/** Prefer exam–subject catalog assignments when any faculty uses structured teaching. */
+function subjectsForDemoCourse(
+  faculties: Faculty[],
+  course: string,
+  examSubjectNameById: Map<string, string>,
+  activeExamSubjectIds: Set<string>,
+  byExam: Map<string, ExamSubjectEntry[]>,
+): string[] {
+  const catalog = catalogSubjectNamesForExam(course, byExam);
+  const structured = faculties.some((f) => (f.assignments?.length ?? 0) > 0);
+  if (structured) {
+    const c = course.trim();
+    const set = new Set<string>();
+    for (const f of faculties) {
+      for (const a of f.assignments ?? []) {
+        if (a.examValue !== c) continue;
+        if (!activeExamSubjectIds.has(a.subjectId)) continue;
+        const name = examSubjectNameById.get(a.subjectId)?.trim();
+        if (name) set.add(name);
+      }
+    }
+    if (set.size > 0) return [...set].sort((a, b) => a.localeCompare(b));
+    if (catalog.length > 0) return catalog;
+    return subjectsForDemoCourseLegacy(faculties, course);
+  }
+  if (catalog.length > 0) return catalog;
+  return subjectsForDemoCourseLegacy(faculties, course);
+}
+
+function subjectNamesUnionForDemos(
+  examValues: readonly string[],
+  faculties: Faculty[],
+  examSubjectNameById: Map<string, string>,
+  activeExamSubjectIds: Set<string>,
+  byExam: Map<string, ExamSubjectEntry[]>,
+): string[] {
+  const set = new Set<string>();
+  for (const ex of examValues) {
+    const e = typeof ex === "string" ? ex.trim() : "";
+    if (!e) continue;
+    for (const s of subjectsForDemoCourse(
+      faculties,
+      e,
+      examSubjectNameById,
+      activeExamSubjectIds,
+      byExam,
+    )) {
+      set.add(s);
+    }
+  }
+  if (set.size === 0) return [];
+  return [...set].sort((a, b) => a.localeCompare(b));
 }
 
 type DemoTableRow = {
@@ -384,6 +486,24 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   }, [refreshLead]);
 
   const extras = useMemo(() => extrasForLead(lead), [lead]);
+  const { activeValues: targetExamActiveValues, labelFor: targetExamLabelFor } =
+    useTargetExamOptions();
+  const heroExamChoiceValues = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of targetExamActiveValues) set.add(v);
+    for (const v of lead.targetExams) {
+      const t = typeof v === "string" ? v.trim() : "";
+      if (t) set.add(t);
+    }
+    return [...set];
+  }, [targetExamActiveValues, lead.targetExams]);
+  const formatTargetExamsLabeled = useCallback(
+    (exams: string[] | undefined | null) => {
+      if (!exams?.length) return "—";
+      return exams.map((v) => targetExamLabelFor(v)).join(", ");
+    },
+    [targetExamLabelFor],
+  );
   const completed = lead.pipelineSteps;
   const [activeStep, setActiveStep] = useState(() => {
     const c = initialLead.pipelineSteps;
@@ -462,6 +582,11 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
     return v === "calendar" ? "calendar" : "table";
   });
   const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const {
+    nameById: examSubjectNameById,
+    activeSubjectIds: activeExamSubjectIds,
+    byExam: examSubjectByExam,
+  } = useExamSubjectCatalog();
 
   const maxAccessibleStep =
     completed >= PIPELINE_TOTAL ? PIPELINE_TOTAL : completed + 1;
@@ -915,7 +1040,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                     Select one or more.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {TARGET_EXAM_OPTIONS.map((exam) => (
+                    {heroExamChoiceValues.map((exam) => (
                       <label
                         key={exam}
                         className="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-slate-800"
@@ -938,7 +1063,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                           }}
                           className="rounded border-slate-300"
                         />
-                        {exam}
+                        {targetExamLabelFor(exam)}
                       </label>
                     ))}
                   </div>
@@ -974,7 +1099,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                   </dt>
                   <dd className="mt-1">
                     <span className={SX.studentHeroCourseBadge}>
-                      {formatTargetExams(lead.targetExams)}
+                      {formatTargetExamsLabeled(lead.targetExams)}
                     </span>
                   </dd>
                 </div>
@@ -1101,13 +1226,28 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                   faculties={faculties}
                   onPatchLead={patchLead}
                   refreshLead={refreshLead}
+                  canonicalTargetExams={targetExamActiveValues}
+                  labelForTargetExam={targetExamLabelFor}
+                  examSubjectNameById={examSubjectNameById}
+                  activeExamSubjectIds={activeExamSubjectIds}
+                  examSubjectByExam={examSubjectByExam}
                 />
               )}
               {activeStep === 2 && (
-                <BrochureSection lead={lead} onPatchLead={patchLead} />
+                <BrochureSection
+                  lead={lead}
+                  onPatchLead={patchLead}
+                  targetExamPreferredOrder={targetExamActiveValues}
+                  targetExamLabelFor={targetExamLabelFor}
+                />
               )}
               {activeStep === 3 && (
-                <FeeSection lead={lead} onPatchLead={patchLead} />
+                <FeeSection
+                  lead={lead}
+                  onPatchLead={patchLead}
+                  targetExamPreferredOrder={targetExamActiveValues}
+                  targetExamLabelFor={targetExamLabelFor}
+                />
               )}
               {activeStep === 4 && (
                 <ScheduleSection
@@ -1804,14 +1944,48 @@ function DemoSection({
   faculties,
   onPatchLead,
   refreshLead,
+  canonicalTargetExams,
+  labelForTargetExam,
+  examSubjectNameById,
+  activeExamSubjectIds,
+  examSubjectByExam,
 }: {
   lead: Lead;
   faculties: Faculty[];
   onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
   refreshLead: () => Promise<void>;
+  canonicalTargetExams: string[];
+  labelForTargetExam: (value: string) => string;
+  examSubjectNameById: Map<string, string>;
+  activeExamSubjectIds: Set<string>;
+  examSubjectByExam: Map<string, ExamSubjectEntry[]>;
 }) {
   const leadRef = useRef(lead);
   leadRef.current = lead;
+  const demoEditSubjectOptions = useMemo(
+    () =>
+      subjectNamesUnionForDemos(
+        lead.targetExams.some((x) => typeof x === "string" && x.trim())
+          ? lead.targetExams
+          : canonicalTargetExams,
+        faculties,
+        examSubjectNameById,
+        activeExamSubjectIds,
+        examSubjectByExam,
+      ),
+    [
+      lead.targetExams,
+      canonicalTargetExams,
+      faculties,
+      examSubjectNameById,
+      activeExamSubjectIds,
+      examSubjectByExam,
+    ],
+  );
+  const demoEditCourseForTeacher =
+    lead.targetExams.find((x) => typeof x === "string" && x.trim()) ??
+    canonicalTargetExams[0] ??
+    "";
   const demoRowsFromMeta = (
     lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined
   )?.rows;
@@ -2399,6 +2573,11 @@ function DemoSection({
               faculties={faculties}
               meetHoldDurationMinutes={holdMin}
               teacherBlockDurationMinutes={teacherBlockMin}
+              canonicalTargetExams={canonicalTargetExams}
+              labelForTargetExam={labelForTargetExam}
+              examSubjectNameById={examSubjectNameById}
+              activeExamSubjectIds={activeExamSubjectIds}
+              examSubjectByExam={examSubjectByExam}
               onCancel={() => setExpanded(false)}
               onSchedule={(r) => {
                 const nextRows = [r];
@@ -2787,6 +2966,11 @@ function DemoSection({
                   faculties={faculties}
                   meetHoldDurationMinutes={holdMin}
                   teacherBlockDurationMinutes={teacherBlockMin}
+                  canonicalTargetExams={canonicalTargetExams}
+                  labelForTargetExam={labelForTargetExam}
+                  examSubjectNameById={examSubjectNameById}
+                  activeExamSubjectIds={activeExamSubjectIds}
+                  examSubjectByExam={examSubjectByExam}
                   onCancel={() => setExpanded(false)}
                   onSchedule={(r) => {
                     setRows((prev) => {
@@ -2869,6 +3053,9 @@ function DemoSection({
         open={rowAction?.type === "edit"}
         draft={editDraft}
         faculties={faculties}
+        subjectOptions={demoEditSubjectOptions}
+        courseForTeacherPick={demoEditCourseForTeacher}
+        examSubjectNameById={examSubjectNameById}
         onDraftChange={patchEditDraft}
         onClose={closeRowModal}
         onSave={saveEditRow}
@@ -2907,6 +3094,9 @@ function DemoEditRowDialog({
   open,
   draft,
   faculties,
+  subjectOptions: subjectOptionList,
+  courseForTeacherPick,
+  examSubjectNameById,
   onDraftChange,
   onClose,
   onSave,
@@ -2915,6 +3105,9 @@ function DemoEditRowDialog({
   open: boolean;
   draft: DemoTableRow | null;
   faculties: Faculty[];
+  subjectOptions: string[];
+  courseForTeacherPick: string;
+  examSubjectNameById: Map<string, string>;
   onDraftChange: (patch: Partial<DemoTableRow>) => void;
   onClose: () => void;
   onSave: () => void;
@@ -2925,22 +3118,28 @@ function DemoEditRowDialog({
   const show = open && draft != null;
 
   const subjectOptions = useMemo(() => {
-    if (!draft) return [...DEMO_EDIT_SUBJECTS];
-    const set = new Set<string>(DEMO_EDIT_SUBJECTS);
-    return set.has(draft.subject)
-      ? [...DEMO_EDIT_SUBJECTS]
-      : [draft.subject, ...DEMO_EDIT_SUBJECTS];
-  }, [draft]);
+    const base = subjectOptionList;
+    if (!draft) return base;
+    const set = new Set<string>(base);
+    if (draft.subject.trim()) set.add(draft.subject.trim());
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [draft, subjectOptionList]);
 
   const teacherOptions = useMemo(() => {
-    const names = faculties.map((f) => f.name);
-    if (!draft) return names;
-    return names.includes(draft.teacher)
-      ? names
-      : draft.teacher
-        ? [draft.teacher, ...names]
-        : names;
-  }, [draft, faculties]);
+    if (!draft) return faculties.filter((f) => f.active).map((f) => f.name);
+    const active = faculties.filter((f) => f.active);
+    const pool = facultiesTeachingSubject(
+      courseForTeacherPick,
+      draft.subject,
+      active,
+      examSubjectNameById,
+    );
+    const pick = pool.length > 0 ? pool : active;
+    const names = pick.map((f) => f.name);
+    const t = draft.teacher.trim();
+    if (t && !names.includes(t)) return [t, ...names];
+    return names.length ? names : faculties.map((f) => f.name);
+  }, [draft, faculties, courseForTeacherPick, examSubjectNameById]);
 
   useEffect(() => {
     const d = ref.current;
@@ -3679,6 +3878,11 @@ function DemoForm({
   onSchedule,
   meetHoldDurationMinutes,
   teacherBlockDurationMinutes,
+  canonicalTargetExams,
+  labelForTargetExam,
+  examSubjectNameById,
+  activeExamSubjectIds,
+  examSubjectByExam,
 }: {
   lead: Lead;
   faculties: Faculty[];
@@ -3686,22 +3890,65 @@ function DemoForm({
   onSchedule: (r: DemoTableRow) => void;
   meetHoldDurationMinutes: number;
   teacherBlockDurationMinutes: number;
+  canonicalTargetExams: string[];
+  labelForTargetExam: (value: string) => string;
+  examSubjectNameById: Map<string, string>;
+  activeExamSubjectIds: Set<string>;
+  examSubjectByExam: Map<string, ExamSubjectEntry[]>;
 }) {
-  const demoTargetOptions =
-    lead.targetExams.length > 0 ? lead.targetExams : [...TARGET_EXAM_OPTIONS];
+  const demoTargetOptions = useMemo(() => {
+    const fromLead = lead.targetExams.filter(
+      (x) => typeof x === "string" && x.trim(),
+    );
+    if (fromLead.length > 0) return [...new Set(fromLead)];
+    return [...canonicalTargetExams];
+  }, [lead.targetExams, canonicalTargetExams]);
+
   const [course, setCourse] = useState(
-    () => demoTargetOptions[0] ?? TARGET_EXAM_OPTIONS[0],
+    () =>
+      lead.targetExams.find((x) => typeof x === "string" && x.trim()) ??
+      canonicalTargetExams[0] ??
+      "",
   );
-  const subs =
-    course === "NEET"
-      ? ["Biology", "Physics", "Chemistry"]
-      : course === "JEE"
-        ? ["Physics", "Chemistry", "Mathematics"]
-        : ["English", "GK", "Reasoning"];
-  const [subj, setSubj] = useState(subs[0]);
-  const [teacher, setTeacher] = useState(() =>
-    pickDefaultTeacher(subj, faculties),
+
+  useEffect(() => {
+    setCourse((c) =>
+      demoTargetOptions.includes(c)
+        ? c
+        : demoTargetOptions[0] ?? canonicalTargetExams[0] ?? "",
+    );
+  }, [demoTargetOptions, canonicalTargetExams]);
+
+  const subs = useMemo(
+    () =>
+      subjectsForDemoCourse(
+        faculties,
+        course,
+        examSubjectNameById,
+        activeExamSubjectIds,
+        examSubjectByExam,
+      ),
+    [
+      faculties,
+      course,
+      examSubjectNameById,
+      activeExamSubjectIds,
+      examSubjectByExam,
+    ],
   );
+
+  const [subj, setSubj] = useState("");
+  const [teacher, setTeacher] = useState("");
+
+  useEffect(() => {
+    const nextSub = subs.includes(subj) ? subj : subs[0] ?? "";
+    if (nextSub !== subj) {
+      setSubj(nextSub);
+      setTeacher(
+        pickDefaultTeacher(nextSub, course, faculties, examSubjectNameById),
+      );
+    }
+  }, [subs, subj, faculties, course, examSubjectNameById]);
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [demoDate, setDemoDate] = useState(todayStr);
   const [demoTime, setDemoTime] = useState("10:00");
@@ -3750,10 +3997,20 @@ function DemoForm({
     return `${formatDateInZone(slot, studentTimeZone)} · ${formatTime12hInZone(slot, studentTimeZone)} ${timeZoneShortLabelForMessages(studentTimeZone, slot)}`;
   }, [effectiveDemoDate, demoTime, studentTimeZone]);
 
-  const teacherNameOptions = useMemo(
-    () => faculties.map((f) => f.name),
-    [faculties],
-  );
+  const teacherNameOptions = useMemo(() => {
+    const active = faculties.filter((f) => f.active);
+    const pool =
+      subj.trim() && course.trim()
+        ? facultiesTeachingSubject(
+            course,
+            subj,
+            active,
+            examSubjectNameById,
+          )
+        : active;
+    const usePool = pool.length > 0 ? pool : active;
+    return usePool.map((f) => f.name);
+  }, [faculties, course, subj, examSubjectNameById]);
 
   const effectiveTeacher = useMemo(() => {
     if (teacherNameOptions.includes(teacher)) return teacher;
@@ -3765,7 +4022,7 @@ function DemoForm({
     setPreScheduleBlock(null);
     setShareSlotConfirm(null);
     setSubj(s);
-    setTeacher(pickDefaultTeacher(s, faculties));
+    setTeacher(pickDefaultTeacher(s, course, faculties, examSubjectNameById));
   };
 
   const confirmSharedTeacherSlotRequest = useCallback(async () => {
@@ -3882,19 +4139,20 @@ function DemoForm({
                         onChange={(e) => {
                           const v = e.target.value;
                           setCourse(v);
-                          const next =
-                            v === "NEET"
-                              ? "Biology"
-                              : v === "JEE"
-                                ? "Physics"
-                                : "English";
-                          pickSubject(next);
+                          const nextSubs = subjectsForDemoCourse(
+                            faculties,
+                            v,
+                            examSubjectNameById,
+                            activeExamSubjectIds,
+                            examSubjectByExam,
+                          );
+                          pickSubject(nextSubs[0] ?? "");
                         }}
                         aria-label="Target exam"
                       >
                         {demoTargetOptions.map((c) => (
                           <option key={c} value={c}>
-                            {c}
+                            {labelForTargetExam(c)}
                           </option>
                         ))}
                       </select>
@@ -3903,26 +4161,40 @@ function DemoForm({
                         role="group"
                         aria-label="Subject for this demo"
                       >
-                        {subs.map((s) => (
-                          <label
-                            key={s}
-                            className={cn(
-                              "inline-flex cursor-pointer items-center border px-2.5 py-1.5 text-[13px]",
-                              subj === s
-                                ? "border-[#1565c0] bg-[#e3f2fd] font-medium text-[#1565c0]"
-                                : "border-[#d0d0d0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="demo-subj"
-                              className="sr-only"
-                              checked={subj === s}
-                              onChange={() => pickSubject(s)}
-                            />
-                            {s}
-                          </label>
-                        ))}
+                        {subs.length === 0 ? (
+                          <p className="text-[12px] text-amber-900">
+                            No subjects for this exam in your catalog. Add them
+                            under{" "}
+                            <Link
+                              href="/exams-subjects"
+                              className="font-semibold text-primary underline"
+                            >
+                              Exams &amp; subjects
+                            </Link>
+                            , or add faculty assignments.
+                          </p>
+                        ) : (
+                          subs.map((s) => (
+                            <label
+                              key={s}
+                              className={cn(
+                                "inline-flex cursor-pointer items-center border px-2.5 py-1.5 text-[13px]",
+                                subj === s
+                                  ? "border-[#1565c0] bg-[#e3f2fd] font-medium text-[#1565c0]"
+                                  : "border-[#d0d0d0] bg-white text-[#424242] hover:bg-[#f5f5f5]",
+                              )}
+                            >
+                              <input
+                                type="radio"
+                                name="demo-subj"
+                                className="sr-only"
+                                checked={subj === s}
+                                onChange={() => pickSubject(s)}
+                              />
+                              {s}
+                            </label>
+                          ))
+                        )}
                       </div>
                     </div>
                   </td>
@@ -4065,13 +4337,23 @@ function DemoForm({
               type="button"
               className={SX.btnPrimary}
               disabled={
-                !effectiveTeacher.trim() || meetGateBusy || shareConfirmBusy
+                !subj.trim() ||
+                subs.length === 0 ||
+                !effectiveTeacher.trim() ||
+                meetGateBusy ||
+                shareConfirmBusy
               }
               onClick={() => {
                 void (async () => {
                   setScheduleWarnMsg(null);
                   setPreScheduleBlock(null);
                   setShareSlotConfirm(null);
+                  if (!subj.trim() || subs.length === 0) {
+                    setScheduleWarnMsg(
+                      "Pick a target exam with at least one subject (see Exams & subjects).",
+                    );
+                    return;
+                  }
                   if (!effectiveTeacher.trim()) {
                     setScheduleWarnMsg(
                       "Choose a teacher from your faculty list.",
@@ -4220,8 +4502,8 @@ function DemoForm({
   );
 }
 
-type ExamBrochureCatalogRow = {
-  exam: string;
+type ExamBrochureCatalogItem = {
+  key: string;
   title: string;
   summary: string;
   linkUrl: string;
@@ -4230,12 +4512,93 @@ type ExamBrochureCatalogRow = {
   storedFileName?: string | null;
 };
 
+type ExamBrochureCatalogGroup = {
+  exam: string;
+  brochures: ExamBrochureCatalogItem[];
+};
+
+function brochureCatalogDefaultItem(
+  items: ExamBrochureCatalogItem[],
+): ExamBrochureCatalogItem | null {
+  for (const b of items) {
+    if (b.storedFileUrl?.trim() || b.linkUrl?.trim()) return b;
+  }
+  return items[0] ?? null;
+}
+
+function persistedDemoToTableRow(p: DemoTableRowPersisted): DemoTableRow {
+  return {
+    subject: p.subject ?? "",
+    teacher: p.teacher ?? "",
+    studentTimeZone: p.studentTimeZone ?? "Asia/Kolkata",
+    status: p.status ?? "",
+    isoDate: p.isoDate ?? "",
+    timeHmIST: p.timeHmIST ?? "",
+    inviteSent: p.inviteSent,
+    inviteSentAt: p.inviteSentAt ?? null,
+    meetRowId: p.meetRowId,
+    meetLinkUrl: p.meetLinkUrl,
+    meetBookingId: p.meetBookingId,
+    meetWindowStartIso: p.meetWindowStartIso,
+    meetWindowEndIso: p.meetWindowEndIso,
+    teacherFeedbackInviteSentAt: p.teacherFeedbackInviteSentAt ?? null,
+    teacherFeedbackSubmittedAt: p.teacherFeedbackSubmittedAt ?? null,
+    teacherFeedbackRating: p.teacherFeedbackRating,
+    teacherFeedbackStrengths: p.teacherFeedbackStrengths,
+    teacherFeedbackImprovements: p.teacherFeedbackImprovements,
+    teacherFeedbackNotes: p.teacherFeedbackNotes,
+    teacherFeedbackExamTrack: p.teacherFeedbackExamTrack,
+    teacherFeedbackSessionTopics: p.teacherFeedbackSessionTopics,
+    teacherFeedbackPaceFit: p.teacherFeedbackPaceFit,
+    teacherFeedbackRatingEngagement: p.teacherFeedbackRatingEngagement,
+    teacherFeedbackRatingConceptual: p.teacherFeedbackRatingConceptual,
+    teacherFeedbackRatingApplication: p.teacherFeedbackRatingApplication,
+    teacherFeedbackRatingExamReadiness: p.teacherFeedbackRatingExamReadiness,
+    teacherFeedbackParentInvolvement: p.teacherFeedbackParentInvolvement,
+    teacherFeedbackRecommendedNext: p.teacherFeedbackRecommendedNext,
+    teacherFeedbackFollowUpHomework: p.teacherFeedbackFollowUpHomework,
+  };
+}
+
+function overallDemoRatingLabel(v: string | undefined): string {
+  if (!v?.trim()) return "—";
+  const m: Record<string, string> = {
+    excellent: "Excellent",
+    good: "Good",
+    satisfactory: "Satisfactory",
+    needs_improvement: "Needs improvement",
+  };
+  return m[v] ?? v;
+}
+
+function brochureDocOpenHref(b: ExamBrochureCatalogItem): string | null {
+  const stored = b.storedFileUrl?.trim();
+  const link = b.linkUrl?.trim();
+  const u = stored || link;
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  return u.startsWith("/") ? u : `/${u}`;
+}
+
+type BrochureCatalogFlatRow = {
+  key: string;
+  exam: string;
+  examLabel: string;
+  title: string;
+  docKind: string;
+  href: string | null;
+};
+
 function BrochureSection({
   lead,
   onPatchLead,
+  targetExamPreferredOrder,
+  targetExamLabelFor,
 }: {
   lead: Lead;
   onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+  targetExamPreferredOrder: readonly string[];
+  targetExamLabelFor: (value: string) => string;
 }) {
   const br = lead.pipelineMeta?.brochure as
     | {
@@ -4264,8 +4627,9 @@ function BrochureSection({
   const [brochureEmailBusy, setBrochureEmailBusy] = useState(false);
   const [brochureEmailErr, setBrochureEmailErr] = useState<string | null>(null);
   const brochureFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [examBrochureCatalog, setExamBrochureCatalog] =
-    useState<ExamBrochureCatalogRow | null>(null);
+  const [examCatalogGroup, setExamCatalogGroup] =
+    useState<ExamBrochureCatalogGroup | null>(null);
+  const [catalogSelectedKey, setCatalogSelectedKey] = useState("");
   const [examBrochureCatalogLoading, setExamBrochureCatalogLoading] =
     useState(true);
   const brochureSkipAutosave = useRef(true);
@@ -4273,9 +4637,21 @@ function BrochureSection({
   const leadBrRef = useRef(lead);
   leadBrRef.current = lead;
 
+  const [docStepFeedbackRow, setDocStepFeedbackRow] =
+    useState<DemoTableRow | null>(null);
+  const [examBrochureTableRows, setExamBrochureTableRows] = useState<
+    BrochureCatalogFlatRow[]
+  >([]);
+  const [examBrochureTableLoading, setExamBrochureTableLoading] =
+    useState(true);
+
+  const persistedDemoRows: DemoTableRowPersisted[] =
+    (lead.pipelineMeta?.demo as LeadPipelineDemo | undefined)?.rows ?? [];
+
   const brochurePrimaryExam = useMemo(
-    () => primaryExamForFee(lead.targetExams),
-    [lead.targetExams],
+    () =>
+      primaryExamForFee(lead.targetExams, targetExamPreferredOrder),
+    [lead.targetExams, targetExamPreferredOrder],
   );
 
   useEffect(() => {
@@ -4286,7 +4662,7 @@ function BrochureSection({
   useEffect(() => {
     const exam = brochurePrimaryExam;
     if (!exam) {
-      setExamBrochureCatalog(null);
+      setExamCatalogGroup(null);
       setExamBrochureCatalogLoading(false);
       return;
     }
@@ -4298,17 +4674,41 @@ function BrochureSection({
           cache: "no-store",
         });
         if (!res.ok || cancelled) return;
-        const rows = (await res.json()) as ExamBrochureCatalogRow[];
+        const rows = (await res.json()) as ExamBrochureCatalogGroup[];
         const hit = Array.isArray(rows)
-          ? rows.find((r) => r.exam === exam)
+          ? pickBrochureDocByExam(rows, exam)
+          : null;
+        const rawList = Array.isArray(hit?.brochures) ? hit!.brochures : [];
+        const normalized: ExamBrochureCatalogGroup | null = hit
+          ? {
+              exam: hit.exam,
+              brochures: rawList.map((raw) => ({
+                key: String(raw.key ?? ""),
+                title: typeof raw.title === "string" ? raw.title : "",
+                summary: typeof raw.summary === "string" ? raw.summary : "",
+                linkUrl: typeof raw.linkUrl === "string" ? raw.linkUrl : "",
+                linkLabel:
+                  typeof raw.linkLabel === "string" ? raw.linkLabel : "",
+                storedFileUrl:
+                  raw.storedFileUrl === null ||
+                  raw.storedFileUrl === undefined
+                    ? null
+                    : String(raw.storedFileUrl),
+                storedFileName:
+                  raw.storedFileName === null ||
+                  raw.storedFileName === undefined
+                    ? null
+                    : String(raw.storedFileName),
+              })),
+            }
           : null;
         if (!cancelled) {
-          setExamBrochureCatalog(hit ?? null);
+          setExamCatalogGroup(normalized);
           setExamBrochureCatalogLoading(false);
         }
       } catch {
         if (!cancelled) {
-          setExamBrochureCatalog(null);
+          setExamCatalogGroup(null);
           setExamBrochureCatalogLoading(false);
         }
       }
@@ -4317,6 +4717,85 @@ function BrochureSection({
       cancelled = true;
     };
   }, [brochurePrimaryExam, lead.id]);
+
+  useEffect(() => {
+    const exams = lead.targetExams.filter(
+      (x) => typeof x === "string" && x.trim(),
+    );
+    if (exams.length === 0) {
+      setExamBrochureTableRows([]);
+      setExamBrochureTableLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setExamBrochureTableLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/exam-brochure-templates", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const rows = (await res.json()) as ExamBrochureCatalogGroup[];
+        if (!Array.isArray(rows) || cancelled) return;
+        const flat: BrochureCatalogFlatRow[] = [];
+        for (const exam of exams) {
+          const hit = pickBrochureDocByExam(rows, exam);
+          const rawList = Array.isArray(hit?.brochures) ? hit!.brochures : [];
+          const examLabel = targetExamLabelFor(exam);
+          for (const raw of rawList) {
+            const b: ExamBrochureCatalogItem = {
+              key: String(raw.key ?? ""),
+              title: typeof raw.title === "string" ? raw.title : "",
+              summary: typeof raw.summary === "string" ? raw.summary : "",
+              linkUrl: typeof raw.linkUrl === "string" ? raw.linkUrl : "",
+              linkLabel:
+                typeof raw.linkLabel === "string" ? raw.linkLabel : "",
+              storedFileUrl:
+                raw.storedFileUrl === null || raw.storedFileUrl === undefined
+                  ? null
+                  : String(raw.storedFileUrl),
+              storedFileName:
+                raw.storedFileName === null || raw.storedFileName === undefined
+                  ? null
+                  : String(raw.storedFileName),
+            };
+            const href = brochureDocOpenHref(b);
+            const stored = b.storedFileUrl?.trim();
+            const link = b.linkUrl?.trim();
+            const docKind = stored ? "File" : link ? "Link" : "—";
+            flat.push({
+              key: `${exam}-${b.key}`,
+              exam,
+              examLabel,
+              title: b.title.trim() || "Untitled document",
+              docKind,
+              href,
+            });
+          }
+        }
+        if (!cancelled) setExamBrochureTableRows(flat);
+      } catch {
+        if (!cancelled) setExamBrochureTableRows([]);
+      } finally {
+        if (!cancelled) setExamBrochureTableLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lead.id, lead.targetExams, targetExamLabelFor]);
+
+  useEffect(() => {
+    const items = examCatalogGroup?.brochures ?? [];
+    if (!items.length) {
+      setCatalogSelectedKey("");
+      return;
+    }
+    setCatalogSelectedKey((prev) => {
+      if (prev && items.some((b) => b.key === prev)) return prev;
+      return brochureCatalogDefaultItem(items)?.key ?? items[0]!.key;
+    });
+  }, [examCatalogGroup, brochurePrimaryExam, lead.id]);
 
   useEffect(() => {
     const b = lead.pipelineMeta?.brochure as
@@ -4344,13 +4823,20 @@ function BrochureSection({
     !hasUploadedBrochure && documentUrl.trim()
       ? normalizeBrochurePreviewUrl(documentUrl)
       : "";
+  const catalogSelectedItem = useMemo(() => {
+    const items = examCatalogGroup?.brochures ?? [];
+    if (!items.length) return null;
+    const byKey = items.find((b) => b.key === catalogSelectedKey);
+    if (byKey) return byKey;
+    return brochureCatalogDefaultItem(items);
+  }, [examCatalogGroup, catalogSelectedKey]);
   const catalogBrochureSrc = useMemo(() => {
-    const stored = examBrochureCatalog?.storedFileUrl?.trim();
-    const link = examBrochureCatalog?.linkUrl?.trim();
+    const stored = catalogSelectedItem?.storedFileUrl?.trim();
+    const link = catalogSelectedItem?.linkUrl?.trim();
     const u = stored || link;
     if (!u) return "";
     return normalizeBrochurePreviewUrl(u);
-  }, [examBrochureCatalog?.storedFileUrl, examBrochureCatalog?.linkUrl]);
+  }, [catalogSelectedItem?.storedFileUrl, catalogSelectedItem?.linkUrl]);
   /** No per-student upload: lead document URL overrides course default. */
   const defaultOrLeadPreviewSrc = hasUploadedBrochure
     ? ""
@@ -4360,13 +4846,13 @@ function BrochureSection({
     : documentPreviewSrc
       ? "Document link"
       : catalogBrochureSrc
-        ? examBrochureCatalog?.storedFileUrl?.trim()
-          ? examBrochureCatalog?.storedFileName?.trim() ||
-            examBrochureCatalog?.title?.trim() ||
+        ? catalogSelectedItem?.storedFileUrl?.trim()
+          ? catalogSelectedItem?.storedFileName?.trim() ||
+            catalogSelectedItem?.title?.trim() ||
             (brochurePrimaryExam
               ? `${brochurePrimaryExam} brochure`
               : "Course brochure")
-          : examBrochureCatalog?.title?.trim() ||
+          : catalogSelectedItem?.title?.trim() ||
             (brochurePrimaryExam
               ? `${brochurePrimaryExam} brochure`
               : "Course brochure")
@@ -4377,8 +4863,8 @@ function BrochureSection({
     !defaultOrLeadPreviewSrc &&
     Boolean(brochurePrimaryExam) &&
     Boolean(
-      examBrochureCatalog?.title?.trim() ||
-      examBrochureCatalog?.summary?.trim(),
+      catalogSelectedItem?.title?.trim() ||
+        catalogSelectedItem?.summary?.trim(),
     );
   const showNoDefaultBrochureHint =
     !hasUploadedBrochure &&
@@ -4451,7 +4937,7 @@ function BrochureSection({
       <div className={SX.sectionHead}>
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className={SX.sectionTitle}>Step 2 · Course brochure</h2>
+            <h2 className={SX.sectionTitle}>Step 2 · Documents</h2>
             {lead.pipelineSteps >= 2 ? (
               <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-100">
                 Done
@@ -4459,19 +4945,212 @@ function BrochureSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            The exam brochure from{" "}
-            <Link
-              href="/course-brochure"
-              className="font-medium text-primary underline"
-            >
-              Course Brochures
-            </Link>{" "}
-            previews here by default. Upload a file for this student to replace
-            it, or remove the upload to use the default again.
+            Demo feedback summary and brochures by exam (tables below). Then
+            preview, upload, or send your student-specific brochure.
           </p>
         </div>
       </div>
       <div className={SX.sectionBody}>
+        <div className="mb-6 space-y-6">
+          <div>
+            <h3 className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-[13px] font-semibold text-slate-800">
+              <span>Demo teacher feedback</span>
+              <span className="text-[11px] font-normal text-slate-500">
+                From Step 1 demos · full detail on View
+              </span>
+            </h3>
+            <div className="overflow-auto rounded-md border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.03]">
+              <table className={cn(SX.dataTable, "min-w-[720px]")}>
+                <thead>
+                  <tr>
+                    <th className={SX.dataTh}>Date</th>
+                    <th className={SX.dataTh}>Time (IST)</th>
+                    <th className={SX.dataTh}>Subject</th>
+                    <th className={SX.dataTh}>Teacher</th>
+                    <th className={SX.dataTh}>Overall</th>
+                    <th className={SX.dataTh}>Feedback</th>
+                    <th className={cn(SX.dataTh, "w-[1%] whitespace-nowrap")}>
+                      View
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {persistedDemoRows.length === 0 ? (
+                    <tr>
+                      <td
+                        className={cn(SX.dataTd, "text-[13px] text-slate-500")}
+                        colSpan={7}
+                      >
+                        No demo rows yet. Schedule demos in Step 1 · Demo
+                        classes.
+                      </td>
+                    </tr>
+                  ) : (
+                    persistedDemoRows.map((row: DemoTableRowPersisted, i: number) => {
+                      const submitted = Boolean(
+                        row.teacherFeedbackSubmittedAt?.trim(),
+                      );
+                      const dateLabel = (() => {
+                        if (!row.isoDate?.trim()) return "—";
+                        try {
+                          return format(
+                            parseISO(row.isoDate),
+                            "d MMM yyyy",
+                          );
+                        } catch {
+                          return row.isoDate;
+                        }
+                      })();
+                      const feedbackLabel = submitted
+                        ? (() => {
+                            try {
+                              return format(
+                                parseISO(row.teacherFeedbackSubmittedAt!),
+                                "dd MMM yyyy, HH:mm",
+                              );
+                            } catch {
+                              return "Submitted";
+                            }
+                          })()
+                        : row.teacherFeedbackInviteSentAt?.trim()
+                          ? "Pending (invite sent)"
+                          : "—";
+                      return (
+                        <tr key={row.meetRowId || `${row.isoDate}-${i}`}>
+                          <td className={SX.dataTd}>{dateLabel}</td>
+                          <td className={cn(SX.dataTd, "tabular-nums")}>
+                            {row.timeHmIST?.trim() || "—"}
+                          </td>
+                          <td className={SX.dataTd}>
+                            {row.subject?.trim() || "—"}
+                          </td>
+                          <td className={SX.dataTd}>
+                            {row.teacher?.trim() || "—"}
+                          </td>
+                          <td className={SX.dataTd}>
+                            {overallDemoRatingLabel(row.teacherFeedbackRating)}
+                          </td>
+                          <td className={cn(SX.dataTd, "text-[12px]")}>
+                            {feedbackLabel}
+                          </td>
+                          <td className={SX.dataTd}>
+                            {submitted ? (
+                              <button
+                                type="button"
+                                className="text-[12px] font-semibold text-primary hover:underline"
+                                onClick={() =>
+                                  setDocStepFeedbackRow(
+                                    persistedDemoToTableRow(row),
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            ) : (
+                              <span className="text-[12px] text-slate-400">
+                                —
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-[13px] font-semibold text-slate-800">
+              <span>Course brochures (by target exam)</span>
+              <Link
+                href="/course-brochure"
+                className="text-[11px] font-medium text-primary underline"
+              >
+                Edit in Course brochures
+              </Link>
+            </h3>
+            {examBrochureTableLoading ? (
+              <div
+                className="h-24 animate-pulse rounded-md bg-slate-100 ring-1 ring-slate-200/80"
+                aria-hidden
+              />
+            ) : (
+              <div className="overflow-auto rounded-md border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.03]">
+                <table className={cn(SX.dataTable, "min-w-[560px]")}>
+                  <thead>
+                    <tr>
+                      <th className={SX.dataTh}>Exam</th>
+                      <th className={SX.dataTh}>Document</th>
+                      <th className={SX.dataTh}>Type</th>
+                      <th className={cn(SX.dataTh, "w-[1%] whitespace-nowrap")}>
+                        Open
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lead.targetExams.filter((x) => typeof x === "string" && x.trim())
+                      .length === 0 ? (
+                      <tr>
+                        <td
+                          className={cn(SX.dataTd, "text-[13px] text-slate-500")}
+                          colSpan={4}
+                        >
+                          Add target exams on the lead row to list brochures
+                          from your catalog.
+                        </td>
+                      </tr>
+                    ) : examBrochureTableRows.length === 0 ? (
+                      <tr>
+                        <td
+                          className={cn(SX.dataTd, "text-[13px] text-slate-500")}
+                          colSpan={4}
+                        >
+                          No brochure documents configured for these exams in{" "}
+                          <Link
+                            href="/course-brochure"
+                            className="font-medium text-primary underline"
+                          >
+                            Course brochures
+                          </Link>
+                          .
+                        </td>
+                      </tr>
+                    ) : (
+                      examBrochureTableRows.map((r) => (
+                        <tr key={r.key}>
+                          <td className={SX.dataTd}>{r.examLabel}</td>
+                          <td className={SX.dataTd}>{r.title}</td>
+                          <td className={cn(SX.dataTd, "text-[12px]")}>
+                            {r.docKind}
+                          </td>
+                          <td className={SX.dataTd}>
+                            {r.href ? (
+                              <a
+                                href={normalizeBrochurePreviewUrl(r.href)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[12px] font-semibold text-primary hover:underline"
+                              >
+                                Open
+                              </a>
+                            ) : (
+                              <span className="text-[12px] text-slate-400">
+                                —
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
         {!brochurePrimaryExam ? (
           <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-3 text-[13px] text-amber-950">
             <p className="font-semibold">No target exam selected</p>
@@ -4536,6 +5215,40 @@ function BrochureSection({
                     aria-hidden
                   />
                 ) : null}
+                {!examBrochureCatalogLoading &&
+                examCatalogGroup &&
+                examCatalogGroup.brochures.length > 1 ? (
+                  <div
+                    className="mb-3 flex flex-wrap gap-1.5"
+                    role="tablist"
+                    aria-label="Course brochures for this exam"
+                  >
+                    {examCatalogGroup.brochures.map((b) => {
+                      const tabLabel =
+                        b.title.trim() ||
+                        b.linkLabel.trim() ||
+                        b.storedFileName?.trim() ||
+                        "Brochure";
+                      return (
+                        <button
+                          key={b.key}
+                          type="button"
+                          role="tab"
+                          aria-selected={catalogSelectedKey === b.key}
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                            catalogSelectedKey === b.key
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                          )}
+                          onClick={() => setCatalogSelectedKey(b.key)}
+                        >
+                          {tabLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 {!examBrochureCatalogLoading && defaultOrLeadPreviewSrc ? (
                   <div className="mb-3 space-y-2">
                     <BrochureInlinePreviewFrame
@@ -4560,14 +5273,14 @@ function BrochureSection({
                         student&apos;s own file.
                       </p>
                     ) : null}
-                    {examBrochureCatalog?.summary?.trim() &&
+                    {catalogSelectedItem?.summary?.trim() &&
                     catalogBrochureSrc &&
                     !documentPreviewSrc ? (
                       <button
                         type="button"
                         className={cn(SX.btnSecondary, "text-[12px]")}
                         onClick={() => {
-                          const s = examBrochureCatalog!.summary.trim();
+                          const s = catalogSelectedItem!.summary.trim();
                           if (!s) return;
                           setNotes((prev) =>
                             prev.trim() ? `${prev}\n\n${s}` : s,
@@ -4581,23 +5294,23 @@ function BrochureSection({
                 ) : null}
                 {showCatalogTextOnly ? (
                   <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-3 text-[13px] shadow-sm ring-1 ring-slate-900/5">
-                    {examBrochureCatalog?.title?.trim() ? (
+                    {catalogSelectedItem?.title?.trim() ? (
                       <p className="font-semibold text-slate-900">
-                        {examBrochureCatalog.title.trim()}
+                        {catalogSelectedItem.title.trim()}
                       </p>
                     ) : null}
-                    {examBrochureCatalog?.summary?.trim() ? (
+                    {catalogSelectedItem?.summary?.trim() ? (
                       <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">
-                        {examBrochureCatalog.summary}
+                        {catalogSelectedItem.summary}
                       </p>
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {examBrochureCatalog?.summary?.trim() ? (
+                      {catalogSelectedItem?.summary?.trim() ? (
                         <button
                           type="button"
                           className={cn(SX.btnSecondary, "text-[12px]")}
                           onClick={() => {
-                            const s = examBrochureCatalog!.summary.trim();
+                            const s = catalogSelectedItem!.summary.trim();
                             if (!s) return;
                             setNotes((prev) =>
                               prev.trim() ? `${prev}\n\n${s}` : s,
@@ -4618,7 +5331,7 @@ function BrochureSection({
                 ) : null}
                 {showNoDefaultBrochureHint ? (
                   <p className="mb-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2.5 text-[12px] leading-snug text-slate-600">
-                    No PDF link for{" "}
+                    No course brochures for{" "}
                     <span className="font-semibold">{brochurePrimaryExam}</span>{" "}
                     in{" "}
                     <Link
@@ -4627,8 +5340,8 @@ function BrochureSection({
                     >
                       Course Brochures
                     </Link>
-                    . Add a link there to preview the default here, or upload
-                    for this student.
+                    . Add a file or link there to preview the default here, or
+                    upload for this student.
                   </p>
                 ) : null}
                 <label
@@ -4913,6 +5626,10 @@ function BrochureSection({
           email to advance the pipeline.
         </p>
       </div>
+      <DemoTeacherFeedbackViewDialog
+        row={docStepFeedbackRow}
+        onClose={() => setDocStepFeedbackRow(null)}
+      />
     </section>
   );
 }
@@ -4971,12 +5688,24 @@ function redistributeAfterAmountEdit(
   return next;
 }
 
+function savedFeeBankAccountIdFromLead(lead: Lead): string | null {
+  const f = lead.pipelineMeta?.fees as Record<string, unknown> | undefined;
+  const raw = f?.feeSelectedBankAccountId;
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  return t.length > 0 ? t : null;
+}
+
 function FeeSection({
   lead,
   onPatchLead,
+  targetExamPreferredOrder,
+  targetExamLabelFor,
 }: {
   lead: Lead;
   onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+  targetExamPreferredOrder: readonly string[];
+  targetExamLabelFor: (value: string) => string;
 }) {
   const [scholarshipPct, setScholarshipPct] = useState(0);
   const [installmentEnabled, setInstallmentEnabled] = useState(false);
@@ -4998,6 +5727,7 @@ function FeeSection({
   useEffect(() => {
     feesSkipAutosave.current = true;
     examDefaultFillResolvedRef.current = false;
+    feeBankTouchedRef.current = false;
   }, [lead.id]);
 
   const finalFee = useMemo(
@@ -5006,6 +5736,21 @@ function FeeSection({
   );
 
   const [currency, setCurrency] = useState("INR");
+  const [feeBankAccountId, setFeeBankAccountId] = useState<string | null>(() =>
+    savedFeeBankAccountIdFromLead(lead),
+  );
+  const feeBankTouchedRef = useRef(false);
+
+  /** Primitive from server — do not key off `pipelineMeta` identity or fee autosaves reset the pick. */
+  const persistedFeeBankAccountId = savedFeeBankAccountIdFromLead(lead);
+
+  const onFeeBankChange = useCallback(
+    (id: string | null, source?: "user" | "sync") => {
+      if (source !== "sync") feeBankTouchedRef.current = true;
+      setFeeBankAccountId(id);
+    },
+    [],
+  );
   const rates: Record<string, number> = {
     INR: 1,
     USD: 0.012,
@@ -5063,17 +5808,11 @@ function FeeSection({
   };
 
   useEffect(() => {
-    const f = lead.pipelineMeta?.fees as
-      | {
-          scholarshipPct?: number;
-          installmentEnabled?: boolean;
-          installmentCount?: number;
-          installmentAmounts?: number[];
-          installmentDates?: string[];
-          currency?: string;
-          baseTotal?: number;
-        }
-      | undefined;
+    setFeeBankAccountId(persistedFeeBankAccountId);
+  }, [lead.id, persistedFeeBankAccountId]);
+
+  useEffect(() => {
+    const f = lead.pipelineMeta?.fees as Record<string, unknown> | undefined;
     if (!f || typeof f !== "object") return;
     if (typeof f.scholarshipPct === "number")
       setScholarshipPct(f.scholarshipPct);
@@ -5117,7 +5856,7 @@ function FeeSection({
     }
     if (examDefaultFillResolvedRef.current) return;
 
-    const exam = primaryExamForFee(lead.targetExams);
+    const exam = primaryExamForFee(lead.targetExams, targetExamPreferredOrder);
     if (!exam) {
       examDefaultFillResolvedRef.current = true;
       return;
@@ -5147,13 +5886,14 @@ function FeeSection({
     return () => {
       cancelled = true;
     };
-  }, [lead.id, lead.targetExams]);
+  }, [lead.id, lead.targetExams, targetExamPreferredOrder]);
 
   const buildFeesMeta = useCallback(() => {
     const prev = leadFeesRef.current.pipelineMeta?.fees as
       | Record<string, unknown>
       | undefined;
-    return {
+    const bankTrim = feeBankAccountId?.trim() ?? "";
+    const fees: Record<string, unknown> = {
       scholarshipPct,
       installmentEnabled,
       installmentCount,
@@ -5178,6 +5918,12 @@ function FeeSection({
           ? prev.enrollmentSentAt
           : undefined,
     };
+    if (bankTrim) {
+      fees.feeSelectedBankAccountId = bankTrim;
+    } else if (feeBankTouchedRef.current) {
+      fees.feeSelectedBankAccountId = null;
+    }
+    return fees;
   }, [
     scholarshipPct,
     installmentEnabled,
@@ -5187,6 +5933,7 @@ function FeeSection({
     currency,
     baseTotal,
     finalFee,
+    feeBankAccountId,
   ]);
 
   useEffect(() => {
@@ -5237,8 +5984,9 @@ function FeeSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Base fee can load from Fee Management defaults by target exam (e.g.
-            NEET). Scholarship, final fee, and installments save automatically.
+            Base fee can load from Fee Management defaults for each target exam on
+            this lead. Scholarship, final fee, and installments save
+            automatically.
           </p>
         </div>
         {!installmentEnabled && (
@@ -5270,7 +6018,11 @@ function FeeSection({
             <tbody>
               <tr>
                 <td className={SX.dataTd}>
-                  {formatTargetExams(lead.targetExams)}
+                  {lead.targetExams.length
+                    ? lead.targetExams
+                        .map((v) => targetExamLabelFor(v))
+                        .join(", ")
+                    : "—"}
                 </td>
                 <td className={SX.dataTd}>
                   <label className="sr-only" htmlFor={`base-fee-${lead.id}`}>
@@ -5498,13 +6250,13 @@ function FeeSection({
               </tbody>
             </table>
           </div>
-          <p className="border-t border-[#d0d0d0] bg-[#fafafa] px-2 py-1.5 text-[10px] leading-snug text-[#757575]">
-            Non-INR amounts use approximate rates — always confirm before
-            payment.
-          </p>
         </div>
 
-        <InstituteBankDetailsPanel />
+        <InstituteBankDetailsPanel
+          leadId={lead.id}
+          value={feeBankAccountId}
+          onChange={onFeeBankChange}
+        />
 
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#d0d0d0] pt-3">
           <span className="mr-1 text-[13px] font-semibold text-[#424242]">

@@ -91,6 +91,7 @@ const FeesBlockSchema = new Schema(
     feeSentWhatsAppAt: { type: String, default: null },
     feeSentEmailAt: { type: String, default: null },
     enrollmentSentAt: { type: String, default: null },
+    feeSelectedBankAccountId: { type: String, default: null },
   },
   { _id: false },
 );

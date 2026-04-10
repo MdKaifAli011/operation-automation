@@ -3,7 +3,6 @@
 import { format, parseISO } from "date-fns";
 import { useCallback, useEffect, useState } from "react";
 import {
-  DEFAULT_LEAD_SOURCE_OPTIONS,
   normalizeLeadSources,
   type LeadSourceOption,
 } from "@/lib/leadSources";
@@ -11,9 +10,7 @@ import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
 export default function LeadSourcesSettingsPage() {
-  const [sources, setSources] = useState<LeadSourceOption[]>(() =>
-    DEFAULT_LEAD_SOURCE_OPTIONS.map((o) => ({ ...o })),
-  );
+  const [sources, setSources] = useState<LeadSourceOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

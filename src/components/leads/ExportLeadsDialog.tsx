@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, SheetTabId } from "@/lib/types";
 import { leadsToExportCsv } from "@/lib/lead-csv";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
@@ -65,6 +65,8 @@ type Props = {
 
 export function ExportLeadsDialog({ leads, open, onOpenChange }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const { activeValues: targetExamFilterValues, labelFor: targetExamLabel } =
+    useTargetExamOptions();
   const todayStr = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -324,9 +326,9 @@ export function ExportLeadsDialog({ leads, open, onOpenChange }: Props) {
               onChange={(e) => setCourse(e.target.value)}
             >
               <option value="">All targets</option>
-              {TARGET_EXAM_OPTIONS.map((c) => (
+              {targetExamFilterValues.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {targetExamLabel(c)}
                 </option>
               ))}
             </select>

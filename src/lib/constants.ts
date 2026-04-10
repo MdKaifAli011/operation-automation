@@ -1,13 +1,11 @@
 import { DEFAULT_LEAD_SOURCE_OPTIONS } from "@/lib/leadSources";
+import { FALLBACK_TARGET_EXAM_VALUES } from "@/lib/targetExams";
 
-/** Target exams shown in leads grid (multi-select). */
-export const TARGET_EXAM_OPTIONS = [
-  "NEET",
-  "JEE",
-  "CUET",
-  "SAT",
-  "Other",
-] as const;
+/**
+ * Fallback when `/api/settings/target-exams` is unavailable.
+ * Prefer loading exams from that API in UI.
+ */
+export const TARGET_EXAM_OPTIONS = [...FALLBACK_TARGET_EXAM_VALUES] as const;
 
 /** @deprecated Use TARGET_EXAM_OPTIONS — kept for older screens. */
 export const COURSE_OPTIONS = TARGET_EXAM_OPTIONS;

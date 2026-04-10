@@ -17,5 +17,10 @@ export function randomUuid(): string {
     const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
   }
-  return `id-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 18)}`;
+  // Must stay within [a-zA-Z0-9_-] for brochure keys (see isValidBrochureKey).
+  const part = `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 18)}`.replace(
+    /[^a-zA-Z0-9]/g,
+    "",
+  );
+  return `id-${part.slice(0, 48)}`;
 }

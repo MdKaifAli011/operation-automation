@@ -3,6 +3,7 @@
 import { format, isSameMonth, parseISO } from "date-fns";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import { formatTargetExams } from "@/lib/lead-display";
@@ -17,6 +18,11 @@ function safeFormatLeadDate(iso: string): string {
 }
 
 export default function EnrollStudentPage() {
+  const {
+    activeValues: targetExamValues,
+    labelFor: targetExamLabel,
+    loading: targetExamsLoading,
+  } = useTargetExamOptions();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [fees, setFees] = useState<FeeRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,20 +69,54 @@ export default function EnrollStudentPage() {
         return false;
       }
     }).length;
-    const countExam = (exam: string) =>
-      enrolled.filter((l) =>
-        (l.targetExams ?? []).some(
-          (t) => t.toLowerCase() === exam.toLowerCase(),
-        ),
-      ).length;
     return {
       total: enrolled.length,
       thisMonth,
-      neet: countExam("NEET"),
-      jee: countExam("JEE"),
-      cuet: countExam("CUET"),
     };
   }, [enrolled]);
+
+  const examTiles = useMemo(() => {
+    return targetExamValues.map((value) => {
+      const count = enrolled.filter((l) =>
+        (l.targetExams ?? []).some(
+          (t) =>
+            typeof t === "string" &&
+            t.trim().toLowerCase() === value.toLowerCase(),
+        ),
+      ).length;
+      return {
+        key: value,
+        label: targetExamLabel(value),
+        count,
+      };
+    });
+  }, [enrolled, targetExamValues, targetExamLabel]);
+
+  const statsBusy = loading || targetExamsLoading;
+
+  const dashboardTiles = useMemo(
+    () => [
+      {
+        key: "total",
+        label: "Total enrolled",
+        val: stats.total,
+        accent: "text-primary" as const,
+      },
+      {
+        key: "month",
+        label: "This month",
+        val: stats.thisMonth,
+        accent: "text-emerald-600" as const,
+      },
+      ...examTiles.map((t) => ({
+        key: t.key,
+        label: t.label,
+        val: t.count,
+        accent: "text-slate-800" as const,
+      })),
+    ],
+    [stats.total, stats.thisMonth, examTiles],
+  );
 
   const feeByLeadId = useMemo(() => {
     const m = new Map<string, FeeRecord>();
@@ -115,34 +155,45 @@ export default function EnrollStudentPage() {
         <div className={SX.leadStatBar}>
           <span className="text-slate-600">
             <strong className="font-semibold text-slate-800">
-              {loading ? "…" : stats.total}
+              {statsBusy ? "…" : stats.total}
             </strong>{" "}
             enrolled in view
           </span>
         </div>
 
-        <div className="grid gap-3 border-b border-slate-200/90 bg-white px-3 py-4 sm:grid-cols-2 lg:grid-cols-5 lg:px-4">
-          {(
-            [
-              ["Total enrolled", String(stats.total), "text-primary"],
-              ["This month", String(stats.thisMonth), "text-emerald-600"],
-              ["NEET", String(stats.neet), "text-slate-800"],
-              ["JEE", String(stats.jee), "text-slate-800"],
-              ["CUET", String(stats.cuet), "text-slate-800"],
-            ] as const
-          ).map(([label, val, accent]) => (
-            <div
-              key={label}
-              className="rounded-none border border-slate-200/90 bg-slate-50/50 px-3 py-3 text-center shadow-sm"
-            >
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                {label}
-              </p>
-              <p className={cn("mt-1 text-xl font-bold tabular-nums", accent)}>
-                {loading ? "…" : val}
-              </p>
-            </div>
-          ))}
+        <div className="space-y-2 border-b border-slate-200/90 bg-white px-3 py-4 lg:px-4">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {dashboardTiles.map((tile) => (
+              <div
+                key={tile.key}
+                className="rounded-none border border-slate-200/90 bg-slate-50/50 px-3 py-3 text-center shadow-sm"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  {tile.label}
+                </p>
+                <p
+                  className={cn(
+                    "mt-1 text-xl font-bold tabular-nums",
+                    tile.accent,
+                  )}
+                >
+                  {statsBusy ? "…" : tile.val}
+                </p>
+              </div>
+            ))}
+          </div>
+          {!targetExamsLoading && targetExamValues.length === 0 ? (
+            <p className="text-[12px] text-slate-500">
+              Add target courses under{" "}
+              <Link
+                href="/exams-subjects"
+                className="font-medium text-primary underline"
+              >
+                Exams &amp; subjects
+              </Link>{" "}
+              to see per-exam counts here.
+            </p>
+          ) : null}
         </div>
 
         <div className="border-b border-slate-200/90 bg-white px-3 py-3 sm:px-4">

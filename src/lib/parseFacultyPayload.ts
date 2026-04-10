@@ -1,10 +1,22 @@
 /** Shared body parser for POST /api/faculties and PATCH /api/faculties/[id]. */
 
+export type FacultyAssignmentPayload = {
+  examValue: string;
+  subjectId: string;
+};
+
 export type FacultyPayload = {
   name: string;
   email: string;
   phone: string;
   subjects: string[];
+  /** Target exam/course ids (e.g. NEET). */
+  courses: string[];
+  /**
+   * When present, server replaces teaching with these pairs and re-derives
+   * `subjects` / `courses` from the exam-subject catalog.
+   */
+  assignments?: FacultyAssignmentPayload[];
   qualification: string;
   experience: number;
   joined: string;
@@ -35,6 +47,32 @@ export function parseFacultyPayload(
       .map((s) => s.trim());
   }
 
+  let courses: string[] = [];
+  if (Array.isArray(b.courses)) {
+    courses = b.courses
+      .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      .map((s) => s.trim());
+  }
+
+  let assignments: FacultyAssignmentPayload[] | undefined;
+  if ("assignments" in b) {
+    if (!Array.isArray(b.assignments)) {
+      return { error: "assignments must be an array." };
+    }
+    const pairs: FacultyAssignmentPayload[] = [];
+    for (const row of b.assignments) {
+      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+      const o = row as Record<string, unknown>;
+      const examValue =
+        typeof o.examValue === "string" ? o.examValue.trim().slice(0, 64) : "";
+      const subjectId =
+        typeof o.subjectId === "string" ? o.subjectId.trim().slice(0, 64) : "";
+      if (!examValue || !subjectId) continue;
+      pairs.push({ examValue, subjectId });
+    }
+    assignments = pairs;
+  }
+
   const qualification =
     typeof b.qualification === "string" ? b.qualification.trim() : "";
 
@@ -55,6 +93,8 @@ export function parseFacultyPayload(
     email,
     phone,
     subjects,
+    courses,
+    ...(assignments !== undefined ? { assignments } : {}),
     qualification,
     experience,
     joined,

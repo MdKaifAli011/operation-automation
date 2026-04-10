@@ -74,10 +74,19 @@ export type Lead = {
   notInterestedRemark?: string | null;
 };
 
+export type FacultyAssignment = {
+  examValue: string;
+  subjectId: string;
+};
+
 export type Faculty = {
   id: string;
   name: string;
+  /** Teaching pairs when using the exam–subject catalog (see Exams & subjects). */
+  assignments: FacultyAssignment[];
   subjects: string[];
+  /** Target courses/exams this faculty covers. */
+  courses: string[];
   phone: string;
   email: string;
   active: boolean;

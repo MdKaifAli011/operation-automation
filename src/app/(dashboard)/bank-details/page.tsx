@@ -7,6 +7,7 @@ import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import {
   DEFAULT_INSTITUTE,
+  normBankAccountId,
   type BankAccountRecord,
   type InstituteRecord,
 } from "@/lib/instituteProfileTypes";
@@ -14,7 +15,17 @@ import {
 type Snapshot = {
   institute: InstituteRecord;
   bankAccounts: BankAccountRecord[];
+  defaultFeeBankAccountId: string | null;
 };
+
+function formatSavedAt(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return format(parseISO(iso), "dd MMM yyyy, HH:mm");
+  } catch {
+    return iso;
+  }
+}
 
 export default function BankDetailsPage() {
   const [loading, setLoading] = useState(true);
@@ -24,46 +35,83 @@ export default function BankDetailsPage() {
 
   const [institute, setInstitute] = useState<InstituteRecord>(DEFAULT_INSTITUTE);
   const [bankAccounts, setBankAccounts] = useState<BankAccountRecord[]>([]);
+  const [defaultFeeBankAccountId, setDefaultFeeBankAccountId] = useState<
+    string | null
+  >(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null);
+  const [instituteUpdatedAt, setInstituteUpdatedAt] = useState<string | null>(
+    null,
+  );
+  const [bankUpdatedAt, setBankUpdatedAt] = useState<string | null>(null);
 
-  const applyPayload = useCallback((body: Record<string, unknown>) => {
-    const inst = body.institute;
-    setInstitute(
-      inst && typeof inst === "object" && !Array.isArray(inst)
-        ? { ...DEFAULT_INSTITUTE, ...(inst as InstituteRecord) }
-        : DEFAULT_INSTITUTE,
-    );
-    const banks = body.bankAccounts;
+  const applyInstitutePayload = useCallback(
+    (data: Record<string, unknown>) => {
+      const inst = data.institute;
+      setInstitute(
+        inst && typeof inst === "object" && !Array.isArray(inst)
+          ? { ...DEFAULT_INSTITUTE, ...(inst as InstituteRecord) }
+          : DEFAULT_INSTITUTE,
+      );
+      const u = data.updatedAt;
+      setInstituteUpdatedAt(typeof u === "string" ? u : null);
+    },
+    [],
+  );
+
+  const applyBankPayload = useCallback((data: Record<string, unknown>) => {
+    const banks = data.bankAccounts;
     setBankAccounts(Array.isArray(banks) ? (banks as BankAccountRecord[]) : []);
-    const u = body.updatedAt;
-    setServerUpdatedAt(typeof u === "string" ? u : null);
+    const def = normBankAccountId(data.defaultFeeBankAccountId);
+    setDefaultFeeBankAccountId(def || null);
+    const u = data.updatedAt;
+    setBankUpdatedAt(typeof u === "string" ? u : null);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    void fetch("/api/settings/institute-profile", { cache: "no-store" })
-      .then(async (res) => {
-        const data = (await res.json().catch(() => ({}))) as Record<
-          string,
-          unknown
-        >;
-        if (!res.ok) {
-          throw new Error(
-            typeof data.error === "string"
-              ? data.error
-              : "Could not load settings.",
-          );
-        }
-        return data;
-      })
-      .then((data) => {
+    void Promise.all([
+      fetch("/api/settings/institute-profile", { cache: "no-store" }).then(
+        async (res) => {
+          const data = (await res.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+          >;
+          if (!res.ok) {
+            throw new Error(
+              typeof data.error === "string"
+                ? data.error
+                : "Could not load institute details.",
+            );
+          }
+          return data;
+        },
+      ),
+      fetch("/api/settings/bank-profile", { cache: "no-store" }).then(
+        async (res) => {
+          const data = (await res.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+          >;
+          if (!res.ok) {
+            throw new Error(
+              typeof data.error === "string"
+                ? data.error
+                : "Could not load bank accounts.",
+            );
+          }
+          return data;
+        },
+      ),
+    ])
+      .then(([instData, bankData]) => {
         if (cancelled) return;
-        applyPayload(data);
-        const inst = data.institute;
-        const banks = data.bankAccounts;
+        applyInstitutePayload(instData);
+        applyBankPayload(bankData);
+        const inst = instData.institute;
+        const banks = bankData.bankAccounts;
+        const defId = bankData.defaultFeeBankAccountId;
         setSnapshot({
           institute:
             inst && typeof inst === "object" && !Array.isArray(inst)
@@ -72,6 +120,7 @@ export default function BankDetailsPage() {
           bankAccounts: Array.isArray(banks)
             ? (banks as BankAccountRecord[]).map((a) => ({ ...a }))
             : [],
+          defaultFeeBankAccountId: normBankAccountId(defId) || null,
         });
       })
       .catch((e: unknown) => {
@@ -85,29 +134,54 @@ export default function BankDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyPayload]);
+  }, [applyInstitutePayload, applyBankPayload]);
 
   const save = useCallback(async () => {
     setSaveError(null);
     setSaving(true);
     try {
-      const res = await fetch("/api/settings/institute-profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ institute, bankAccounts }),
-      });
-      const data = (await res.json().catch(() => ({}))) as Record<
+      const [resI, resB] = await Promise.all([
+        fetch("/api/settings/institute-profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ institute }),
+        }),
+        fetch("/api/settings/bank-profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bankAccounts,
+            defaultFeeBankAccountId,
+          }),
+        }),
+      ]);
+      const dataI = (await resI.json().catch(() => ({}))) as Record<
         string,
         unknown
       >;
-      if (!res.ok) {
+      const dataB = (await resB.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      if (!resI.ok) {
         throw new Error(
-          typeof data.error === "string" ? data.error : "Could not save.",
+          typeof dataI.error === "string"
+            ? dataI.error
+            : "Could not save institute details.",
         );
       }
-      applyPayload(data);
-      const inst = data.institute;
-      const banks = data.bankAccounts;
+      if (!resB.ok) {
+        throw new Error(
+          typeof dataB.error === "string"
+            ? dataB.error
+            : "Could not save bank accounts.",
+        );
+      }
+      applyInstitutePayload(dataI);
+      applyBankPayload(dataB);
+      const inst = dataI.institute;
+      const banks = dataB.bankAccounts;
+      const defId = dataB.defaultFeeBankAccountId;
       setSnapshot({
         institute:
           inst && typeof inst === "object" && !Array.isArray(inst)
@@ -116,34 +190,47 @@ export default function BankDetailsPage() {
         bankAccounts: Array.isArray(banks)
           ? (banks as BankAccountRecord[]).map((a) => ({ ...a }))
           : [],
+        defaultFeeBankAccountId: normBankAccountId(defId) || null,
       });
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : "Could not save.");
     } finally {
       setSaving(false);
     }
-  }, [applyPayload, bankAccounts, institute]);
+  }, [
+    applyInstitutePayload,
+    applyBankPayload,
+    bankAccounts,
+    defaultFeeBankAccountId,
+    institute,
+  ]);
 
   const resetToSnapshot = useCallback(() => {
     setSaveError(null);
     if (!snapshot) {
       setInstitute({ ...DEFAULT_INSTITUTE });
       setBankAccounts([]);
+      setDefaultFeeBankAccountId(null);
       return;
     }
     setInstitute({ ...snapshot.institute });
     setBankAccounts(snapshot.bankAccounts.map((a) => ({ ...a })));
+    setDefaultFeeBankAccountId(snapshot.defaultFeeBankAccountId);
   }, [snapshot]);
 
-  const lastSavedLabel =
-    serverUpdatedAt &&
-    (() => {
-      try {
-        return format(parseISO(serverUpdatedAt), "dd MMM yyyy, HH:mm");
-      } catch {
-        return serverUpdatedAt;
-      }
-    })();
+  const handleAccountsChange = useCallback(
+    (next: BankAccountRecord[]) => {
+      setBankAccounts(next);
+      setDefaultFeeBankAccountId((prev) => {
+        const p = normBankAccountId(prev);
+        if (!p) return prev;
+        const acc = next.find((a) => normBankAccountId(a.id) === p);
+        if (!acc || !acc.isActive) return null;
+        return p;
+      });
+    },
+    [],
+  );
 
   const formDisabled = loading || saving;
 
@@ -154,7 +241,8 @@ export default function BankDetailsPage() {
           <div className="min-w-0 flex-1">
             <h1 className={SX.toolbarTitle}>Bank &amp; Account Details</h1>
             <p className={SX.toolbarMeta}>
-              Institute profile · Shown on the student Fees step for bank transfer
+              Institute profile and bank accounts are stored separately — default
+              fee bank applies only to bank accounts.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -178,12 +266,22 @@ export default function BankDetailsPage() {
         </div>
 
         <div className={SX.leadStatBar}>
-          <span>
-            <span className="text-[#757575]">Last saved</span>{" "}
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-[#757575]">Last saved</span>
             <span className="font-medium tabular-nums text-[#212121]">
-              {loading
-                ? "Loading…"
-                : lastSavedLabel ?? "Not saved yet (nothing in database)"}
+              {loading ? (
+                "Loading…"
+              ) : (
+                <>
+                  <span className="text-[#757575]">Institute</span>{" "}
+                  {formatSavedAt(instituteUpdatedAt)}
+                  <span className="mx-1.5 text-[#bdbdbd]" aria-hidden>
+                    ·
+                  </span>
+                  <span className="text-[#757575]">Banks</span>{" "}
+                  {formatSavedAt(bankUpdatedAt)}
+                </>
+              )}
             </span>
           </span>
           <span className="hidden sm:inline text-[#bdbdbd]" aria-hidden>
@@ -375,7 +473,9 @@ export default function BankDetailsPage() {
 
           <BankAccountsSection
             accounts={bankAccounts}
-            onAccountsChange={setBankAccounts}
+            onAccountsChange={handleAccountsChange}
+            defaultFeeBankAccountId={defaultFeeBankAccountId}
+            onDefaultFeeBankAccountIdChange={setDefaultFeeBankAccountId}
             disabled={formDisabled}
           />
 

@@ -219,7 +219,7 @@ function TemplateEditorPanel({
                 className="border border-[#ffe082] bg-[#fffde7] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#f57f17]"
                 title="Not real lead data"
               >
-                Sample data
+                Preview placeholders
               </span>
             </div>
             <p className="mb-3 text-[11px] leading-relaxed text-[#546e7a]">

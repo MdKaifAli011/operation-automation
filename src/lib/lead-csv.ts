@@ -286,22 +286,10 @@ export function leadsToExportCsv(leads: Lead[]): string {
   return [headerLine, ...lines].join("\r\n");
 }
 
-/** Header + one example row — same columns as export; safe to import after editing. */
+/** Header row only — same columns as export; add rows and import. */
 export function buildLeadCsvTemplate(): string {
   const headerLine = LEAD_CSV_EXPORT_HEADERS.map(csvEscape).join(",");
-  const sample = [
-    "2026-04-01",
-    "Sample Student",
-    "Parent Name",
-    "Organic",
-    "12th",
-    "NEET, JEE",
-    "India",
-    "9876543210",
-    "new",
-    "",
-  ] as const;
-  return [headerLine, sample.map((c) => csvEscape(c)).join(",")].join("\r\n");
+  return headerLine;
 }
 
 /** Browser-only: triggers download of the import template CSV. Call from client components only. */

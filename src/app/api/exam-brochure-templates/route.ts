@@ -1,67 +1,47 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import {
+  brochureItemsFromDoc,
+  escapeRegexLiteral,
+  pickBrochureDocByExam,
+  resolveCanonicalTargetExam,
+  type BrochureTemplateItem,
+  type ExamBrochureGroupRow,
+  MAX_BROCHURES_PER_EXAM,
+  isValidBrochureKey,
+} from "@/lib/examBrochureTemplates";
+import { getActiveTargetExamValues } from "@/lib/serverTargetExams";
 import ExamBrochureTemplateModel from "@/models/ExamBrochureTemplate";
 
 export const runtime = "nodejs";
 
-export type ExamBrochureTemplateRow = {
-  exam: string;
-  title: string;
-  summary: string;
-  linkUrl: string;
-  linkLabel: string;
-  storedFileUrl?: string | null;
-  storedFileName?: string | null;
-  updatedAt?: string | null;
-};
+export type { BrochureTemplateItem, ExamBrochureGroupRow };
 
 export async function GET() {
   try {
+    const examListActive = await getActiveTargetExamValues();
     await connectDB();
     const docs = await ExamBrochureTemplateModel.find({}).lean();
-    const byExam = new Map<
-      string,
-      {
-        title: string;
-        summary: string;
-        linkUrl: string;
-        linkLabel: string;
-        storedFileUrl: string | null;
-        storedFileName: string | null;
-        updatedAt?: Date;
-      }
-    >();
+    const activeLower = new Set(
+      examListActive.map((e) => e.toLowerCase()),
+    );
+    const orphans: string[] = [];
     for (const d of docs) {
-      byExam.set(d.exam, {
-        title: typeof d.title === "string" ? d.title : "",
-        summary: typeof d.summary === "string" ? d.summary : "",
-        linkUrl: typeof d.linkUrl === "string" ? d.linkUrl : "",
-        linkLabel: typeof d.linkLabel === "string" ? d.linkLabel : "",
-        storedFileUrl:
-          typeof (d as { storedFileUrl?: string | null }).storedFileUrl ===
-          "string"
-            ? (d as { storedFileUrl?: string | null }).storedFileUrl ?? null
-            : null,
-        storedFileName:
-          typeof (d as { storedFileName?: string | null }).storedFileName ===
-          "string"
-            ? (d as { storedFileName?: string | null }).storedFileName ?? null
-            : null,
-        updatedAt: d.updatedAt,
-      });
+      const raw = typeof d.exam === "string" ? d.exam.trim() : "";
+      if (!raw) continue;
+      if (!activeLower.has(raw.toLowerCase())) {
+        orphans.push(raw);
+      }
     }
-    const rows: ExamBrochureTemplateRow[] = TARGET_EXAM_OPTIONS.map((exam) => {
-      const hit = byExam.get(exam);
+    orphans.sort((a, b) => a.localeCompare(b));
+    const examList = [...examListActive, ...orphans];
+    const rows: ExamBrochureGroupRow[] = examList.map((exam) => {
+      const hit = pickBrochureDocByExam(docs, exam);
+      const updatedAt = hit?.updatedAt as Date | undefined;
       return {
         exam,
-        title: hit?.title ?? "",
-        summary: hit?.summary ?? "",
-        linkUrl: hit?.linkUrl ?? "",
-        linkLabel: hit?.linkLabel ?? "",
-        storedFileUrl: hit?.storedFileUrl ?? null,
-        storedFileName: hit?.storedFileName ?? null,
-        updatedAt: hit?.updatedAt?.toISOString() ?? null,
+        brochures: brochureItemsFromDoc(hit ?? null),
+        updatedAt: updatedAt?.toISOString() ?? null,
       };
     });
     return NextResponse.json(rows);
@@ -77,14 +57,49 @@ export async function GET() {
 type PutBody = {
   items?: Array<{
     exam?: string;
-    title?: string;
-    summary?: string;
-    linkUrl?: string;
-    linkLabel?: string;
-    storedFileUrl?: string | null;
-    storedFileName?: string | null;
+    brochures?: unknown;
   }>;
 };
+
+function parseBrochuresPayload(raw: unknown): BrochureTemplateItem[] | null {
+  if (!Array.isArray(raw)) return null;
+  if (raw.length > MAX_BROCHURES_PER_EXAM) return null;
+  const keys = new Set<string>();
+  const out: BrochureTemplateItem[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i];
+    if (!row || typeof row !== "object") return null;
+    const o = row as Record<string, unknown>;
+    const key = typeof o.key === "string" ? o.key.trim() : "";
+    if (!key || !isValidBrochureKey(key) || keys.has(key)) return null;
+    keys.add(key);
+    out.push({
+      key,
+      title: typeof o.title === "string" ? o.title : "",
+      summary: typeof o.summary === "string" ? o.summary : "",
+      linkUrl: typeof o.linkUrl === "string" ? o.linkUrl.trim() : "",
+      linkLabel: typeof o.linkLabel === "string" ? o.linkLabel.trim() : "",
+      storedFileUrl:
+        o.storedFileUrl === null
+          ? null
+          : typeof o.storedFileUrl === "string"
+            ? o.storedFileUrl.trim() || null
+            : null,
+      storedFileName:
+        o.storedFileName === null
+          ? null
+          : typeof o.storedFileName === "string"
+            ? o.storedFileName.trim() || null
+            : null,
+      sortOrder:
+        typeof o.sortOrder === "number" && Number.isFinite(o.sortOrder)
+          ? o.sortOrder
+          : i,
+    });
+  }
+  out.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key));
+  return out;
+}
 
 export async function PUT(req: Request) {
   try {
@@ -92,83 +107,83 @@ export async function PUT(req: Request) {
     const items = Array.isArray(body?.items) ? body.items : null;
     if (!items?.length) {
       return NextResponse.json(
-        { error: "Expected body: { items: [{ exam, title?, summary?, linkUrl? }] }" },
+        {
+          error:
+            "Expected body: { items: [{ exam, brochures: [{ key, title?, … }] }] }",
+        },
         { status: 400 },
       );
     }
     await connectDB();
-    const allowed = new Set<string>([...TARGET_EXAM_OPTIONS]);
+    const allowedList = await getActiveTargetExamValues();
     for (const raw of items) {
-      const exam = typeof raw.exam === "string" ? raw.exam.trim() : "";
-      if (!exam || !allowed.has(exam)) continue;
-      const title = typeof raw.title === "string" ? raw.title.trim() : "";
-      const summary = typeof raw.summary === "string" ? raw.summary : "";
-      const linkUrl = typeof raw.linkUrl === "string" ? raw.linkUrl.trim() : "";
-      const linkLabel = typeof raw.linkLabel === "string" ? raw.linkLabel.trim() : "";
-      const storedFileUrl =
-        raw.storedFileUrl === null
-          ? null
-          : typeof raw.storedFileUrl === "string"
-            ? raw.storedFileUrl.trim() || null
-            : undefined;
-      const storedFileName =
-        raw.storedFileName === null
-          ? null
-          : typeof raw.storedFileName === "string"
-            ? raw.storedFileName.trim() || null
-            : undefined;
-      const setDoc: Record<string, unknown> = { exam, title, summary, linkUrl, linkLabel };
-      if (storedFileUrl !== undefined) setDoc.storedFileUrl = storedFileUrl;
-      if (storedFileName !== undefined) setDoc.storedFileName = storedFileName;
+      const rawExam = typeof raw.exam === "string" ? raw.exam.trim() : "";
+      const exam = rawExam
+        ? resolveCanonicalTargetExam(rawExam, allowedList)
+        : null;
+      if (!exam) {
+        return NextResponse.json(
+          {
+            error: rawExam
+              ? `Exam "${rawExam}" is not an active target exam. Add or enable it under Exams & subjects.`
+              : "Missing exam on an item.",
+          },
+          { status: 400 },
+        );
+      }
+      const brochures = parseBrochuresPayload(raw.brochures);
+      if (brochures === null) {
+        return NextResponse.json(
+          {
+            error: `Invalid brochures for ${exam}: max ${MAX_BROCHURES_PER_EXAM} items, unique keys (alphanumeric, _ -).`,
+          },
+          { status: 400 },
+        );
+      }
+      const existing = await ExamBrochureTemplateModel.findOne({
+        exam: new RegExp(`^${escapeRegexLiteral(exam)}$`, "i"),
+      }).lean();
+      const filter = existing?._id
+        ? { _id: existing._id }
+        : { exam };
       await ExamBrochureTemplateModel.findOneAndUpdate(
-        { exam },
-        { $set: setDoc },
-        { upsert: true, new: true },
+        filter,
+        {
+          $set: { exam, brochures },
+          $unset: {
+            title: "",
+            summary: "",
+            linkUrl: "",
+            linkLabel: "",
+            storedFileUrl: "",
+            storedFileName: "",
+          },
+        },
+        { upsert: true, returnDocument: "after" },
       );
     }
     const docs = await ExamBrochureTemplateModel.find({}).lean();
-    const byExam = new Map<
-      string,
-      {
-        title: string;
-        summary: string;
-        linkUrl: string;
-        linkLabel: string;
-        storedFileUrl: string | null;
-        storedFileName: string | null;
-        updatedAt?: Date;
-      }
-    >();
+    const examListActive = await getActiveTargetExamValues();
+    const activeLower = new Set(
+      examListActive.map((e) => e.toLowerCase()),
+    );
+    const orphans: string[] = [];
     for (const d of docs) {
-      byExam.set(d.exam, {
-        title: typeof d.title === "string" ? d.title : "",
-        summary: typeof d.summary === "string" ? d.summary : "",
-        linkUrl: typeof d.linkUrl === "string" ? d.linkUrl : "",
-        linkLabel: typeof d.linkLabel === "string" ? d.linkLabel : "",
-        storedFileUrl:
-          typeof (d as { storedFileUrl?: string | null }).storedFileUrl ===
-          "string"
-            ? (d as { storedFileUrl?: string | null }).storedFileUrl ?? null
-            : null,
-        storedFileName:
-          typeof (d as { storedFileName?: string | null }).storedFileName ===
-          "string"
-            ? (d as { storedFileName?: string | null }).storedFileName ?? null
-            : null,
-        updatedAt: d.updatedAt,
-      });
+      const raw = typeof d.exam === "string" ? d.exam.trim() : "";
+      if (!raw) continue;
+      if (!activeLower.has(raw.toLowerCase())) {
+        orphans.push(raw);
+      }
     }
-    const rows: ExamBrochureTemplateRow[] = TARGET_EXAM_OPTIONS.map((exam) => {
-      const hit = byExam.get(exam);
+    orphans.sort((a, b) => a.localeCompare(b));
+    const examList = [...examListActive, ...orphans];
+    const rows: ExamBrochureGroupRow[] = examList.map((exam) => {
+      const hit = pickBrochureDocByExam(docs, exam);
+      const updatedAt = hit?.updatedAt as Date | undefined;
       return {
         exam,
-        title: hit?.title ?? "",
-        summary: hit?.summary ?? "",
-        linkUrl: hit?.linkUrl ?? "",
-        linkLabel: hit?.linkLabel ?? "",
-        storedFileUrl: hit?.storedFileUrl ?? null,
-        storedFileName: hit?.storedFileName ?? null,
-        updatedAt: hit?.updatedAt?.toISOString() ?? null,
+        brochures: brochureItemsFromDoc(hit ?? null),
+        updatedAt: updatedAt?.toISOString() ?? null,
       };
     });
     return NextResponse.json(rows);

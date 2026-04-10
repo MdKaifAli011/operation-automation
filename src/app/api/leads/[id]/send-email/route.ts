@@ -69,7 +69,10 @@ export async function POST(
     const tmpl = await EmailTemplateModel.findOne({ key: templateKey }).lean();
     if (!tmpl) {
       return NextResponse.json(
-        { error: "Template not found. Open Email Templates Management to seed defaults." },
+        {
+          error:
+            "Template not found. Open Email templates to create or restore templates.",
+        },
         { status: 404 },
       );
     }

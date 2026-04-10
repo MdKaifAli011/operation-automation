@@ -74,6 +74,8 @@ export type LeadPipelineFees = {
   feeSentWhatsAppAt?: string | null;
   feeSentEmailAt?: string | null;
   enrollmentSentAt?: string | null;
+  /** Institute bank account id (from Bank & A/c Details) chosen for this lead’s fee step. */
+  feeSelectedBankAccountId?: string | null;
 };
 
 export type LeadPipelineScheduleClass = {

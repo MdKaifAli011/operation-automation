@@ -51,23 +51,29 @@ const LeadSchema = new Schema(
     },
     activityLog: {
       type: [
-        {
-          at: { type: String, required: true },
-          kind: { type: String, required: true },
-          message: { type: String, required: true },
-        },
+        new Schema(
+          {
+            at: { type: String, required: true },
+            kind: { type: String, required: true },
+            message: { type: String, required: true },
+          },
+          { _id: false },
+        ),
       ],
       default: [],
     },
     workspaceNotes: { type: String, default: "" },
     callHistory: {
       type: [
-        {
-          at: { type: String, required: true },
-          outcome: { type: String, default: "" },
-          duration: { type: String, default: "" },
-          notes: { type: String, default: "" },
-        },
+        new Schema(
+          {
+            at: { type: String, required: true },
+            outcome: { type: String, default: "" },
+            duration: { type: String, default: "" },
+            notes: { type: String, default: "" },
+          },
+          { _id: false },
+        ),
       ],
       default: [],
     },

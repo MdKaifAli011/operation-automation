@@ -1,25 +1,5 @@
 import mongoose, { Schema } from "mongoose";
 
-const BankAccountSchema = new Schema(
-  {
-    id: { type: String, required: true, trim: true, maxlength: 64 },
-    label: { type: String, default: "", trim: true, maxlength: 120 },
-    bankName: { type: String, default: "", trim: true, maxlength: 120 },
-    accountHolderName: { type: String, default: "", trim: true, maxlength: 120 },
-    accountNumber: { type: String, default: "", trim: true, maxlength: 40 },
-    ifsc: { type: String, default: "", trim: true, maxlength: 20 },
-    branch: { type: String, default: "", trim: true, maxlength: 120 },
-    accountType: {
-      type: String,
-      enum: ["Current", "Savings"],
-      default: "Current",
-    },
-    upi: { type: String, default: "", trim: true, maxlength: 120 },
-    isActive: { type: Boolean, default: true },
-  },
-  { _id: false },
-);
-
 const InstituteFieldsSchema = new Schema(
   {
     instituteName: { type: String, default: "", trim: true, maxlength: 200 },
@@ -37,11 +17,11 @@ const InstituteFieldsSchema = new Schema(
   { _id: false },
 );
 
+/** Institute legal & contact only — bank accounts live in `BankProfileSettings`. */
 const InstituteProfileSettingsSchema = new Schema(
   {
     key: { type: String, required: true, unique: true, default: "default" },
     institute: { type: InstituteFieldsSchema, default: () => ({}) },
-    bankAccounts: { type: [BankAccountSchema], default: [] },
   },
   { timestamps: true },
 );

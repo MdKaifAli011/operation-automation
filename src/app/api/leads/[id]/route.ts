@@ -161,7 +161,7 @@ export async function PATCH(req: Request, context: Ctx) {
     const doc = await LeadModel.findByIdAndUpdate(
       id,
       { $set: patch },
-      { new: true, runValidators: true },
+      { returnDocument: "after", runValidators: true },
     ).lean();
     if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(

@@ -2,7 +2,13 @@ import { randomUUID } from "crypto";
 import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import {
+  brochureItemsFromDoc,
+  escapeRegexLiteral,
+  isValidBrochureKey,
+  resolveCanonicalTargetExam,
+} from "@/lib/examBrochureTemplates";
+import { getActiveTargetExamValues } from "@/lib/serverTargetExams";
 import connectDB from "@/lib/mongodb";
 import ExamBrochureTemplateModel from "@/models/ExamBrochureTemplate";
 
@@ -27,21 +33,48 @@ const ALLOWED_MIME = new Set([
   "application/octet-stream",
 ]);
 
+/** Resolve disk path for a stored URL under this exam (legacy flat or key/subfolder). */
 function uploadsPathForUrl(publicUrl: string, exam: string): string | null {
   const prefix = `/uploads/exam-brochures/${exam}/`;
   if (!publicUrl.startsWith(prefix)) return null;
   const rest = publicUrl.slice(prefix.length);
-  if (!rest || rest.includes("..") || rest.includes("/") || rest.includes("\\")) {
-    return null;
+  if (!rest || rest.includes("..")) return null;
+  const parts = rest.split("/").filter(Boolean);
+  if (parts.length === 1) {
+    const f = parts[0]!;
+    if (f.includes("\\")) return null;
+    return path.join(
+      process.cwd(),
+      "public",
+      "uploads",
+      "exam-brochures",
+      exam,
+      f,
+    );
   }
-  return path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    "exam-brochures",
-    exam,
-    rest,
-  );
+  if (parts.length === 2) {
+    const [keySeg, fname] = parts;
+    if (
+      !keySeg ||
+      !fname ||
+      !/^[a-zA-Z0-9_-]+$/.test(keySeg) ||
+      fname.includes("..") ||
+      fname.includes("/") ||
+      fname.includes("\\")
+    ) {
+      return null;
+    }
+    return path.join(
+      process.cwd(),
+      "public",
+      "uploads",
+      "exam-brochures",
+      exam,
+      keySeg,
+      fname,
+    );
+  }
+  return null;
 }
 
 async function removeStoredFile(publicUrl: string, exam: string) {
@@ -76,23 +109,26 @@ type Ctx = { params: Promise<{ exam: string }> };
 export async function POST(req: Request, context: Ctx) {
   try {
     const { exam: rawExam } = await context.params;
-    const exam = decodeURIComponent(rawExam || "").trim();
-    const allowed = new Set<string>([...TARGET_EXAM_OPTIONS]);
-    if (!exam || !allowed.has(exam)) {
+    const decoded = decodeURIComponent(rawExam || "").trim();
+    const allowedList = await getActiveTargetExamValues();
+    const exam = decoded
+      ? resolveCanonicalTargetExam(decoded, allowedList)
+      : null;
+    if (!exam) {
       return NextResponse.json({ error: "Invalid exam" }, { status: 400 });
     }
 
-    await connectDB();
-    const doc = await ExamBrochureTemplateModel.findOne({ exam }).lean();
-    const oldUrl =
-      doc && typeof (doc as { storedFileUrl?: string | null }).storedFileUrl === "string"
-        ? (doc as { storedFileUrl?: string | null }).storedFileUrl
-        : null;
-    if (typeof oldUrl === "string" && oldUrl) {
-      await removeStoredFile(oldUrl, exam);
+    const formData = await req.formData();
+    const brochureKeyRaw = formData.get("brochureKey");
+    const brochureKey =
+      typeof brochureKeyRaw === "string" ? brochureKeyRaw.trim() : "";
+    if (!brochureKey || !isValidBrochureKey(brochureKey)) {
+      return NextResponse.json(
+        { error: "Missing or invalid brochureKey" },
+        { status: 400 },
+      );
     }
 
-    const formData = await req.formData();
     const file = formData.get("file");
     if (!file || !(file instanceof File)) {
       return NextResponse.json({ error: "Missing file" }, { status: 400 });
@@ -141,7 +177,7 @@ export async function POST(req: Request, context: Ctx) {
                         ? ".xlsx"
                         : mime === "application/vnd.ms-excel"
                           ? ".xls"
-                          : mime.includes("presentationml")
+                            : mime.includes("presentationml")
                             ? ".pptx"
                             : mime === "application/vnd.ms-powerpoint"
                               ? ".ppt"
@@ -165,6 +201,18 @@ export async function POST(req: Request, context: Ctx) {
       );
     }
 
+    await connectDB();
+    const existing = await ExamBrochureTemplateModel.findOne({
+      exam: new RegExp(`^${escapeRegexLiteral(exam)}$`, "i"),
+    }).lean();
+    const brochures = brochureItemsFromDoc(existing);
+    const idx = brochures.findIndex((b) => b.key === brochureKey);
+    const prevUrl =
+      idx >= 0 ? brochures[idx]!.storedFileUrl?.trim() || null : null;
+    if (typeof prevUrl === "string" && prevUrl) {
+      await removeStoredFile(prevUrl, exam);
+    }
+
     const safeName = `${randomUUID()}${ext}`;
     const dir = path.join(
       process.cwd(),
@@ -172,56 +220,120 @@ export async function POST(req: Request, context: Ctx) {
       "uploads",
       "exam-brochures",
       exam,
+      brochureKey,
     );
     await mkdir(dir, { recursive: true });
     const fullPath = path.join(dir, safeName);
     const buf = Buffer.from(await file.arrayBuffer());
     await writeFile(fullPath, buf);
 
-    const storedFileUrl = `/uploads/exam-brochures/${exam}/${safeName}`;
+    const storedFileUrl = `/uploads/exam-brochures/${exam}/${brochureKey}/${safeName}`;
     const storedFileName = (file.name && file.name.trim()) || safeName;
 
+    let next = [...brochures];
+    if (idx >= 0) {
+      next[idx] = {
+        ...next[idx]!,
+        storedFileUrl,
+        storedFileName,
+      };
+    } else {
+      next.push({
+        key: brochureKey,
+        title: "",
+        summary: "",
+        linkUrl: "",
+        linkLabel: "",
+        storedFileUrl,
+        storedFileName,
+        sortOrder: next.length,
+      });
+    }
+    next.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key));
+
+    const filter = existing?._id ? { _id: existing._id } : { exam };
     await ExamBrochureTemplateModel.findOneAndUpdate(
-      { exam },
+      filter,
       {
-        $set: {
-          exam,
-          storedFileUrl,
-          storedFileName,
+        $set: { exam, brochures: next },
+        $unset: {
+          title: "",
+          summary: "",
+          linkUrl: "",
+          linkLabel: "",
+          storedFileUrl: "",
+          storedFileName: "",
         },
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: "after" },
     );
 
-    return NextResponse.json({ storedFileUrl, storedFileName, exam });
+    return NextResponse.json({
+      storedFileUrl,
+      storedFileName,
+      exam,
+      brochureKey,
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }
 
-export async function DELETE(_req: Request, context: Ctx) {
+export async function DELETE(req: Request, context: Ctx) {
   try {
     const { exam: rawExam } = await context.params;
-    const exam = decodeURIComponent(rawExam || "").trim();
-    const allowed = new Set<string>([...TARGET_EXAM_OPTIONS]);
-    if (!exam || !allowed.has(exam)) {
+    const decoded = decodeURIComponent(rawExam || "").trim();
+    const allowedList = await getActiveTargetExamValues();
+    const exam = decoded
+      ? resolveCanonicalTargetExam(decoded, allowedList)
+      : null;
+    if (!exam) {
       return NextResponse.json({ error: "Invalid exam" }, { status: 400 });
     }
 
-    await connectDB();
-    const doc = await ExamBrochureTemplateModel.findOne({ exam }).lean();
-    const url =
-      doc && typeof (doc as { storedFileUrl?: string | null }).storedFileUrl === "string"
-        ? (doc as { storedFileUrl?: string | null }).storedFileUrl
-        : null;
-    if (typeof url === "string" && url) {
-      await removeStoredFile(url, exam);
+    const url = new URL(req.url);
+    const brochureKey = (url.searchParams.get("brochureKey") ?? "").trim();
+    if (!brochureKey || !isValidBrochureKey(brochureKey)) {
+      return NextResponse.json(
+        { error: "Query brochureKey is required" },
+        { status: 400 },
+      );
     }
 
+    await connectDB();
+    const existing = await ExamBrochureTemplateModel.findOne({
+      exam: new RegExp(`^${escapeRegexLiteral(exam)}$`, "i"),
+    }).lean();
+    const brochures = brochureItemsFromDoc(existing);
+    const idx = brochures.findIndex((b) => b.key === brochureKey);
+    if (idx < 0) {
+      return NextResponse.json({ ok: true });
+    }
+    const urlRm = brochures[idx]!.storedFileUrl?.trim() || null;
+    if (typeof urlRm === "string" && urlRm) {
+      await removeStoredFile(urlRm, exam);
+    }
+    const next = brochures.map((b, i) =>
+      i === idx
+        ? { ...b, storedFileUrl: null, storedFileName: null }
+        : { ...b },
+    );
+
+    const filter = existing?._id ? { _id: existing._id } : { exam };
     await ExamBrochureTemplateModel.findOneAndUpdate(
-      { exam },
-      { $set: { storedFileUrl: null, storedFileName: null } },
+      filter,
+      {
+        $set: { exam, brochures: next },
+        $unset: {
+          title: "",
+          summary: "",
+          linkUrl: "",
+          linkLabel: "",
+          storedFileUrl: "",
+          storedFileName: "",
+        },
+      },
       { upsert: true },
     );
 

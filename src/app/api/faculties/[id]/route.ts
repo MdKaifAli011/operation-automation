@@ -1,7 +1,12 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
+import {
+  deriveSubjectsAndCoursesFromAssignments,
+  sanitizeFacultyAssignments,
+} from "@/lib/facultyAssignments";
 import { parseFacultyPayload } from "@/lib/parseFacultyPayload";
+import { loadExamSubjectCatalog } from "@/lib/serverExamSubjectCatalog";
 import FacultyModel from "@/models/Faculty";
 import { serializeFaculty } from "@/lib/serializers";
 
@@ -52,20 +57,44 @@ export async function PATCH(req: Request, context: Ctx) {
     }
 
     await connectDB();
+
+    let setDoc: Record<string, unknown> = {
+      name: parsed.name,
+      email: parsed.email,
+      phone: parsed.phone,
+      qualification: parsed.qualification,
+      experience: parsed.experience,
+      joined: parsed.joined,
+      active: parsed.active,
+    };
+
+    if (parsed.assignments !== undefined) {
+      const catalog = await loadExamSubjectCatalog();
+      const assignments = sanitizeFacultyAssignments(
+        parsed.assignments,
+        catalog,
+      );
+      const derived = deriveSubjectsAndCoursesFromAssignments(
+        assignments,
+        catalog,
+      );
+      setDoc = {
+        ...setDoc,
+        assignments,
+        subjects: derived.subjects,
+        courses: derived.courses,
+      };
+    } else {
+      setDoc = {
+        ...setDoc,
+        subjects: parsed.subjects,
+        courses: parsed.courses,
+      };
+    }
+
     const doc = await FacultyModel.findByIdAndUpdate(
       id,
-      {
-        $set: {
-          name: parsed.name,
-          email: parsed.email,
-          phone: parsed.phone,
-          subjects: parsed.subjects,
-          qualification: parsed.qualification,
-          experience: parsed.experience,
-          joined: parsed.joined,
-          active: parsed.active,
-        },
-      },
+      { $set: setDoc },
       { new: true, runValidators: true },
     ).lean();
 

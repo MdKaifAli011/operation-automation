@@ -4,7 +4,10 @@ import { useId, useMemo, useState } from "react";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import { BANK_NAME_SUGGESTIONS } from "@/lib/bankNameSuggestions";
-import type { BankAccountRecord } from "@/lib/instituteProfileTypes";
+import {
+  normBankAccountId,
+  type BankAccountRecord,
+} from "@/lib/instituteProfileTypes";
 import { MAX_BANK_ACCOUNTS } from "@/lib/instituteProfileTypes";
 import { randomUuid } from "@/lib/randomUuid";
 
@@ -49,17 +52,27 @@ function sortAccounts(list: BankAccountRecord[]): BankAccountRecord[] {
 export function BankAccountsSection({
   accounts,
   onAccountsChange,
+  defaultFeeBankAccountId,
+  onDefaultFeeBankAccountIdChange,
   disabled,
 }: {
   accounts: BankAccountRecord[];
   onAccountsChange: (next: BankAccountRecord[]) => void;
+  defaultFeeBankAccountId: string | null;
+  onDefaultFeeBankAccountIdChange: (id: string | null) => void;
   disabled?: boolean;
 }) {
   const bankNameListId = useId();
+  const defaultFeeRadioName = useId();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAcctNo, setShowAcctNo] = useState(false);
 
   const sorted = useMemo(() => sortAccounts(accounts), [accounts]);
+  const defaultFeeNorm = normBankAccountId(defaultFeeBankAccountId);
+  const activeCount = useMemo(
+    () => accounts.filter((a) => a.isActive).length,
+    [accounts],
+  );
   const editing = editingId
     ? accounts.find((a) => a.id === editingId) ?? null
     : null;
@@ -79,6 +92,9 @@ export function BankAccountsSection({
       return;
     }
     onAccountsChange(accounts.filter((a) => a.id !== id));
+    if (normBankAccountId(defaultFeeBankAccountId) === normBankAccountId(id)) {
+      onDefaultFeeBankAccountIdChange(null);
+    }
     if (editingId === id) {
       setEditingId(null);
       setShowAcctNo(false);
@@ -121,6 +137,43 @@ export function BankAccountsSection({
             Add account
           </button>
         </div>
+
+        {activeCount > 0 ? (
+          <div
+            className="rounded-none border border-emerald-100 bg-emerald-50/50 px-3 py-3"
+            role="group"
+            aria-label="Default bank for fee step"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-900/90">
+                  Default account (Fees step)
+                </p>
+                <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[#616161]">
+                  Students with no bank picked yet auto-use this account on
+                  step 3. Staff can override per lead anytime.
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-col gap-2 border-t border-emerald-100/80 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-none border border-transparent px-0 py-0.5 text-[12px] text-[#212121] hover:border-slate-200/80">
+                <input
+                  type="radio"
+                  name={defaultFeeRadioName}
+                  className="h-4 w-4 accent-primary"
+                  checked={!defaultFeeNorm}
+                  disabled={disabled}
+                  onChange={() => onDefaultFeeBankAccountIdChange(null)}
+                />
+                No institute default — choose manually on each lead
+              </label>
+            </div>
+            <p className="mt-2 text-[10px] leading-snug text-[#757575]">
+              Select <span className="font-medium text-[#424242]">Use as default</span>{" "}
+              on an active account below, then save this page.
+            </p>
+          </div>
+        ) : null}
 
         {accounts.length === 0 ? (
           <div
@@ -221,7 +274,27 @@ export function BankAccountsSection({
                         </div>
                       </dl>
                     </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      {acc.isActive ? (
+                        <label className="inline-flex max-w-full cursor-pointer items-center gap-2 text-[11px] font-medium text-[#424242]">
+                          <input
+                            type="radio"
+                            name={defaultFeeRadioName}
+                            className="h-4 w-4 shrink-0 accent-primary"
+                            checked={defaultFeeNorm === normBankAccountId(acc.id)}
+                            disabled={disabled}
+                            onChange={() =>
+                              onDefaultFeeBankAccountIdChange(
+                                normBankAccountId(acc.id) || acc.id,
+                              )
+                            }
+                          />
+                          <span className="min-w-0 text-right leading-tight">
+                            Use as default
+                          </span>
+                        </label>
+                      ) : null}
+                      <div className="flex flex-wrap justify-end gap-2">
                       <button
                         type="button"
                         className={SX.btnSecondary}
@@ -257,6 +330,7 @@ export function BankAccountsSection({
                       >
                         Remove
                       </button>
+                      </div>
                     </div>
                   </div>
                 </li>

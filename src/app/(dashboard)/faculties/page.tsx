@@ -1,23 +1,54 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Faculty } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useExamSubjectCatalog } from "@/hooks/useExamSubjectCatalog";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
+import type { Faculty, FacultyAssignment } from "@/lib/types";
 import type { FacultyPayload } from "@/lib/parseFacultyPayload";
+import type { ExamSubjectEntry } from "@/lib/examSubjectTypes";
 import { cn } from "@/lib/cn";
 
-const SUBJECT_OPTIONS = [
-  "Biology",
-  "Physics",
-  "Chemistry",
-  "Mathematics",
-] as const;
+function dedupeAssignments(pairs: FacultyAssignment[]): FacultyAssignment[] {
+  const seen = new Set<string>();
+  const out: FacultyAssignment[] = [];
+  for (const p of pairs) {
+    const k = `${p.examValue}\0${p.subjectId}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  return out;
+}
+
+/** Best-effort map legacy free-text subjects to catalog rows for the same course. */
+function inferAssignmentsFromLegacy(
+  f: Faculty,
+  catalog: ExamSubjectEntry[],
+): FacultyAssignment[] {
+  const courses = f.courses?.length ? [...f.courses] : [];
+  const subs = f.subjects ?? [];
+  if (!courses.length || !subs.length) return [];
+  const out: FacultyAssignment[] = [];
+  for (const exam of courses) {
+    const entries = catalog.filter(
+      (e) => e.examValue === exam && e.isActive !== false,
+    );
+    for (const subjName of subs) {
+      const hit = entries.find(
+        (e) => e.name.toLowerCase() === subjName.trim().toLowerCase(),
+      );
+      if (hit) out.push({ examValue: exam, subjectId: hit.id });
+    }
+  }
+  return dedupeAssignments(out);
+}
 
 type FormState = {
   name: string;
   email: string;
   phone: string;
-  subjects: string[];
+  assignments: FacultyAssignment[];
   qualification: string;
   experience: string;
   joined: string;
@@ -28,7 +59,7 @@ const emptyForm = (): FormState => ({
   name: "",
   email: "",
   phone: "",
-  subjects: [],
+  assignments: [],
   qualification: "",
   experience: "",
   joined: "",
@@ -40,7 +71,7 @@ function facultyToForm(f: Faculty): FormState {
     name: f.name,
     email: f.email,
     phone: f.phone,
-    subjects: [...f.subjects],
+    assignments: [...(f.assignments ?? [])],
     qualification: f.qualification,
     experience: String(f.experience ?? 0),
     joined: f.joined || "",
@@ -57,7 +88,9 @@ function formToPayload(form: FormState): FacultyPayload {
     name: form.name.trim(),
     email: form.email.trim(),
     phone: form.phone.replace(/\s+/g, "").trim(),
-    subjects: form.subjects,
+    subjects: [],
+    courses: [],
+    assignments: dedupeAssignments(form.assignments),
     qualification: form.qualification.trim(),
     experience: experienceNum,
     joined: form.joined.trim(),
@@ -69,17 +102,22 @@ function payloadFromFaculty(
   f: Faculty,
   overrides: Partial<FacultyPayload> = {},
 ): FacultyPayload {
-  return {
+  const base: FacultyPayload = {
     name: f.name,
     email: f.email,
     phone: f.phone,
     subjects: [...f.subjects],
+    courses: [...(f.courses ?? [])],
     qualification: f.qualification,
     experience: f.experience,
     joined: f.joined,
     active: f.active,
-    ...overrides,
   };
+  const asg = f.assignments ?? [];
+  if (asg.length > 0) {
+    return { ...base, assignments: [...asg], ...overrides };
+  }
+  return { ...base, ...overrides };
 }
 
 const btnOutline =
@@ -90,6 +128,12 @@ const btnDanger =
   "inline-flex items-center justify-center border border-[#ffcdd2] bg-[#ffebee] px-3 py-1.5 text-sm font-medium text-[#c62828] hover:bg-[#ffcdd2]/40";
 
 export default function FacultiesPage() {
+  const { activeValues, labelFor } = useTargetExamOptions();
+  const {
+    subjects: catalogSubjects,
+    loading: catalogLoading,
+    nameById: catalogNameById,
+  } = useExamSubjectCatalog();
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -104,6 +148,9 @@ export default function FacultiesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Faculty | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toggleBusyId, setToggleBusyId] = useState<string | null>(null);
+  const [pickExam, setPickExam] = useState("");
+  const [pickSubjectId, setPickSubjectId] = useState("");
+  const inferLockRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,20 +174,30 @@ export default function FacultiesPage() {
   }, [load]);
 
   const openCreate = useCallback(() => {
+    inferLockRef.current = null;
     setDrawerMode("create");
     setEditingId(null);
     setForm(emptyForm());
     setFormError(null);
+    setPickExam(activeValues[0] ?? "");
+    setPickSubjectId("");
     setDrawerOpen(true);
-  }, []);
+  }, [activeValues]);
 
   const openEdit = useCallback((f: Faculty) => {
+    inferLockRef.current = null;
     setDrawerMode("edit");
     setEditingId(f.id);
     setForm(facultyToForm(f));
     setFormError(null);
+    setPickExam(
+      (f.assignments?.[0]?.examValue as string | undefined) ??
+        activeValues[0] ??
+        "",
+    );
+    setPickSubjectId("");
     setDrawerOpen(true);
-  }, []);
+  }, [activeValues]);
 
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false);
@@ -148,16 +205,64 @@ export default function FacultiesPage() {
     setEditingId(null);
   }, []);
 
-  const toggleSubject = useCallback((s: string) => {
-    setForm((prev) => {
-      const has = prev.subjects.includes(s);
-      return {
-        ...prev,
-        subjects: has
-          ? prev.subjects.filter((x) => x !== s)
-          : [...prev.subjects, s],
-      };
-    });
+  const subjectsForPickExam = useMemo(() => {
+    if (!pickExam) return [];
+    return catalogSubjects
+      .filter((s) => s.examValue === pickExam && s.isActive !== false)
+      .sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+      );
+  }, [catalogSubjects, pickExam]);
+
+  useEffect(() => {
+    if (!drawerOpen || drawerMode !== "edit" || !editingId) {
+      inferLockRef.current = null;
+      return;
+    }
+    if (catalogLoading) return;
+    if (inferLockRef.current === editingId) return;
+    const f = faculty.find((x) => x.id === editingId);
+    if (!f) return;
+    if ((f.assignments?.length ?? 0) > 0) {
+      inferLockRef.current = editingId;
+      return;
+    }
+    const inferred = inferAssignmentsFromLegacy(f, catalogSubjects);
+    inferLockRef.current = editingId;
+    if (inferred.length > 0) {
+      setForm((prev) => ({ ...prev, assignments: inferred }));
+    }
+  }, [
+    drawerOpen,
+    drawerMode,
+    editingId,
+    faculty,
+    catalogSubjects,
+    catalogLoading,
+  ]);
+
+  const addTeachingPair = useCallback(() => {
+    const exam = pickExam.trim();
+    const sid = pickSubjectId.trim();
+    if (!exam || !sid) return;
+    setForm((prev) => ({
+      ...prev,
+      assignments: dedupeAssignments([
+        ...prev.assignments,
+        { examValue: exam, subjectId: sid },
+      ]),
+    }));
+    setPickSubjectId("");
+  }, [pickExam, pickSubjectId]);
+
+  const removeTeachingPair = useCallback((examValue: string, subjectId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      assignments: prev.assignments.filter(
+        (a) => !(a.examValue === examValue && a.subjectId === subjectId),
+      ),
+    }));
   }, []);
 
   const submitForm = useCallback(async () => {
@@ -252,8 +357,11 @@ export default function FacultiesPage() {
             Faculty Management
           </h1>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[#757575]">
-            Create and manage teachers. They appear when scheduling demos and in
-            subject pickers.{" "}
+            Create and manage teachers. Tag <strong>exam + subject</strong> pairs from{" "}
+            <Link href="/exams-subjects" className="font-medium text-[#1565c0] underline">
+              Exams &amp; subjects
+            </Link>
+            . They appear when scheduling demos and in subject pickers.{" "}
             <Link href="/" className="font-medium text-[#1565c0] underline">
               Back to leads
             </Link>
@@ -305,11 +413,11 @@ export default function FacultiesPage() {
         <>
           {/* Desktop table */}
           <div className="hidden overflow-x-auto border border-[#e0e0e0] md:block">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[#e0e0e0] bg-[#f8f9fa] text-left text-xs font-bold uppercase tracking-wide text-[#757575]">
                   <th className="px-3 py-3">Name</th>
-                  <th className="px-3 py-3">Subjects</th>
+                  <th className="px-3 py-3">Teaching</th>
                   <th className="px-3 py-3">Phone</th>
                   <th className="px-3 py-3">Email</th>
                   <th className="px-3 py-3">Qualification</th>
@@ -328,12 +436,23 @@ export default function FacultiesPage() {
                       {f.name}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex max-w-[220px] flex-wrap gap-1">
-                        {f.subjects.length ? (
+                      <div className="flex max-w-[320px] flex-wrap gap-1">
+                        {(f.assignments?.length ?? 0) > 0 ? (
+                          f.assignments!.map((a) => (
+                            <span
+                              key={`${a.examValue}:${a.subjectId}`}
+                              className="border border-[#bbdefb] bg-[#e3f2fd] px-1.5 py-0.5 text-[11px] text-[#1565c0]"
+                            >
+                              {labelFor(a.examValue)} ·{" "}
+                              {catalogNameById.get(a.subjectId) ??
+                                a.subjectId}
+                            </span>
+                          ))
+                        ) : f.subjects.length ? (
                           f.subjects.map((s) => (
                             <span
                               key={s}
-                              className="border border-[#bbdefb] bg-[#e3f2fd] px-1.5 py-0.5 text-[11px] text-[#1565c0]"
+                              className="border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-950"
                             >
                               {s}
                             </span>
@@ -433,18 +552,28 @@ export default function FacultiesPage() {
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {f.subjects.length ? (
+                      {(f.assignments?.length ?? 0) > 0 ? (
+                        f.assignments!.map((a) => (
+                          <span
+                            key={`${a.examValue}:${a.subjectId}`}
+                            className="border border-[#bbdefb] bg-[#e3f2fd] px-2 py-0.5 text-xs text-[#1565c0]"
+                          >
+                            {labelFor(a.examValue)} ·{" "}
+                            {catalogNameById.get(a.subjectId) ?? a.subjectId}
+                          </span>
+                        ))
+                      ) : f.subjects.length ? (
                         f.subjects.map((s) => (
                           <span
                             key={s}
-                            className="border border-[#bbdefb] bg-[#e3f2fd] px-2 py-0.5 text-xs text-[#1565c0]"
+                            className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-950"
                           >
                             {s}
                           </span>
                         ))
                       ) : (
                         <span className="text-xs text-[#bdbdbd]">
-                          No subjects
+                          Not set
                         </span>
                       )}
                     </div>
@@ -544,6 +673,122 @@ export default function FacultiesPage() {
                   void submitForm();
                 }}
               >
+                <div className="rounded border border-[#e8eaf0] bg-[#fafbfd] p-3">
+                  <span className="text-[13px] font-semibold text-[#424242]">
+                    What they teach
+                  </span>
+                  <p className="mt-1 text-[11px] leading-snug text-[#757575]">
+                    Pick an exam, then a subject from your catalog, then Add.
+                    Manage lists under{" "}
+                    <Link
+                      href="/exams-subjects"
+                      className="font-medium text-[#1565c0] underline"
+                    >
+                      Exams &amp; subjects
+                    </Link>
+                    .
+                  </p>
+                  {catalogLoading ? (
+                    <p className="mt-2 text-[12px] text-[#9e9e9e]">
+                      Loading subject catalog…
+                    </p>
+                  ) : (
+                    <>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <label className="min-w-0 flex-1">
+                          <span className="text-[11px] font-medium text-[#757575]">
+                            Exam
+                          </span>
+                          <select
+                            className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#1565c0]"
+                            value={pickExam}
+                            onChange={(e) => {
+                              setPickExam(e.target.value);
+                              setPickSubjectId("");
+                            }}
+                            aria-label="Exam"
+                          >
+                            {activeValues.length === 0 ? (
+                              <option value="">No exams in settings</option>
+                            ) : (
+                              activeValues.map((c) => (
+                                <option key={c} value={c}>
+                                  {labelFor(c)}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </label>
+                        <label className="min-w-0 flex-1">
+                          <span className="text-[11px] font-medium text-[#757575]">
+                            Subject
+                          </span>
+                          <select
+                            className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#1565c0]"
+                            value={pickSubjectId}
+                            onChange={(e) => setPickSubjectId(e.target.value)}
+                            disabled={!pickExam || subjectsForPickExam.length === 0}
+                            aria-label="Subject"
+                          >
+                            <option value="">
+                              {!pickExam
+                                ? "Pick exam first"
+                                : subjectsForPickExam.length === 0
+                                  ? "Add active subjects for this exam"
+                                  : "Select subject"}
+                            </option>
+                            {subjectsForPickExam.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          className={cn(btnOutline, "shrink-0 py-2.5")}
+                          disabled={!pickExam || !pickSubjectId}
+                          onClick={addTeachingPair}
+                        >
+                          Add
+                        </button>
+                      </div>
+                      <div className="mt-3 flex min-h-[2rem] flex-wrap gap-1.5">
+                        {form.assignments.length === 0 ? (
+                          <span className="text-[12px] text-[#bdbdbd]">
+                            No exam–subject pairs yet
+                          </span>
+                        ) : (
+                          form.assignments.map((a) => (
+                            <span
+                              key={`${a.examValue}:${a.subjectId}`}
+                              className="inline-flex items-center gap-1 border border-[#c5cae9] bg-white px-2 py-1 text-[12px] text-[#37474f]"
+                            >
+                              <span>
+                                {labelFor(a.examValue)} ·{" "}
+                                {catalogNameById.get(a.subjectId) ??
+                                  a.subjectId}
+                              </span>
+                              <button
+                                type="button"
+                                className="text-[14px] leading-none text-rose-700 hover:text-rose-900"
+                                aria-label="Remove"
+                                onClick={() =>
+                                  removeTeachingPair(
+                                    a.examValue,
+                                    a.subjectId,
+                                  )
+                                }
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
                 <label className="block">
                   <span className="text-[#616161]">Name *</span>
                   <input
@@ -576,58 +821,6 @@ export default function FacultiesPage() {
                     className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
                   />
                 </label>
-                <div>
-                  <span className="text-[#616161]">Subjects</span>
-                  <div className="mt-2 flex flex-wrap gap-3">
-                    {SUBJECT_OPTIONS.map((s) => (
-                      <label
-                        key={s}
-                        className="flex cursor-pointer items-center gap-2"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.subjects.includes(s)}
-                          onChange={() => toggleSubject(s)}
-                          className="h-4 w-4 border-[#bdbdbd] text-[#1565c0]"
-                        />
-                        <span>{s}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <label className="block">
-                  <span className="text-[#616161]">Qualification</span>
-                  <input
-                    value={form.qualification}
-                    onChange={(e) =>
-                      setForm((x) => ({ ...x, qualification: e.target.value }))
-                    }
-                    className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[#616161]">Experience (years)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.experience}
-                    onChange={(e) =>
-                      setForm((x) => ({ ...x, experience: e.target.value }))
-                    }
-                    className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[#616161]">Joining date</span>
-                  <input
-                    type="date"
-                    value={form.joined}
-                    onChange={(e) =>
-                      setForm((x) => ({ ...x, joined: e.target.value }))
-                    }
-                    className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
-                  />
-                </label>
                 <label className="block">
                   <span className="text-[#616161]">Status</span>
                   <select
@@ -644,6 +837,52 @@ export default function FacultiesPage() {
                     <option value="inactive">Inactive</option>
                   </select>
                 </label>
+                <details className="rounded border border-[#eeeeee] bg-[#fafafa] px-3 py-2">
+                  <summary className="cursor-pointer text-[13px] font-medium text-[#424242]">
+                    More details (optional)
+                  </summary>
+                  <div className="mt-3 space-y-4 pb-1">
+                    <label className="block">
+                      <span className="text-[#616161]">Qualification</span>
+                      <input
+                        value={form.qualification}
+                        onChange={(e) =>
+                          setForm((x) => ({
+                            ...x,
+                            qualification: e.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[#616161]">Experience (years)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.experience}
+                        onChange={(e) =>
+                          setForm((x) => ({
+                            ...x,
+                            experience: e.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[#616161]">Joining date</span>
+                      <input
+                        type="date"
+                        value={form.joined}
+                        onChange={(e) =>
+                          setForm((x) => ({ ...x, joined: e.target.value }))
+                        }
+                        className="mt-1 w-full border border-[#e0e0e0] bg-white px-3 py-2.5 outline-none focus:border-[#1565c0] focus:ring-1 focus:ring-[#1565c0]"
+                      />
+                    </label>
+                  </div>
+                </details>
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"

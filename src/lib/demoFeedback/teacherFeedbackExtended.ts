@@ -9,7 +9,7 @@ export const EXAM_TRACK_OPTIONS = [
   { value: "cuet", label: "CUET" },
   { value: "boards_competitive", label: "Board exams + competitive mix" },
   { value: "other", label: "Other / multiple tracks" },
-  { value: "manual_entry", label: "Manual entry / not listed in CRM" },
+  { value: "manual_entry", label: "Other / not listed in our system" },
 ] as const;
 
 export type ExamTrackValue = (typeof EXAM_TRACK_OPTIONS)[number]["value"];
@@ -23,10 +23,10 @@ export const PACE_OPTIONS = [
 export type PaceFitValue = (typeof PACE_OPTIONS)[number]["value"];
 
 export const PARENT_INVOLVEMENT_OPTIONS = [
-  { value: "high", label: "High — asked good questions / very engaged" },
-  { value: "moderate", label: "Moderate — present, occasional input" },
-  { value: "low", label: "Low — minimal participation" },
-  { value: "not_observed", label: "Not observed / N/A this session" },
+  { value: "high", label: "Very involved — asked questions, engaged" },
+  { value: "moderate", label: "Somewhat involved — there, spoke a little" },
+  { value: "low", label: "Little involvement — mostly quiet" },
+  { value: "not_observed", label: "Parent not in this class / not sure" },
 ] as const;
 
 export type ParentInvolvementValue =
@@ -35,23 +35,23 @@ export type ParentInvolvementValue =
 export const RECOMMENDED_NEXT_OPTIONS = [
   {
     value: "strong_continue",
-    label: "Strong fit — push enrollment / next demo topics",
+    label: "Good fit — suggest joining / next steps with us",
   },
   {
     value: "needs_support",
-    label: "Promising — needs structured support & practice plan",
+    label: "Has potential — needs clear practice plan & follow-up",
   },
   {
     value: "more_evaluation",
-    label: "Unclear — schedule another subject / diagnostic",
+    label: "Hard to say — needs another class or different subject",
   },
   {
     value: "parent_conversation",
-    label: "Flag for counsellor / parent conversation",
+    label: "Counsellor should talk to parents before deciding",
   },
   {
     value: "not_current_fit",
-    label: "Not a current fit — expectations or level mismatch",
+    label: "Not the right fit right now (level or expectations)",
   },
 ] as const;
 
@@ -110,7 +110,8 @@ export function parseExtendedBody(body: Record<string, unknown>): {
   if (!examTrack || !EXAM_SET.has(examTrack)) {
     return {
       ok: false,
-      error: "Please confirm the student’s primary exam / track (NEET, JEE, SAT, IB, etc.).",
+      error:
+        "Please choose which exam this student is mainly preparing for (dropdown in section 1).",
     };
   }
 

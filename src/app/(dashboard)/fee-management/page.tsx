@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TARGET_EXAM_OPTIONS } from "@/lib/constants";
+import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import type { FeeRecord } from "@/lib/types";
 
 type FeeRow = {
@@ -24,6 +24,11 @@ type ExamFeeRow = {
 };
 
 export default function FeeManagementPage() {
+  const {
+    activeValues: targetCourseOptions,
+    labelFor: targetCourseLabel,
+    loading: targetExamsLoading,
+  } = useTargetExamOptions();
   const [rows, setRows] = useState<FeeRow[]>([]);
   const [leadCount, setLeadCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,13 +36,7 @@ export default function FeeManagementPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourse, setFilterCourse] = useState("");
 
-  const [examRows, setExamRows] = useState<ExamFeeRow[]>(() =>
-    TARGET_EXAM_OPTIONS.map((exam) => ({
-      exam,
-      baseFee: 0,
-      notes: "",
-    })),
-  );
+  const [examRows, setExamRows] = useState<ExamFeeRow[]>([]);
   const [examLoading, setExamLoading] = useState(true);
   const [examSaving, setExamSaving] = useState(false);
   const [examError, setExamError] = useState<string | null>(null);
@@ -50,17 +49,17 @@ export default function FeeManagementPage() {
       const res = await fetch("/api/exam-fee-structures", { cache: "no-store" });
       if (!res.ok) throw new Error("Could not load exam fee defaults.");
       const data = (await res.json()) as ExamFeeRow[];
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setExamRows(
-          TARGET_EXAM_OPTIONS.map((exam) => {
-            const hit = data.find((d) => d.exam === exam);
-            return {
-              exam,
-              baseFee: hit?.baseFee ?? 0,
-              notes: hit?.notes ?? "",
-              updatedAt: hit?.updatedAt ?? null,
-            };
-          }),
+          data.map((d) => ({
+            exam: typeof d.exam === "string" ? d.exam : "",
+            baseFee:
+              typeof d.baseFee === "number" && Number.isFinite(d.baseFee)
+                ? d.baseFee
+                : 0,
+            notes: typeof d.notes === "string" ? d.notes : "",
+            updatedAt: d.updatedAt ?? null,
+          })),
         );
       }
     } catch (e) {
@@ -90,15 +89,15 @@ export default function FeeManagementPage() {
       const data = (await res.json()) as ExamFeeRow[];
       if (Array.isArray(data)) {
         setExamRows(
-          TARGET_EXAM_OPTIONS.map((exam) => {
-            const hit = data.find((d) => d.exam === exam);
-            return {
-              exam,
-              baseFee: hit?.baseFee ?? 0,
-              notes: hit?.notes ?? "",
-              updatedAt: hit?.updatedAt ?? null,
-            };
-          }),
+          data.map((d) => ({
+            exam: typeof d.exam === "string" ? d.exam : "",
+            baseFee:
+              typeof d.baseFee === "number" && Number.isFinite(d.baseFee)
+                ? d.baseFee
+                : 0,
+            notes: typeof d.notes === "string" ? d.notes : "",
+            updatedAt: d.updatedAt ?? null,
+          })),
         );
       }
       setExamSavedAt(new Date().toISOString());
@@ -137,7 +136,7 @@ export default function FeeManagementPage() {
         setLeadCount(leads.length);
       }
     } catch {
-      setError("Could not load fee data. Check MongoDB and run npm run seed.");
+      setError("Could not load fee data. Check MongoDB and try again.");
     } finally {
       setLoading(false);
     }
@@ -205,15 +204,16 @@ export default function FeeManagementPage() {
               Default fees by target exam
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-[#757575]">
-              Set the base course fee (INR) for each exam. When a student has that
-              exam selected (e.g. NEET) and their fee step has no base amount yet,
-              this value auto-fills on the student workspace.
+              Set the base fee (INR) for each target exam from your Exams &amp;
+              subjects settings. On a lead, when that exam is selected and the fee
+              step has no base amount yet, this value auto-fills on the student
+              workspace.
             </p>
           </div>
           <button
             type="button"
             className="rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            disabled={examSaving || examLoading}
+            disabled={examSaving || examLoading || targetExamsLoading}
             onClick={() => void saveExamStructures()}
           >
             {examSaving ? "Saving…" : "Save exam defaults"}
@@ -229,7 +229,7 @@ export default function FeeManagementPage() {
             Saved exam defaults ({new Date(examSavedAt).toLocaleString()}).
           </p>
         )}
-        {examLoading ? (
+        {examLoading || targetExamsLoading ? (
           <p className="text-sm text-[#757575]">Loading exam defaults…</p>
         ) : (
           <div className="overflow-auto">
@@ -248,7 +248,7 @@ export default function FeeManagementPage() {
                 {examRows.map((r) => (
                   <tr key={r.exam}>
                     <td className="border border-[#e0e0e0] px-2 py-2 font-semibold text-[#212121]">
-                      {r.exam}
+                      {targetCourseLabel(r.exam)}
                     </td>
                     <td className="border border-[#e0e0e0] px-2 py-2">
                       <input
@@ -262,7 +262,7 @@ export default function FeeManagementPage() {
                             Math.max(0, Math.round(Number(e.target.value) || 0)),
                           )
                         }
-                        aria-label={`Base fee for ${r.exam}`}
+                        aria-label={`Base fee for ${targetCourseLabel(r.exam)}`}
                       />
                     </td>
                     <td className="border border-[#e0e0e0] px-2 py-2">
@@ -345,14 +345,12 @@ export default function FeeManagementPage() {
             onChange={(e) => setFilterCourse(e.target.value)}
           >
             <option value="">All courses</option>
-            <option value="NEET">NEET</option>
-            <option value="JEE">JEE</option>
-            <option value="CUET">CUET</option>
+            {targetCourseOptions.map((c) => (
+              <option key={c} value={c}>
+                {targetCourseLabel(c)}
+              </option>
+            ))}
           </select>
-          <input
-            type="date"
-            className="rounded-none border border-[#e0e0e0] px-3 py-2 text-sm"
-          />
         </div>
 
         <div className="overflow-auto rounded-none border border-[#e0e0e0]">
@@ -361,7 +359,9 @@ export default function FeeManagementPage() {
               <tr className="bg-[#f8f9fa] text-left text-xs uppercase text-[#757575]">
                 <th className="border-b border-[#e0e0e0] px-2 py-2">#</th>
                 <th className="border-b border-[#e0e0e0] px-2 py-2">Student</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Course</th>
+                <th className="border-b border-[#e0e0e0] px-2 py-2">
+                  Target exam
+                </th>
                 <th className="border-b border-[#e0e0e0] px-2 py-2">Total</th>
                 <th className="border-b border-[#e0e0e0] px-2 py-2">Discount</th>
                 <th className="border-b border-[#e0e0e0] px-2 py-2">Final</th>
@@ -377,7 +377,9 @@ export default function FeeManagementPage() {
                 <tr key={r.id} className="min-h-[40px] hover:bg-[#f5f5f5]">
                   <td className="border-b border-[#e0e0e0] px-2 py-2">{i + 1}</td>
                   <td className="border-b border-[#e0e0e0] px-2 py-2">{r.student}</td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">{r.course}</td>
+                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                    {targetCourseLabel(r.course) || r.course || "—"}
+                  </td>
                   <td className="border-b border-[#e0e0e0] px-2 py-2">
                     ₹{r.total.toLocaleString("en-IN")}
                   </td>

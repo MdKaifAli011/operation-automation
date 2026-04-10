@@ -2,15 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  DEFAULT_LEAD_SOURCE_OPTIONS,
   normalizeLeadSources,
   type LeadSourceOption,
 } from "@/lib/leadSources";
 
 export function useLeadSources(): LeadSourceOption[] {
-  const [sources, setSources] = useState<LeadSourceOption[]>(() =>
-    DEFAULT_LEAD_SOURCE_OPTIONS.map((o) => ({ ...o })),
-  );
+  const [sources, setSources] = useState<LeadSourceOption[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -21,7 +18,7 @@ export function useLeadSources(): LeadSourceOption[] {
       const data = (await res.json()) as { sources?: unknown };
       setSources(normalizeLeadSources(data.sources));
     } catch {
-      /* keep defaults */
+      /* leave empty until a successful load */
     }
   }, []);
 
