@@ -67,6 +67,7 @@ import {
   IconTrash,
 } from "@/components/icons/CrmIcons";
 import { BrochureInlinePreviewFrame } from "@/components/brochure/BrochureInlinePreviewFrame";
+import { InstituteBankDetailsPanel } from "@/components/student/fee/InstituteBankDetailsPanel";
 import { normalizeBrochurePreviewUrl } from "@/lib/brochurePreview";
 import { cn } from "@/lib/cn";
 import { computeMeetWindow } from "@/lib/meetLinks/window";
@@ -887,7 +888,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                   <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
                     Source
                     <select
-                      className={cn(HERO_EDIT_INPUT, "mt-1 cursor-pointer")}
+                      className={cn(HERO_EDIT_INPUT, "mt-0.5 cursor-pointer")}
                       value={heroDraft.dataType}
                       onChange={(e) =>
                         setHeroDraft({ ...heroDraft, dataType: e.target.value })
@@ -906,11 +907,11 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                   </label>
                 </div>
 
-                <fieldset className="min-w-0 border border-slate-200 p-3">
+                <fieldset className="min-w-0 border border-slate-200 p-2.5">
                   <legend className="px-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
                     Target exams
                   </legend>
-                  <p className="mb-2 text-[11px] text-slate-500">
+                  <p className="mb-1.5 text-[11px] text-slate-500">
                     Select one or more.
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -5255,6 +5256,7 @@ function FeeSection({
         )}
       </div>
       <div className={SX.sectionBody}>
+        <InstituteBankDetailsPanel />
         <div className="overflow-auto border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.02]">
           <table className={cn(SX.dataTable, "min-w-[520px]")}>
             <thead>

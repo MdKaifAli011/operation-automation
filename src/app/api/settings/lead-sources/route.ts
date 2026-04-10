@@ -3,7 +3,6 @@ import connectDB from "@/lib/mongodb";
 import {
   DEFAULT_LEAD_SOURCE_OPTIONS,
   normalizeLeadSources,
-  type LeadSourceOption,
 } from "@/lib/leadSources";
 import LeadSourceSettingsModel from "@/models/LeadSourceSettings";
 
@@ -11,19 +10,18 @@ export const runtime = "nodejs";
 
 const SETTINGS_KEY = "default";
 
-async function getSources(): Promise<LeadSourceOption[]> {
-  await connectDB();
-  const doc = await LeadSourceSettingsModel.findOne({ key: SETTINGS_KEY })
-    .lean()
-    .exec();
-  const raw = doc?.sources;
-  return normalizeLeadSources(raw);
-}
-
 export async function GET() {
   try {
-    const sources = await getSources();
-    return NextResponse.json({ sources });
+    await connectDB();
+    const doc = await LeadSourceSettingsModel.findOne({ key: SETTINGS_KEY })
+      .lean()
+      .exec();
+    const sources = normalizeLeadSources(doc?.sources);
+    const updatedAt =
+      doc && "updatedAt" in doc && doc.updatedAt instanceof Date
+        ? doc.updatedAt.toISOString()
+        : null;
+    return NextResponse.json({ sources, updatedAt });
   } catch (e) {
     console.error(e);
     return NextResponse.json(
@@ -45,12 +43,18 @@ export async function PUT(req: Request) {
       );
     }
     await connectDB();
-    await LeadSourceSettingsModel.findOneAndUpdate(
+    const doc = await LeadSourceSettingsModel.findOneAndUpdate(
       { key: SETTINGS_KEY },
       { $set: { sources } },
       { upsert: true, new: true },
-    );
-    return NextResponse.json({ sources });
+    )
+      .lean()
+      .exec();
+    const updatedAt =
+      doc && "updatedAt" in doc && doc.updatedAt instanceof Date
+        ? doc.updatedAt.toISOString()
+        : null;
+    return NextResponse.json({ sources, updatedAt });
   } catch (e) {
     console.error(e);
     return NextResponse.json(
@@ -65,12 +69,18 @@ export async function DELETE() {
   try {
     await connectDB();
     const sources = normalizeLeadSources(DEFAULT_LEAD_SOURCE_OPTIONS);
-    await LeadSourceSettingsModel.findOneAndUpdate(
+    const doc = await LeadSourceSettingsModel.findOneAndUpdate(
       { key: SETTINGS_KEY },
       { $set: { sources } },
       { upsert: true, new: true },
-    );
-    return NextResponse.json({ sources });
+    )
+      .lean()
+      .exec();
+    const updatedAt =
+      doc && "updatedAt" in doc && doc.updatedAt instanceof Date
+        ? doc.updatedAt.toISOString()
+        : null;
+    return NextResponse.json({ sources, updatedAt });
   } catch (e) {
     console.error(e);
     return NextResponse.json(

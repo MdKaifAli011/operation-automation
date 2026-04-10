@@ -351,7 +351,10 @@ export function AddStudentLeadDialog({
           <label className="block min-w-0 text-[12px] font-medium text-slate-700">
             Source <span className="text-rose-600">*</span>
             <select
-              className={cn(fieldFull, "cursor-pointer")}
+              className={cn(
+                inputBase,
+                "mt-0.5 w-full min-w-0 max-w-full cursor-pointer",
+              )}
               value={dataType}
               onChange={(e) => {
                 setDataType(e.target.value);
@@ -365,8 +368,8 @@ export function AddStudentLeadDialog({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Configure options in Settings → Lead sources.
+            <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+              Settings → Lead sources
             </p>
           </label>
 

@@ -35,7 +35,7 @@ type TextColKey =
   | "country";
 
 const ACTION_MENU_W = 180;
-const DATA_TYPE_MENU_W = 200;
+const DATA_TYPE_MENU_W = 216;
 
 type ActionMenuState = { leadId: string; top: number; left: number } | null;
 
@@ -747,15 +747,15 @@ export function LeadSheetTable({
             ref={dataTypeMenuRef}
             role="menu"
             aria-label="Set data type"
-            className="fixed z-[201] rounded-none border border-slate-200 bg-white py-1 text-left text-sm shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+            className="fixed z-[201] rounded-none border border-slate-200 bg-white py-0.5 text-left text-[13px] shadow-lg shadow-slate-900/10"
             style={{
               top: dataTypeMenu.top,
               left: dataTypeMenu.left,
               width: DATA_TYPE_MENU_W,
             }}
           >
-            <p className="border-b border-slate-100 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Source
+            <p className="border-b border-slate-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              Lead source
             </p>
             {leadSourceOptions.map(({ abbrev, value, label }) => (
               <button
@@ -763,19 +763,19 @@ export function LeadSheetTable({
                 type="button"
                 role="menuitem"
                 className={cn(
-                  "flex w-full items-baseline gap-2 px-2.5 py-2 text-left transition-colors hover:bg-slate-50",
+                  "flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-slate-50",
                   dataTypeMenuLead.dataType === value &&
-                    "bg-primary/5 text-slate-900",
+                    "bg-primary/[0.06] font-medium text-slate-900",
                 )}
                 onClick={() => {
                   onUpdateLead(dataTypeMenuLead.id, { dataType: value });
                   setDataTypeMenu(null);
                 }}
               >
-                <span className="w-7 shrink-0 font-mono text-[12px] font-bold tabular-nums text-slate-800">
+                <span className="w-8 shrink-0 text-center font-mono text-[11px] font-bold tabular-nums text-slate-800">
                   {abbrev}
                 </span>
-                <span className="min-w-0 text-[12px] text-slate-600">
+                <span className="min-w-0 flex-1 truncate text-[12px] leading-snug text-slate-600">
                   {label}
                 </span>
               </button>

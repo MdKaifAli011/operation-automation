@@ -1,5 +1,6 @@
 "use client";
 
+import { format, parseISO } from "date-fns";
 import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_LEAD_SOURCE_OPTIONS,
@@ -17,6 +18,7 @@ export default function LeadSourcesSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -26,8 +28,14 @@ export default function LeadSourcesSettingsPage() {
         cache: "no-store",
       });
       if (!res.ok) throw new Error("Load failed");
-      const data = (await res.json()) as { sources?: unknown };
+      const data = (await res.json()) as {
+        sources?: unknown;
+        updatedAt?: string | null;
+      };
       setSources(normalizeLeadSources(data.sources));
+      setServerUpdatedAt(
+        typeof data.updatedAt === "string" ? data.updatedAt : null,
+      );
     } catch {
       setError("Could not load settings.");
     } finally {
@@ -49,7 +57,11 @@ export default function LeadSourcesSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sources }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json()) as {
+        sources?: unknown;
+        error?: string;
+        updatedAt?: string | null;
+      };
       if (!res.ok) {
         setError(
           typeof data?.error === "string" ? data.error : "Save failed.",
@@ -57,6 +69,9 @@ export default function LeadSourcesSettingsPage() {
         return;
       }
       setSources(normalizeLeadSources(data.sources));
+      setServerUpdatedAt(
+        typeof data.updatedAt === "string" ? data.updatedAt : null,
+      );
       setMessage("Saved.");
     } catch {
       setError("Network error.");
@@ -80,7 +95,11 @@ export default function LeadSourcesSettingsPage() {
       const res = await fetch("/api/settings/lead-sources", {
         method: "DELETE",
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json()) as {
+        sources?: unknown;
+        error?: string;
+        updatedAt?: string | null;
+      };
       if (!res.ok) {
         setError(
           typeof data?.error === "string" ? data.error : "Reset failed.",
@@ -88,6 +107,9 @@ export default function LeadSourcesSettingsPage() {
         return;
       }
       setSources(normalizeLeadSources(data.sources));
+      setServerUpdatedAt(
+        typeof data.updatedAt === "string" ? data.updatedAt : null,
+      );
       setMessage("Restored defaults.");
     } catch {
       setError("Network error.");
@@ -111,6 +133,7 @@ export default function LeadSourcesSettingsPage() {
       return next;
     });
     setMessage(null);
+    setError(null);
   };
 
   const addRow = () => {
@@ -119,51 +142,136 @@ export default function LeadSourcesSettingsPage() {
       { abbrev: "XX", label: "New source", value: "New source" },
     ]);
     setMessage(null);
+    setError(null);
   };
 
   const removeRow = (index: number) => {
     setSources((prev) => prev.filter((_, i) => i !== index));
     setMessage(null);
+    setError(null);
   };
 
-  const field =
-    "mt-1 w-full rounded-none border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25";
+  const lastSavedLabel =
+    serverUpdatedAt &&
+    (() => {
+      try {
+        return format(parseISO(serverUpdatedAt), "dd MMM yyyy, HH:mm");
+      } catch {
+        return null;
+      }
+    })();
+
+  const statText = loading
+    ? "Loading…"
+    : error
+      ? error
+      : message
+        ? message
+        : lastSavedLabel
+          ? `Last saved ${lastSavedLabel}`
+          : "Edit rows, then Save · at least one source required";
+
+  const busy = loading || saving;
 
   return (
-    <div className={cn(SX.pageWrap, "max-w-3xl")}>
-      <header className="mb-6">
-        <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-          Lead sources
-        </h1>
-        <p className="mt-1 text-[13px] text-slate-600">
-          Abbreviations (e.g. OL, WT) appear in the lead sheet. Stored value is
-          saved on each lead and used in exports. Changes apply after save.
-        </p>
-      </header>
+    <div className={cn(SX.leadPageRoot, "gap-0 pb-6")}>
+      <div className={SX.outerSheet}>
+        <div className={SX.toolbar}>
+          <div className="min-w-0 flex-1">
+            <h1 className={SX.toolbarTitle}>Lead sources</h1>
+            <p className={SX.toolbarMeta}>
+              Sheet column abbreviations and stored{" "}
+              <code className="rounded-none bg-slate-100 px-1 font-mono text-[11px] text-slate-800">
+                dataType
+              </code>{" "}
+              on each lead.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              disabled={busy}
+              onClick={addRow}
+            >
+              Add source
+            </button>
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              disabled={busy}
+              onClick={() => void resetDefaults()}
+            >
+              Reset defaults
+            </button>
+            <button
+              type="button"
+              className={SX.leadBtnGreen}
+              disabled={busy}
+              onClick={() => void save()}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
 
-      {loading ? (
-        <p className="text-[13px] text-slate-500">Loading…</p>
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-none border border-slate-200 bg-white shadow-sm">
-            <table className="w-full min-w-[520px] border-collapse text-left text-[13px]">
+        <div
+          className={cn(
+            SX.leadStatBar,
+            "border-t-0",
+            error && "bg-rose-50/80 text-rose-900",
+            !error && message && "bg-emerald-50/50 text-emerald-900",
+          )}
+        >
+          <span
+            className={cn(
+              "min-w-0 flex-1 font-medium",
+              !error && !message && "font-normal text-slate-600",
+            )}
+            role={error ? "alert" : message ? "status" : undefined}
+          >
+            {statText}
+          </span>
+          {!loading ? (
+            <span className="shrink-0 tabular-nums text-slate-500">
+              {sources.length} row{sources.length !== 1 ? "s" : ""}
+            </span>
+          ) : null}
+        </div>
+
+        {!loading ? (
+          <div className="overflow-x-auto border-b border-slate-200 bg-white">
+            <table
+              className={cn(SX.dataTable, "w-full min-w-[min(100%,520px)]")}
+            >
+              <colgroup>
+                <col className="w-[5.5rem]" />
+                <col />
+                <col />
+                <col className="w-[4.5rem]" />
+              </colgroup>
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/95 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                  <th className="px-3 py-2.5">Abbrev</th>
-                  <th className="px-3 py-2.5">Label</th>
-                  <th className="px-3 py-2.5">Stored value</th>
-                  <th className="w-14 px-2 py-2.5 text-center" />
+                <tr>
+                  <th className={cn(SX.dataTh, "py-1.5")}>Abbrev</th>
+                  <th className={cn(SX.dataTh, "py-1.5")}>Label</th>
+                  <th className={cn(SX.dataTh, "py-1.5")}>Stored value</th>
+                  <th className={cn(SX.dataTh, "py-1.5 text-center")}>
+                    <span className="sr-only">Remove</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {sources.map((row, i) => (
                   <tr
                     key={i}
-                    className="border-b border-slate-100 last:border-0"
+                    className={i % 2 === 1 ? SX.zebraRow : undefined}
                   >
-                    <td className="px-3 py-2 align-top">
+                    <td className={cn(SX.dataTd, "p-1 align-middle")}>
                       <input
-                        className={cn(field, "font-mono tabular-nums uppercase")}
+                        className={cn(
+                          SX.input,
+                          "h-8 font-mono text-[12px] uppercase tabular-nums",
+                        )}
                         value={row.abbrev}
                         onChange={(e) =>
                           updateRow(i, "abbrev", e.target.value)
@@ -172,9 +280,9 @@ export default function LeadSourcesSettingsPage() {
                         aria-label={`Source ${i + 1} abbreviation`}
                       />
                     </td>
-                    <td className="px-3 py-2 align-top">
+                    <td className={cn(SX.dataTd, "p-1 align-middle")}>
                       <input
-                        className={field}
+                        className={cn(SX.input, "h-8 text-[12px]")}
                         value={row.label}
                         onChange={(e) =>
                           updateRow(i, "label", e.target.value)
@@ -182,9 +290,9 @@ export default function LeadSourcesSettingsPage() {
                         aria-label={`Source ${i + 1} label`}
                       />
                     </td>
-                    <td className="px-3 py-2 align-top">
+                    <td className={cn(SX.dataTd, "p-1 align-middle")}>
                       <input
-                        className={field}
+                        className={cn(SX.input, "h-8 text-[12px]")}
                         value={row.value}
                         onChange={(e) =>
                           updateRow(i, "value", e.target.value)
@@ -192,11 +300,14 @@ export default function LeadSourcesSettingsPage() {
                         aria-label={`Source ${i + 1} stored value`}
                       />
                     </td>
-                    <td className="px-2 py-2 align-top text-center">
+                    <td className={cn(SX.dataTd, "p-1 text-center align-middle")}>
                       <button
                         type="button"
-                        className="text-[12px] font-medium text-rose-700 hover:underline disabled:opacity-40"
-                        disabled={sources.length <= 1}
+                        className={cn(
+                          SX.btnGhost,
+                          "px-1.5 py-0.5 text-[11px] text-rose-700 hover:text-rose-900",
+                        )}
+                        disabled={sources.length <= 1 || busy}
                         onClick={() => removeRow(i)}
                       >
                         Remove
@@ -207,48 +318,17 @@ export default function LeadSourcesSettingsPage() {
               </tbody>
             </table>
           </div>
+        ) : null}
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className={cn(SX.btnSecondary, "text-[13px]")}
-              onClick={addRow}
-            >
-              Add source
-            </button>
+        {!loading ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 bg-[#fafafa] px-3 py-2 text-[11px] leading-tight text-slate-600">
+            <span>
+              Changing stored values affects new picks only — existing leads keep
+              their saved value until edited.
+            </span>
           </div>
-
-          {error && (
-            <p className="mt-3 text-[13px] text-rose-700" role="alert">
-              {error}
-            </p>
-          )}
-          {message && (
-            <p className="mt-3 text-[13px] text-emerald-800" role="status">
-              {message}
-            </p>
-          )}
-
-          <div className="mt-6 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={cn(SX.btnPrimary, "px-4 py-2 text-[13px]")}
-              disabled={saving}
-              onClick={() => void save()}
-            >
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-            <button
-              type="button"
-              className={cn(SX.btnSecondary, "px-4 py-2 text-[13px]")}
-              disabled={saving}
-              onClick={() => void resetDefaults()}
-            >
-              Reset to defaults
-            </button>
-          </div>
-        </>
-      )}
+        ) : null}
+      </div>
     </div>
   );
 }
