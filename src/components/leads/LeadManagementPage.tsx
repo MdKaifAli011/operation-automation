@@ -71,6 +71,17 @@ export function LeadManagementPage() {
   const { activeValues: targetExamFilterOptions, labelFor: targetExamLabel } =
     useTargetExamOptions();
 
+  /** Configured exams plus any values present on imported/custom leads. */
+  const leadExamFilterOptions = useMemo(() => {
+    const set = new Set<string>(targetExamFilterOptions);
+    for (const l of leads) {
+      for (const e of l.targetExams ?? []) {
+        if (typeof e === "string" && e.trim()) set.add(e.trim());
+      }
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [leads, targetExamFilterOptions]);
+
   const refreshLeads = useCallback(async () => {
     const res = await fetch("/api/leads", { cache: "no-store" });
     if (!res.ok) {
@@ -155,7 +166,12 @@ export function LeadManagementPage() {
       list = list.filter((l) => l.date <= dateTo);
     }
     if (filterCourse) {
-      list = list.filter((l) => l.targetExams.includes(filterCourse));
+      const want = filterCourse.trim().toLowerCase();
+      list = list.filter((l) =>
+        (l.targetExams ?? []).some(
+          (e) => typeof e === "string" && e.trim().toLowerCase() === want,
+        ),
+      );
     }
     if (filterStatus) {
       list = list.filter((l) => l.rowTone === filterStatus);
@@ -525,7 +541,7 @@ export function LeadManagementPage() {
                     onChange={(e) => setFilterCourse(e.target.value)}
                   >
                     <option value="">All</option>
-                    {targetExamFilterOptions.map((c) => (
+                    {leadExamFilterOptions.map((c) => (
                       <option key={c} value={c}>
                         {targetExamLabel(c)}
                       </option>

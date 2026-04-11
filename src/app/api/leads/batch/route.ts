@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
+import { parseTargetExamsValue } from "@/lib/lead-csv";
 import { serializeLead } from "@/lib/serializers";
 import type { Lead } from "@/lib/types";
 
@@ -66,7 +67,9 @@ function normalizeImportRow(
         .filter((x): x is string => typeof x === "string")
         .map((s) => s.trim())
         .filter(Boolean)
-    : [];
+    : typeof row.targetExams === "string"
+      ? parseTargetExamsValue(row.targetExams)
+      : [];
 
   const rawDataType =
     typeof row.dataType === "string" ? row.dataType.trim() : "";

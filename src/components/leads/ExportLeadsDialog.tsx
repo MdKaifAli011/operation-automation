@@ -46,7 +46,13 @@ function filterLeadsForExport(
     }
     if (opts.dateFrom && l.date < opts.dateFrom) return false;
     if (opts.dateTo && l.date > opts.dateTo) return false;
-    if (opts.course && !l.targetExams.includes(opts.course)) return false;
+    if (opts.course) {
+      const want = opts.course.trim().toLowerCase();
+      const has = (l.targetExams ?? []).some(
+        (e) => typeof e === "string" && e.trim().toLowerCase() === want,
+      );
+      if (!has) return false;
+    }
     if (opts.country) {
       if (l.country.trim().toLowerCase() !== opts.country.trim().toLowerCase()) {
         return false;
@@ -111,6 +117,17 @@ export function ExportLeadsDialog({ leads, open, onOpenChange }: Props) {
     }
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [leads]);
+
+  /** Settings exams plus any values already on leads (dynamic / legacy imports). */
+  const examFilterOptions = useMemo(() => {
+    const set = new Set<string>(targetExamFilterValues);
+    for (const l of leads) {
+      for (const e of l.targetExams ?? []) {
+        if (typeof e === "string" && e.trim()) set.add(e.trim());
+      }
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [leads, targetExamFilterValues]);
 
   const matchingLeads = useMemo(() => {
     if (dateFrom && dateTo && dateFrom > dateTo) return [];
@@ -326,7 +343,7 @@ export function ExportLeadsDialog({ leads, open, onOpenChange }: Props) {
               onChange={(e) => setCourse(e.target.value)}
             >
               <option value="">All targets</option>
-              {targetExamFilterValues.map((c) => (
+              {examFilterOptions.map((c) => (
                 <option key={c} value={c}>
                   {targetExamLabel(c)}
                 </option>
