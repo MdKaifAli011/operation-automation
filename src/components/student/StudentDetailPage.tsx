@@ -2508,6 +2508,8 @@ function DemoSection({
 
   const showAddInHeader = rows.length > 0 && !expanded;
 
+  const step1StudentLabel = lead.studentName?.trim() || "Student";
+
   const demoActionBtn =
     "inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-none border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary";
 
@@ -2517,7 +2519,9 @@ function DemoSection({
         <div className={SX.sectionHead}>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className={SX.sectionTitle}>Step 1 · Demo classes</h2>
+              <h2 className={SX.sectionTitle}>
+                Step 1 - {step1StudentLabel} Demo
+              </h2>
               {lead.pipelineSteps >= 1 ? (
                 <span className="rounded-none border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
                   Done
@@ -2525,8 +2529,17 @@ function DemoSection({
               ) : null}
             </div>
             <p className="mt-1 text-[12px] text-slate-500">
-              Schedule and manage trial classes with clear status and quick
-              actions.
+              {lead.studentName?.trim() ? (
+                <>
+                  Schedule and manage {lead.studentName.trim()}&apos;s trial
+                  classes with clear status and quick actions.
+                </>
+              ) : (
+                <>
+                  Schedule and manage trial classes with clear status and quick
+                  actions.
+                </>
+              )}
             </p>
           </div>
           {showAddInHeader ? (
@@ -4928,6 +4941,8 @@ function BrochureSection({
     return () => window.clearTimeout(t);
   }, [documentUrl, brochurePayload, onPatchLead]);
 
+  const step1StudentLabel = lead.studentName?.trim() || "Student";
+
   return (
     <section className={SX.section}>
       <div className={SX.sectionHead}>
@@ -4952,7 +4967,7 @@ function BrochureSection({
             <h3 className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-[13px] font-semibold text-slate-800">
               <span>Demo teacher feedback</span>
               <span className="text-[11px] font-normal text-slate-500">
-                From Step 1 demos · full detail on View
+                From Step 1 — {step1StudentLabel} Demo · full detail on View
               </span>
             </h3>
             <div className="overflow-auto rounded-md border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.03]">
@@ -4977,8 +4992,8 @@ function BrochureSection({
                         className={cn(SX.dataTd, "text-[13px] text-slate-500")}
                         colSpan={7}
                       >
-                        No demo rows yet. Schedule demos in Step 1 · Demo
-                        classes.
+                        No demo rows yet. Schedule demos in Step 1 —{" "}
+                        {step1StudentLabel} Demo.
                       </td>
                     </tr>
                   ) : (
