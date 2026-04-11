@@ -1,6 +1,6 @@
 "use client";
 
-import { addDays, endOfDay, format, isAfter, parseISO } from "date-fns";
+import { endOfDay, format, isAfter, parseISO } from "date-fns";
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -12,6 +12,7 @@ import { SX } from "@/components/student/student-excel-ui";
 import { formatLeadPhone } from "@/lib/phone-display";
 import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
+import { InterestedCourseDialog } from "./InterestedCourseDialog";
 import {
   dataTypeToShortLabel,
   type LeadSourceOption,
@@ -103,6 +104,10 @@ type Props = {
   pickDataTypeOnClick?: boolean;
   /** Configured in Settings → Lead sources; drives OL/WT/… labels and stored values. */
   leadSourceOptions?: LeadSourceOption[];
+  /** Overrides the target-exams column header (e.g. "Courses" on ongoing interested). */
+  targetExamsColumnTitle?: string;
+  /** Custom display for target exams cells (e.g. labels from Settings). */
+  formatTargetExamsDisplay?: (exams: string[]) => string;
 };
 
 export function LeadSheetTable({
@@ -123,6 +128,8 @@ export function LeadSheetTable({
   showNotInterestedRemark = false,
   pickDataTypeOnClick = false,
   leadSourceOptions = [],
+  targetExamsColumnTitle = "Target (exams)",
+  formatTargetExamsDisplay,
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -138,6 +145,8 @@ export function LeadSheetTable({
     left: number;
   } | null>(null);
   const [notInterestedModalLead, setNotInterestedModalLead] =
+    useState<Lead | null>(null);
+  const [interestedCourseLead, setInterestedCourseLead] =
     useState<Lead | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
@@ -210,25 +219,6 @@ export function LeadSheetTable({
     visibleIds.length > 0 &&
     visibleIds.every((id) => selectedIds.has(id));
 
-  const applyStatus = (lead: Lead, kind: "interested" | "followup") => {
-    if (kind === "interested") {
-      onUpdateLead(lead.id, {
-        rowTone: "interested",
-        sheetTab: "ongoing",
-        followUpDate: null,
-        notInterestedRemark: null,
-      });
-    } else {
-      onUpdateLead(lead.id, {
-        rowTone: "followup_later",
-        sheetTab: "followup",
-        followUpDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
-        notInterestedRemark: null,
-      });
-    }
-    setActionMenu(null);
-  };
-
   const menuLead = useMemo(
     () => (actionMenu ? leads.find((l) => l.id === actionMenu.leadId) : undefined),
     [actionMenu, leads],
@@ -290,7 +280,7 @@ export function LeadSheetTable({
             <SheetTh w={COL_WIDTHS.studentName}>Student name</SheetTh>
             <SheetTh w={COL_WIDTHS.parentName}>Parent name</SheetTh>
             <SheetTh w={COL_WIDTHS.grade}>Grade</SheetTh>
-            <SheetTh w={COL_WIDTHS.targetExams}>Target (exams)</SheetTh>
+            <SheetTh w={COL_WIDTHS.targetExams}>{targetExamsColumnTitle}</SheetTh>
             <SheetTh w={COL_WIDTHS.country}>Country</SheetTh>
             <SheetTh w={COL_WIDTHS.phone}>Phone</SheetTh>
             {showPipelineColumn && (
@@ -527,10 +517,16 @@ export function LeadSheetTable({
                   ) : (
                     <span
                       className="inline-flex w-full items-center justify-between gap-1 text-[12px] leading-snug"
-                      title={formatTargetExams(lead.targetExams)}
+                      title={
+                        formatTargetExamsDisplay
+                          ? formatTargetExamsDisplay(lead.targetExams ?? [])
+                          : formatTargetExams(lead.targetExams)
+                      }
                     >
                       <span className="min-w-0 break-words">
-                        {formatTargetExams(lead.targetExams)}
+                        {formatTargetExamsDisplay
+                          ? formatTargetExamsDisplay(lead.targetExams ?? [])
+                          : formatTargetExams(lead.targetExams)}
                       </span>
                       {sheetEditMode && (
                         <ChevronDownGlyph
@@ -824,7 +820,10 @@ export function LeadSheetTable({
               type="button"
               role="menuitem"
               className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
-              onClick={() => applyStatus(menuLead, "interested")}
+              onClick={() => {
+                setInterestedCourseLead(menuLead);
+                setActionMenu(null);
+              }}
             >
               Interested
             </button>
@@ -871,6 +870,22 @@ export function LeadSheetTable({
           notInterestedRemark: trimmed.length > 0 ? trimmed.slice(0, 2000) : null,
         });
         setNotInterestedModalLead(null);
+      }}
+    />
+    <InterestedCourseDialog
+      lead={interestedCourseLead}
+      onClose={() => setInterestedCourseLead(null)}
+      onConfirm={(exams) => {
+        if (!interestedCourseLead) return;
+        const id = interestedCourseLead.id;
+        setInterestedCourseLead(null);
+        onUpdateLead(id, {
+          rowTone: "interested",
+          sheetTab: "ongoing",
+          followUpDate: null,
+          notInterestedRemark: null,
+          targetExams: exams,
+        });
       }}
     />
     </>

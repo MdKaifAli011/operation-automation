@@ -2608,8 +2608,7 @@ function DemoSection({
                     <th className={SX.dataTh}>Student time</th>
                     <th className={SX.dataTh}>Google Meet</th>
                     <th className={SX.dataTh}>Teacher feedback</th>
-                    <th className={SX.dataTh}>Status</th>
-                    <th className={SX.dataTh}>Actions</th>
+                    <th className={SX.dataTh}>Options</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2866,83 +2865,80 @@ function DemoSection({
                         <td
                           className={cn(
                             SX.dataTd,
-                            "py-2.5 align-top",
+                            "min-w-[200px] py-2.5 align-top",
                             i % 2 === 1 && SX.zebraRow,
                           )}
                         >
-                          <select
-                            className={cn(
-                              SX.select,
-                              "h-7 w-full min-w-[104px] max-w-[128px] text-[12px]",
-                            )}
-                            value={r.status}
-                            onChange={(e) =>
-                              setRows((prev) =>
-                                prev.map((row, j) =>
-                                  j === i
-                                    ? { ...row, status: e.target.value }
-                                    : row,
-                                ),
-                              )
-                            }
-                            aria-label={`Status for ${r.subject} demo`}
-                          >
-                            <option value="Scheduled">Scheduled</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
-                        </td>
-                        <td
-                          className={cn(
-                            SX.dataTd,
-                            "py-2.5 align-top",
-                            i % 2 === 1 && SX.zebraRow,
-                          )}
-                        >
-                          <div className="flex flex-wrap items-center gap-1">
-                            <button
-                              type="button"
-                              className={demoActionBtn}
-                              aria-label="Edit demo"
-                              onClick={() => {
-                                setEditDraft({ ...r });
-                                setEditError(null);
-                                setRowAction({ type: "edit", index: i });
-                              }}
-                            >
-                              <IconPencil />
-                              Edit
-                            </button>
-                            <button
-                              type="button"
+                          <div className="flex flex-col gap-2">
+                            <label className="sr-only" htmlFor={`demo-status-${meetId ?? i}`}>
+                              Demo status for {r.subject}
+                            </label>
+                            <select
+                              id={`demo-status-${meetId ?? i}`}
                               className={cn(
-                                demoActionBtn,
-                                r.inviteSent
-                                  ? "border-2 border-emerald-600 bg-emerald-50 font-semibold text-emerald-900 shadow-sm"
-                                  : "text-primary hover:border-primary/40 hover:bg-primary/10",
+                                SX.select,
+                                "h-8 w-full min-w-[min(100%,12rem)] max-w-[220px] text-[12px]",
                               )}
-                              aria-label={
-                                r.inviteSent
-                                  ? "Invite marked sent — tap to open again"
-                                  : "Share demo invite"
+                              value={r.status}
+                              onChange={(e) =>
+                                setRows((prev) =>
+                                  prev.map((row, j) =>
+                                    j === i
+                                      ? { ...row, status: e.target.value }
+                                      : row,
+                                  ),
+                                )
                               }
-                              onClick={() => {
-                                setSendEmailError(null);
-                                setRowAction({ type: "send", index: i });
-                              }}
                             >
-                              {r.inviteSent ? (
-                                <>
-                                  <IconCheck className="h-3.5 w-3.5" />
-                                  Sent
-                                </>
-                              ) : (
-                                <>
-                                  <IconLink />
-                                  Share
-                                </>
-                              )}
-                            </button>
+                              <option value="Scheduled">Mark as scheduled</option>
+                              <option value="Completed">Mark as conducted</option>
+                              <option value="Cancelled">Mark as canceled</option>
+                            </select>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <button
+                                type="button"
+                                className={demoActionBtn}
+                                aria-label="Edit demo"
+                                onClick={() => {
+                                  setEditDraft({ ...r });
+                                  setEditError(null);
+                                  setRowAction({ type: "edit", index: i });
+                                }}
+                              >
+                                <IconPencil />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className={cn(
+                                  demoActionBtn,
+                                  r.inviteSent
+                                    ? "border-2 border-emerald-600 bg-emerald-50 font-semibold text-emerald-900 shadow-sm"
+                                    : "text-primary hover:border-primary/40 hover:bg-primary/10",
+                                )}
+                                aria-label={
+                                  r.inviteSent
+                                    ? "Invite marked sent — tap to open again"
+                                    : "Share demo invite"
+                                }
+                                onClick={() => {
+                                  setSendEmailError(null);
+                                  setRowAction({ type: "send", index: i });
+                                }}
+                              >
+                                {r.inviteSent ? (
+                                  <>
+                                    <IconCheck className="h-3.5 w-3.5" />
+                                    Sent
+                                  </>
+                                ) : (
+                                  <>
+                                    <IconLink />
+                                    Share
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -3266,16 +3262,16 @@ function DemoEditRowDialog({
             </div>
             <div>
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
-                Status
+                Demo status
               </label>
               <select
                 className={cn(SX.select, "w-full")}
                 value={draft.status}
                 onChange={(e) => onDraftChange({ status: e.target.value })}
               >
-                <option value="Scheduled">Scheduled</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
+                <option value="Scheduled">Mark as scheduled</option>
+                <option value="Completed">Mark as conducted</option>
+                <option value="Cancelled">Mark as canceled</option>
               </select>
             </div>
           </div>

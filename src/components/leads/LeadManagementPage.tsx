@@ -716,9 +716,10 @@ export function LeadManagementPage() {
                   >
                     No interested leads here yet. From{" "}
                     <span className="font-medium">New &amp; Daily</span> above,
-                    choose <span className="font-medium">Interested</span> in the
-                    row <span className="font-medium">⋯</span> menu to add them to
-                    this pipeline.
+                    open the row <span className="font-medium">⋯</span> menu, choose{" "}
+                    <span className="font-medium">Interested</span>, then pick a
+                    course or exam — they appear here with{" "}
+                    <span className="font-medium">Courses</span> filled in.
                   </div>
                 ) : (
                   <LeadSheetTable
@@ -727,6 +728,12 @@ export function LeadManagementPage() {
                     showPipelineColumn
                     pickDataTypeOnClick
                     leadSourceOptions={leadSources}
+                    targetExamsColumnTitle="Courses"
+                    formatTargetExamsDisplay={(exams) =>
+                      exams?.length
+                        ? exams.map((v) => targetExamLabel(v)).join(", ")
+                        : "—"
+                    }
                     className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                     leads={applyDraftToList(ongoingInterestedLeads)}
                     sheetEditMode={sheetEditMode}
