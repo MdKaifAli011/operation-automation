@@ -369,7 +369,6 @@ export default function FeeManagementPage() {
                 <th className="border-b border-[#e0e0e0] px-2 py-2">Balance</th>
                 <th className="border-b border-[#e0e0e0] px-2 py-2">EMI</th>
                 <th className="border-b border-[#e0e0e0] px-2 py-2">Status</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -409,9 +408,6 @@ export default function FeeManagementPage() {
                     >
                       {r.status}
                     </span>
-                  </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2 text-[#1565c0]">
-                    View · Edit · Reminder
                   </td>
                 </tr>
               ))}
