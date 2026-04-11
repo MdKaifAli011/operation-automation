@@ -1,6 +1,6 @@
 "use client";
 
-import { addDays, format, parseISO } from "date-fns";
+import { addDays, endOfDay, format, isAfter, parseISO } from "date-fns";
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -16,6 +16,16 @@ import {
   dataTypeToShortLabel,
   type LeadSourceOption,
 } from "@/lib/leadSources";
+
+function followUpDateIsDueOrPast(iso: string): boolean {
+  try {
+    const d = parseISO(iso);
+    if (Number.isNaN(d.getTime())) return false;
+    return !isAfter(d, endOfDay(new Date()));
+  } catch {
+    return false;
+  }
+}
 
 type ColKey =
   | "date"
@@ -75,6 +85,11 @@ type Props = {
   /** Hide follow-up date column (e.g. Ongoing pipeline — use Follow-ups tab for dates). */
   showFollowUpColumn?: boolean;
   /**
+   * When true with {@link showFollowUpColumn}, only show a date when it is due today or
+   * overdue — future scheduled dates show "—" (those live on the Follow-ups tab).
+   */
+  followUpDateOnlyWhenDue?: boolean;
+  /**
    * When true, shows the “Status” column (pipeline step dots). Default false — enable on
    * Interested, Follow-ups, Converted, and Not interested; keep “New & Daily” without it.
    */
@@ -103,6 +118,7 @@ export function LeadSheetTable({
   className,
   variant = "standard",
   showFollowUpColumn = true,
+  followUpDateOnlyWhenDue = false,
   showPipelineColumn = false,
   showNotInterestedRemark = false,
   pickDataTypeOnClick = false,
@@ -304,6 +320,12 @@ export function LeadSheetTable({
         <tbody>
           {leads.map((lead, rowIndex) => {
             const tone = rowToneBg(lead.rowTone);
+            const followUpRaw = lead.followUpDate?.trim();
+            const showFollowUpCellDate = Boolean(
+              followUpRaw &&
+                (!followUpDateOnlyWhenDue ||
+                  followUpDateIsDueOrPast(followUpRaw)),
+            );
             return (
               <tr
                 key={lead.id}
@@ -662,15 +684,16 @@ export function LeadSheetTable({
                       tone,
                     )}
                   >
-                    {lead.followUpDate ? (
+                    {showFollowUpCellDate && followUpRaw ? (
                       <span
                         className={cn(
-                          lead.sheetTab === "followup" &&
+                          (lead.sheetTab === "followup" ||
+                            followUpDateOnlyWhenDue) &&
                             "font-medium text-[#e65100]",
                         )}
                         title="Next follow-up date"
                       >
-                        {format(parseISO(lead.followUpDate), "dd/MM/yyyy")}
+                        {format(parseISO(followUpRaw), "dd/MM/yyyy")}
                       </span>
                     ) : (
                       <span className="text-[#bdbdbd]">—</span>

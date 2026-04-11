@@ -17,7 +17,7 @@ import { cn } from "@/lib/cn";
 import { isLeadConvertedInCurrentMonth } from "@/lib/leadConversionMonth";
 import {
   isLeadInOngoingPipeline,
-  isLeadInTodayData,
+  isLeadInNewDailyView,
 } from "@/lib/leadSheetRouting";
 import { useLeadSources } from "@/hooks/useLeadSources";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
@@ -174,7 +174,7 @@ export function LeadManagementPage() {
 
   /** New & Daily · new intakes (status New) until marked Interested (first block on Ongoing tab). */
   const newAndDailyLeads = useMemo(
-    () => filtered.filter(isLeadInTodayData),
+    () => filtered.filter(isLeadInNewDailyView),
     [filtered],
   );
 
@@ -219,7 +219,7 @@ export function LeadManagementPage() {
   );
 
   const counts = useMemo(() => {
-    const newDaily = leads.filter(isLeadInTodayData).length;
+    const newDaily = leads.filter(isLeadInNewDailyView).length;
     const ongoingInterestedOnly = leads.filter(
       (l) => isLeadInOngoingPipeline(l) && l.rowTone === "interested",
     ).length;
@@ -686,7 +686,8 @@ export function LeadManagementPage() {
                 ) : (
                   <LeadSheetTable
                     variant="standard"
-                    showFollowUpColumn={false}
+                    showFollowUpColumn
+                    followUpDateOnlyWhenDue
                     showPipelineColumn={false}
                     pickDataTypeOnClick
                     leadSourceOptions={leadSources}
