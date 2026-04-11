@@ -101,9 +101,25 @@ export type LeadPipelineSchedule = {
 };
 
 /** Full `pipelineMeta` object stored on each Lead document */
+/** Generated student progress report (PDF) + staff inputs; Step 2 · Documents */
+export type LeadPipelineStudentReport = {
+  /** Public path e.g. `/uploads/student-reports/{leadId}/…pdf` */
+  pdfUrl?: string | null;
+  fileName?: string | null;
+  /** ISO — last successful PDF generation */
+  generatedAt?: string | null;
+  /** Staff text included in PDF and editable before each generate */
+  additionalNotes?: string;
+  recommendations?: string;
+  /** ISO — staff confirmed the report is OK to share with the family */
+  sendConfirmedAt?: string | null;
+};
+
 export type LeadPipelineMeta = {
   demo?: LeadPipelineDemo;
   brochure?: LeadPipelineBrochure;
+  /** Optional: generated PDF report for the student (Step 2) */
+  studentReport?: LeadPipelineStudentReport;
   fees?: LeadPipelineFees;
   schedule?: LeadPipelineSchedule;
 };

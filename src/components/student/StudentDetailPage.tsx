@@ -63,17 +63,15 @@ import {
   IconCalendarLarge,
   IconCheck,
   IconClipboard,
-  IconCloudUpload,
   IconFileText,
   IconLink,
   IconMail,
   IconPencil,
   IconPhone,
   IconPlus,
-  IconSparkles,
   IconTrash,
 } from "@/components/icons/CrmIcons";
-import { BrochureInlinePreviewFrame } from "@/components/brochure/BrochureInlinePreviewFrame";
+import { StudentReportModal } from "@/components/student/StudentReportModal";
 import { InstituteBankDetailsPanel } from "@/components/student/fee/InstituteBankDetailsPanel";
 import { normalizeBrochurePreviewUrl } from "@/lib/brochurePreview";
 import { cn } from "@/lib/cn";
@@ -1237,6 +1235,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                 <BrochureSection
                   lead={lead}
                   onPatchLead={patchLead}
+                  refreshLead={refreshLead}
                   targetExamPreferredOrder={targetExamActiveValues}
                   targetExamLabelFor={targetExamLabelFor}
                 />
@@ -4601,50 +4600,33 @@ type BrochureCatalogFlatRow = {
 function BrochureSection({
   lead,
   onPatchLead,
+  refreshLead,
   targetExamPreferredOrder,
   targetExamLabelFor,
 }: {
   lead: Lead;
   onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
+  refreshLead: () => Promise<void>;
   targetExamPreferredOrder: readonly string[];
   targetExamLabelFor: (value: string) => string;
 }) {
   const br = lead.pipelineMeta?.brochure as
     | {
-        notes?: string;
-        fileName?: string | null;
-        storedFileUrl?: string | null;
-        documentUrl?: string | null;
-        generated?: boolean;
         sentWhatsApp?: boolean;
         sentEmail?: boolean;
         sentWhatsAppAt?: string;
         sentEmailAt?: string;
       }
     | undefined;
-  const [genPreview, setGenPreview] = useState(br?.generated ?? false);
-  const [notes, setNotes] = useState(br?.notes ?? "");
-  const [savedName, setSavedName] = useState<string | null>(
-    br?.fileName ?? null,
-  );
-  const [storedFileUrl, setStoredFileUrl] = useState<string | null>(
-    br?.storedFileUrl ?? null,
-  );
-  const [documentUrl, setDocumentUrl] = useState(br?.documentUrl ?? "");
-  const [uploadBusy, setUploadBusy] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [brochureEmailBusy, setBrochureEmailBusy] = useState(false);
-  const [brochureEmailErr, setBrochureEmailErr] = useState<string | null>(null);
-  const brochureFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [examCatalogGroup, setExamCatalogGroup] =
-    useState<ExamBrochureCatalogGroup | null>(null);
-  const [catalogSelectedKey, setCatalogSelectedKey] = useState("");
-  const [examBrochureCatalogLoading, setExamBrochureCatalogLoading] =
-    useState(true);
-  const brochureSkipAutosave = useRef(true);
-  const documentUrlSkipAutosave = useRef(true);
-  const leadBrRef = useRef(lead);
-  leadBrRef.current = lead;
+
+  const sr = lead.pipelineMeta?.studentReport as
+    | {
+        pdfUrl?: string | null;
+        fileName?: string | null;
+        generatedAt?: string | null;
+        sendConfirmedAt?: string | null;
+      }
+    | undefined;
 
   const [docStepFeedbackRow, setDocStepFeedbackRow] =
     useState<DemoTableRow | null>(null);
@@ -4653,79 +4635,12 @@ function BrochureSection({
   >([]);
   const [examBrochureTableLoading, setExamBrochureTableLoading] =
     useState(true);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [brochureEmailBusy, setBrochureEmailBusy] = useState(false);
+  const [brochureEmailErr, setBrochureEmailErr] = useState<string | null>(null);
 
   const persistedDemoRows: DemoTableRowPersisted[] =
     (lead.pipelineMeta?.demo as LeadPipelineDemo | undefined)?.rows ?? [];
-
-  const brochurePrimaryExam = useMemo(
-    () =>
-      primaryExamForFee(lead.targetExams, targetExamPreferredOrder),
-    [lead.targetExams, targetExamPreferredOrder],
-  );
-
-  useEffect(() => {
-    brochureSkipAutosave.current = true;
-    documentUrlSkipAutosave.current = true;
-  }, [lead.id]);
-
-  useEffect(() => {
-    const exam = brochurePrimaryExam;
-    if (!exam) {
-      setExamCatalogGroup(null);
-      setExamBrochureCatalogLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setExamBrochureCatalogLoading(true);
-    void (async () => {
-      try {
-        const res = await fetch("/api/exam-brochure-templates", {
-          cache: "no-store",
-        });
-        if (!res.ok || cancelled) return;
-        const rows = (await res.json()) as ExamBrochureCatalogGroup[];
-        const hit = Array.isArray(rows)
-          ? pickBrochureDocByExam(rows, exam)
-          : null;
-        const rawList = Array.isArray(hit?.brochures) ? hit!.brochures : [];
-        const normalized: ExamBrochureCatalogGroup | null = hit
-          ? {
-              exam: hit.exam,
-              brochures: rawList.map((raw) => ({
-                key: String(raw.key ?? ""),
-                title: typeof raw.title === "string" ? raw.title : "",
-                summary: typeof raw.summary === "string" ? raw.summary : "",
-                linkUrl: typeof raw.linkUrl === "string" ? raw.linkUrl : "",
-                linkLabel:
-                  typeof raw.linkLabel === "string" ? raw.linkLabel : "",
-                storedFileUrl:
-                  raw.storedFileUrl === null ||
-                  raw.storedFileUrl === undefined
-                    ? null
-                    : String(raw.storedFileUrl),
-                storedFileName:
-                  raw.storedFileName === null ||
-                  raw.storedFileName === undefined
-                    ? null
-                    : String(raw.storedFileName),
-              })),
-            }
-          : null;
-        if (!cancelled) {
-          setExamCatalogGroup(normalized);
-          setExamBrochureCatalogLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setExamCatalogGroup(null);
-          setExamBrochureCatalogLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [brochurePrimaryExam, lead.id]);
 
   useEffect(() => {
     const exams = lead.targetExams.filter(
@@ -4794,93 +4709,6 @@ function BrochureSection({
     };
   }, [lead.id, lead.targetExams, targetExamLabelFor]);
 
-  useEffect(() => {
-    const items = examCatalogGroup?.brochures ?? [];
-    if (!items.length) {
-      setCatalogSelectedKey("");
-      return;
-    }
-    setCatalogSelectedKey((prev) => {
-      if (prev && items.some((b) => b.key === prev)) return prev;
-      return brochureCatalogDefaultItem(items)?.key ?? items[0]!.key;
-    });
-  }, [examCatalogGroup, brochurePrimaryExam, lead.id]);
-
-  useEffect(() => {
-    const b = lead.pipelineMeta?.brochure as
-      | {
-          notes?: string;
-          fileName?: string | null;
-          storedFileUrl?: string | null;
-          documentUrl?: string | null;
-          generated?: boolean;
-        }
-      | undefined;
-    if (b) {
-      setNotes(b.notes ?? "");
-      setSavedName(b.fileName ?? null);
-      setStoredFileUrl(b.storedFileUrl ?? null);
-      setDocumentUrl(b.documentUrl ?? "");
-      setGenPreview(b.generated ?? false);
-    }
-  }, [lead.id, lead.pipelineMeta]);
-
-  const brochureFileLabel =
-    savedName ?? (documentUrl.trim() ? "Linked document" : "");
-  const hasUploadedBrochure = Boolean(storedFileUrl?.trim());
-  const documentPreviewSrc =
-    !hasUploadedBrochure && documentUrl.trim()
-      ? normalizeBrochurePreviewUrl(documentUrl)
-      : "";
-  const catalogSelectedItem = useMemo(() => {
-    const items = examCatalogGroup?.brochures ?? [];
-    if (!items.length) return null;
-    const byKey = items.find((b) => b.key === catalogSelectedKey);
-    if (byKey) return byKey;
-    return brochureCatalogDefaultItem(items);
-  }, [examCatalogGroup, catalogSelectedKey]);
-  const catalogBrochureSrc = useMemo(() => {
-    const stored = catalogSelectedItem?.storedFileUrl?.trim();
-    const link = catalogSelectedItem?.linkUrl?.trim();
-    const u = stored || link;
-    if (!u) return "";
-    return normalizeBrochurePreviewUrl(u);
-  }, [catalogSelectedItem?.storedFileUrl, catalogSelectedItem?.linkUrl]);
-  /** No per-student upload: lead document URL overrides course default. */
-  const defaultOrLeadPreviewSrc = hasUploadedBrochure
-    ? ""
-    : documentPreviewSrc || catalogBrochureSrc;
-  const defaultOrLeadPreviewLabel = hasUploadedBrochure
-    ? ""
-    : documentPreviewSrc
-      ? "Document link"
-      : catalogBrochureSrc
-        ? catalogSelectedItem?.storedFileUrl?.trim()
-          ? catalogSelectedItem?.storedFileName?.trim() ||
-            catalogSelectedItem?.title?.trim() ||
-            (brochurePrimaryExam
-              ? `${brochurePrimaryExam} brochure`
-              : "Course brochure")
-          : catalogSelectedItem?.title?.trim() ||
-            (brochurePrimaryExam
-              ? `${brochurePrimaryExam} brochure`
-              : "Course brochure")
-        : "";
-  const showCatalogTextOnly =
-    !hasUploadedBrochure &&
-    !examBrochureCatalogLoading &&
-    !defaultOrLeadPreviewSrc &&
-    Boolean(brochurePrimaryExam) &&
-    Boolean(
-      catalogSelectedItem?.title?.trim() ||
-        catalogSelectedItem?.summary?.trim(),
-    );
-  const showNoDefaultBrochureHint =
-    !hasUploadedBrochure &&
-    Boolean(brochurePrimaryExam) &&
-    !examBrochureCatalogLoading &&
-    !defaultOrLeadPreviewSrc &&
-    !showCatalogTextOnly;
   const formatSentAt = (iso?: string) => {
     if (!iso) return "";
     try {
@@ -4890,58 +4718,12 @@ function BrochureSection({
     }
   };
 
-  const brochurePayload = useCallback(
-    (patch: Record<string, unknown> = {}) => ({
-      notes,
-      fileName: savedName,
-      storedFileUrl,
-      documentUrl: documentUrl.trim(),
-      generated: genPreview,
-      ...patch,
-    }),
-    [notes, savedName, storedFileUrl, documentUrl, genPreview],
-  );
-
-  useEffect(() => {
-    if (brochureSkipAutosave.current) {
-      brochureSkipAutosave.current = false;
-      return;
-    }
-    const t = window.setTimeout(() => {
-      const L = leadBrRef.current;
-      const prev = (L.pipelineMeta?.brochure as { notes?: string } | undefined)
-        ?.notes;
-      if ((prev ?? "") === notes) return;
-      void onPatchLead({
-        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
-          brochure: brochurePayload(),
-        }),
-      });
-    }, 650);
-    return () => window.clearTimeout(t);
-  }, [notes, brochurePayload, onPatchLead]);
-
-  useEffect(() => {
-    if (documentUrlSkipAutosave.current) {
-      documentUrlSkipAutosave.current = false;
-      return;
-    }
-    const t = window.setTimeout(() => {
-      const L = leadBrRef.current;
-      const prev = (
-        L.pipelineMeta?.brochure as { documentUrl?: string } | undefined
-      )?.documentUrl;
-      if ((prev ?? "").trim() === documentUrl.trim()) return;
-      void onPatchLead({
-        pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
-          brochure: brochurePayload(),
-        }),
-      });
-    }, 650);
-    return () => window.clearTimeout(t);
-  }, [documentUrl, brochurePayload, onPatchLead]);
-
   const step1StudentLabel = lead.studentName?.trim() || "Student";
+
+  const reportPdfUrl = sr?.pdfUrl?.trim() ?? "";
+  const sendLabelBase = reportPdfUrl
+    ? "Send progress report"
+    : "Send course brochure";
 
   return (
     <section className={SX.section}>
@@ -4956,8 +4738,9 @@ function BrochureSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Demo feedback summary and brochures by exam (tables below). Then
-            preview, upload, or send your student-specific brochure.
+            Review demo feedback, browse course brochures, then generate a student
+            progress report (PDF) when you are ready. Confirm in the generator
+            before sending by email or WhatsApp.
           </p>
         </div>
       </div>
@@ -5162,363 +4945,42 @@ function BrochureSection({
           </div>
         </div>
 
-        {!brochurePrimaryExam ? (
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-3 text-[13px] text-amber-950">
-            <p className="font-semibold">No target exam selected</p>
-            <p className="mt-1 text-[12px] leading-snug text-amber-900/90">
-              Add target exams (e.g. NEET) on the lead row so the default
-              brochure from Course Brochures can load for this student.
+        <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-4">
+          <h3 className="text-[13px] font-semibold text-slate-900">
+            Generate student report
+          </h3>
+          <p className="mt-1 text-[12px] leading-snug text-slate-600">
+            Optional. Opens a form with demo feedback and your notes, builds a PDF
+            preview, and saves it on this lead. Confirm there when it is ready to
+            share, then use the buttons below.
+          </p>
+          {reportPdfUrl ? (
+            <p className="mt-2 text-[12px] text-slate-700">
+              <span className="font-medium">Latest PDF:</span>{" "}
+              {sr?.fileName ?? "Progress report"}{" "}
+              {sr?.generatedAt ? (
+                <span className="text-slate-500">
+                  · {formatSentAt(sr.generatedAt)}
+                </span>
+              ) : null}
+              {sr?.sendConfirmedAt ? (
+                <span className="ml-2 inline-flex rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-900">
+                  Ready to send
+                </span>
+              ) : (
+                <span className="ml-2 text-amber-800">
+                  Confirm in the generator when ready to email/WhatsApp the family.
+                </span>
+              )}
             </p>
-          </div>
-        ) : null}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            {hasUploadedBrochure ? (
-              <div className="space-y-3">
-                <BrochureInlinePreviewFrame
-                  src={storedFileUrl!.trim()}
-                  fileLabel={savedName ?? "Uploaded brochure"}
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="min-w-0 flex-1 truncate text-[12px] text-slate-500">
-                    This student&apos;s file — remove to show the course default
-                    again.
-                  </p>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[12px] font-semibold text-red-800 transition-colors hover:bg-red-100"
-                    onClick={() => {
-                      setUploadError(null);
-                      void (async () => {
-                        try {
-                          await fetch(`/api/leads/${lead.id}/brochure-upload`, {
-                            method: "DELETE",
-                          });
-                          setStoredFileUrl(null);
-                          setSavedName(null);
-                          const L = leadBrRef.current;
-                          await onPatchLead({
-                            pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
-                              brochure: brochurePayload({
-                                storedFileUrl: null,
-                                fileName: null,
-                              }),
-                            }),
-                          });
-                        } catch {
-                          setUploadError("Could not remove file");
-                        }
-                      })();
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-                {uploadError ? (
-                  <p className="text-[12px] text-[#c62828]">{uploadError}</p>
-                ) : null}
-              </div>
-            ) : (
-              <>
-                {brochurePrimaryExam && examBrochureCatalogLoading ? (
-                  <div
-                    className="mb-3 h-[min(280px,40vh)] min-h-[200px] animate-pulse rounded-2xl bg-slate-200/80 ring-1 ring-slate-200/60"
-                    aria-hidden
-                  />
-                ) : null}
-                {!examBrochureCatalogLoading &&
-                examCatalogGroup &&
-                examCatalogGroup.brochures.length > 1 ? (
-                  <div
-                    className="mb-3 flex flex-wrap gap-1.5"
-                    role="tablist"
-                    aria-label="Course brochures for this exam"
-                  >
-                    {examCatalogGroup.brochures.map((b) => {
-                      const tabLabel =
-                        b.title.trim() ||
-                        b.linkLabel.trim() ||
-                        b.storedFileName?.trim() ||
-                        "Brochure";
-                      return (
-                        <button
-                          key={b.key}
-                          type="button"
-                          role="tab"
-                          aria-selected={catalogSelectedKey === b.key}
-                          className={cn(
-                            "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                            catalogSelectedKey === b.key
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                          )}
-                          onClick={() => setCatalogSelectedKey(b.key)}
-                        >
-                          {tabLabel}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {!examBrochureCatalogLoading && defaultOrLeadPreviewSrc ? (
-                  <div className="mb-3 space-y-2">
-                    <BrochureInlinePreviewFrame
-                      src={defaultOrLeadPreviewSrc}
-                      fileLabel={defaultOrLeadPreviewLabel}
-                    />
-                    {documentPreviewSrc ? (
-                      <p className="text-[11px] text-slate-500">
-                        From the document URL on this lead (overrides the course
-                        default).
-                      </p>
-                    ) : catalogBrochureSrc ? (
-                      <p className="text-[11px] text-slate-500">
-                        Default from{" "}
-                        <Link
-                          href="/course-brochure"
-                          className="font-medium text-primary underline"
-                        >
-                          Course Brochures
-                        </Link>{" "}
-                        for this exam. Upload below to attach this
-                        student&apos;s own file.
-                      </p>
-                    ) : null}
-                    {catalogSelectedItem?.summary?.trim() &&
-                    catalogBrochureSrc &&
-                    !documentPreviewSrc ? (
-                      <button
-                        type="button"
-                        className={cn(SX.btnSecondary, "text-[12px]")}
-                        onClick={() => {
-                          const s = catalogSelectedItem!.summary.trim();
-                          if (!s) return;
-                          setNotes((prev) =>
-                            prev.trim() ? `${prev}\n\n${s}` : s,
-                          );
-                        }}
-                      >
-                        Insert template summary into notes
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {showCatalogTextOnly ? (
-                  <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-3 text-[13px] shadow-sm ring-1 ring-slate-900/5">
-                    {catalogSelectedItem?.title?.trim() ? (
-                      <p className="font-semibold text-slate-900">
-                        {catalogSelectedItem.title.trim()}
-                      </p>
-                    ) : null}
-                    {catalogSelectedItem?.summary?.trim() ? (
-                      <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">
-                        {catalogSelectedItem.summary}
-                      </p>
-                    ) : null}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {catalogSelectedItem?.summary?.trim() ? (
-                        <button
-                          type="button"
-                          className={cn(SX.btnSecondary, "text-[12px]")}
-                          onClick={() => {
-                            const s = catalogSelectedItem!.summary.trim();
-                            if (!s) return;
-                            setNotes((prev) =>
-                              prev.trim() ? `${prev}\n\n${s}` : s,
-                            );
-                          }}
-                        >
-                          Insert summary into notes
-                        </button>
-                      ) : null}
-                      <Link
-                        href="/course-brochure"
-                        className="text-[12px] font-medium text-primary hover:underline"
-                      >
-                        Edit in Course Brochures
-                      </Link>
-                    </div>
-                  </div>
-                ) : null}
-                {showNoDefaultBrochureHint ? (
-                  <p className="mb-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2.5 text-[12px] leading-snug text-slate-600">
-                    No course brochures for{" "}
-                    <span className="font-semibold">{brochurePrimaryExam}</span>{" "}
-                    in{" "}
-                    <Link
-                      href="/course-brochure"
-                      className="font-medium text-primary underline"
-                    >
-                      Course Brochures
-                    </Link>
-                    . Add a file or link there to preview the default here, or
-                    upload for this student.
-                  </p>
-                ) : null}
-                <label
-                  className={cn(
-                    "flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-slate-200 bg-slate-50/80 px-4 text-center text-[13px] text-slate-600",
-                    uploadBusy && "pointer-events-none opacity-70",
-                  )}
-                >
-                  <input
-                    ref={brochureFileInputRef}
-                    type="file"
-                    accept=".pdf,image/*"
-                    className="hidden"
-                    disabled={uploadBusy}
-                    onChange={(e) => {
-                      const nextFile = e.target.files?.[0] ?? null;
-                      if (!nextFile) {
-                        return;
-                      }
-                      setUploadError(null);
-                      setUploadBusy(true);
-                      void (async () => {
-                        try {
-                          const fd = new FormData();
-                          fd.set("file", nextFile);
-                          const res = await fetch(
-                            `/api/leads/${lead.id}/brochure-upload`,
-                            { method: "POST", body: fd },
-                          );
-                          const data = (await res.json().catch(() => ({}))) as {
-                            storedFileUrl?: string;
-                            fileName?: string;
-                            error?: string;
-                          };
-                          if (!res.ok) {
-                            throw new Error(data.error || "Upload failed");
-                          }
-                          if (!data.storedFileUrl || !data.fileName) {
-                            throw new Error("Invalid upload response");
-                          }
-                          setStoredFileUrl(data.storedFileUrl);
-                          setSavedName(data.fileName);
-                          if (brochureFileInputRef.current) {
-                            brochureFileInputRef.current.value = "";
-                          }
-                          const L = leadBrRef.current;
-                          await onPatchLead({
-                            pipelineMeta: mergePipelineMeta(L.pipelineMeta, {
-                              brochure: brochurePayload({
-                                storedFileUrl: data.storedFileUrl,
-                                fileName: data.fileName,
-                              }),
-                            }),
-                            activityLog: appendActivity(
-                              L.activityLog,
-                              "brochure",
-                              `Brochure saved on server: ${data.fileName}`,
-                            ),
-                          });
-                        } catch (err) {
-                          setUploadError(
-                            err instanceof Error
-                              ? err.message
-                              : "Upload failed",
-                          );
-                          const L = leadBrRef.current;
-                          const prevBr = L.pipelineMeta?.brochure as
-                            | {
-                                storedFileUrl?: string | null;
-                                fileName?: string | null;
-                              }
-                            | undefined;
-                          setStoredFileUrl(prevBr?.storedFileUrl ?? null);
-                          setSavedName(prevBr?.fileName ?? null);
-                          if (brochureFileInputRef.current) {
-                            brochureFileInputRef.current.value = "";
-                          }
-                        } finally {
-                          setUploadBusy(false);
-                        }
-                      })();
-                    }}
-                  />
-                  <IconCloudUpload />
-                  <span>
-                    {uploadBusy ? "Uploading…" : "Upload PDF or image"}
-                  </span>
-                  <span className="text-[12px] text-slate-400">
-                    PDF, JPG, PNG · max 12 MB
-                  </span>
-                </label>
-                {uploadError ? (
-                  <p className="mt-2 text-[12px] text-[#c62828]">
-                    {uploadError}
-                  </p>
-                ) : null}
-                {uploadBusy ? (
-                  <p className="mt-3 flex items-center justify-center gap-2.5 text-[13px] text-slate-600">
-                    <span
-                      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"
-                      aria-hidden
-                    />
-                    Uploading your brochure…
-                  </p>
-                ) : null}
-              </>
-            )}
-            {!hasUploadedBrochure ? (
-              <>
-                <div className="mt-4">
-                  <label className="text-[13px] font-semibold text-slate-900">
-                    Document URL (optional)
-                  </label>
-                  <input
-                    type="url"
-                    className={cn(SX.input, "mt-1.5 w-full")}
-                    placeholder="https://… (PDF or image link)"
-                    value={documentUrl}
-                    onChange={(e) => setDocumentUrl(e.target.value)}
-                    autoComplete="off"
-                  />
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Saves on this lead and replaces the course default in the
-                    preview above.
-                  </p>
-                </div>
-              </>
-            ) : null}
-          </div>
-          <div>
-            <label className="text-[13px] font-semibold text-slate-900">
-              Generate from performance notes
-            </label>
-            <textarea
-              rows={4}
-              className={cn(SX.textarea, "mt-2")}
-              placeholder="Demo performance notes, strengths, areas to improve…"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-            <button
-              type="button"
-              className={cn(SX.btnPrimary, "mt-2 gap-2")}
-              onClick={() => {
-                window.setTimeout(() => {
-                  setGenPreview(true);
-                  void onPatchLead({
-                    pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                      brochure: brochurePayload({ generated: true }),
-                    }),
-                    activityLog: appendActivity(
-                      lead.activityLog,
-                      "brochure",
-                      `Brochure generated from notes — saved on this lead${savedName ? ` (file: ${savedName})` : ""}.`,
-                    ),
-                  });
-                }, 400);
-              }}
-            >
-              <IconSparkles className="h-4 w-4 text-white" />
-              Generate brochure
-            </button>
-            {genPreview && (
-              <p className="mt-2 text-[13px] text-[#2e7d32]">Preview ready</p>
-            )}
-          </div>
+          ) : null}
+          <button
+            type="button"
+            className={cn(SX.btnPrimary, "mt-3")}
+            onClick={() => setReportModalOpen(true)}
+          >
+            {reportPdfUrl ? "Open report generator" : "Generate student report"}
+          </button>
         </div>
         <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
           <button
@@ -5530,12 +4992,16 @@ function BrochureSection({
                 : "bg-[#25d366] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]",
             )}
             onClick={() => {
-              const label = brochureFileLabel || "Course brochure";
+              const label =
+                reportPdfUrl && sr?.fileName?.trim()
+                  ? sr.fileName.trim()
+                  : reportPdfUrl
+                    ? "Student progress report"
+                    : "Course brochure";
               const now = new Date().toISOString();
               void onPatchLead({
                 pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
                   brochure: {
-                    ...brochurePayload(),
                     sentWhatsApp: true,
                     sentWhatsAppAt: now,
                   },
@@ -5543,7 +5009,7 @@ function BrochureSection({
                 activityLog: appendActivity(
                   lead.activityLog,
                   "brochure",
-                  `Brochure "${label}" marked sent via WhatsApp (saved on this lead).`,
+                  `"${label}" marked sent via WhatsApp (saved on this lead).`,
                 ),
               });
             }}
@@ -5559,7 +5025,7 @@ function BrochureSection({
                 ) : null}
               </>
             ) : (
-              "Send via WhatsApp"
+              `${sendLabelBase} · WhatsApp`
             )}
           </button>
           <button
@@ -5572,12 +5038,17 @@ function BrochureSection({
                 : SX.btnPrimary,
             )}
             onClick={() => {
-              const label = brochureFileLabel || "Course brochure";
+              const label =
+                reportPdfUrl && sr?.fileName?.trim()
+                  ? sr.fileName.trim()
+                  : reportPdfUrl
+                    ? "Student progress report"
+                    : "Course brochure";
               const now = new Date().toISOString();
               const to = lead.email?.trim();
               if (!to) {
                 setBrochureEmailErr(
-                  "Add an email on this lead before sending brochure by email.",
+                  "Add an email on this lead before sending by email.",
                 );
                 return;
               }
@@ -5591,7 +5062,6 @@ function BrochureSection({
                   await onPatchLead({
                     pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
                       brochure: {
-                        ...brochurePayload(),
                         sentEmail: true,
                         sentEmailAt: now,
                       },
@@ -5599,7 +5069,7 @@ function BrochureSection({
                     activityLog: appendActivity(
                       lead.activityLog,
                       "brochure",
-                      `Brochure "${label}" sent by email (saved on this lead).`,
+                      `"${label}" sent by email (saved on this lead).`,
                     ),
                   });
                 } catch (e) {
@@ -5625,7 +5095,7 @@ function BrochureSection({
             ) : brochureEmailBusy ? (
               "Sending…"
             ) : (
-              "Send via email"
+              `${sendLabelBase} · Email`
             )}
           </button>
         </div>
@@ -5633,10 +5103,16 @@ function BrochureSection({
           <p className="mt-2 text-[12px] text-[#b71c1c]">{brochureEmailErr}</p>
         ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Notes save automatically. Generate, upload, or send via WhatsApp /
-          email to advance the pipeline.
+          Saving a generated PDF or marking send advances the Documents step.
         </p>
       </div>
+      <StudentReportModal
+        open={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        lead={lead}
+        onPatchLead={onPatchLead}
+        refreshLead={refreshLead}
+      />
       <DemoTeacherFeedbackViewDialog
         row={docStepFeedbackRow}
         onClose={() => setDocStepFeedbackRow(null)}

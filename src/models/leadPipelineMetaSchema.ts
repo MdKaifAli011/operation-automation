@@ -73,6 +73,18 @@ const BrochureBlockSchema = new Schema(
   { _id: false },
 );
 
+const StudentReportBlockSchema = new Schema(
+  {
+    pdfUrl: { type: String, default: null },
+    fileName: { type: String, default: null },
+    generatedAt: { type: String, default: null },
+    additionalNotes: { type: String, default: "" },
+    recommendations: { type: String, default: "" },
+    sendConfirmedAt: { type: String, default: null },
+  },
+  { _id: false },
+);
+
 const FeesBlockSchema = new Schema(
   {
     scholarshipPct: { type: Number, default: 0 },
@@ -134,6 +146,7 @@ export const PipelineMetaSchema = new Schema(
   {
     demo: { type: DemoBlockSchema, default: () => ({ rows: [] }) },
     brochure: { type: BrochureBlockSchema, default: () => ({}) },
+    studentReport: { type: StudentReportBlockSchema, default: () => ({}) },
     fees: { type: FeesBlockSchema, default: () => ({}) },
     schedule: { type: ScheduleBlockSchema, default: () => ({}) },
   },

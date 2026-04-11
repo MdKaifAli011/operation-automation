@@ -130,6 +130,16 @@ export function buildLeadEmailVars(
   }
 
   if (key === "brochure") {
+    const sr = meta.studentReport as
+      | { pdfUrl?: string | null; fileName?: string | null }
+      | undefined;
+    const reportPath = str(sr?.pdfUrl);
+    if (reportPath) {
+      const brochureLink = absUrl(reportPath);
+      const brochureLabel =
+        str(sr?.fileName) || "Student progress report";
+      return { ...base, brochureLabel, brochureLink };
+    }
     const br = meta.brochure as
       | {
           fileName?: string | null;

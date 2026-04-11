@@ -7,7 +7,13 @@ export const PIPELINE_STEP_LABELS = [
   "Schedule",
 ] as const;
 
-const NESTED_META_KEYS = ["demo", "brochure", "fees", "schedule"] as const;
+const NESTED_META_KEYS = [
+  "demo",
+  "brochure",
+  "studentReport",
+  "fees",
+  "schedule",
+] as const;
 
 /** Derive 0–4 pipeline steps from stored pipelineMeta (single source of truth). */
 export function computePipelineStepsFromMeta(
@@ -21,6 +27,9 @@ export function computePipelineStepsFromMeta(
   const hasDemo = Array.isArray(demo?.rows) && demo.rows.length > 0;
   if (!hasDemo) return 0;
 
+  const sr = m.studentReport as { pdfUrl?: string | null } | undefined;
+  const studentReportDone = !!sr?.pdfUrl && String(sr.pdfUrl).trim().length > 0;
+
   const br = m.brochure as {
     generated?: boolean;
     sentWhatsApp?: boolean;
@@ -30,6 +39,7 @@ export function computePipelineStepsFromMeta(
     documentUrl?: string | null;
   } | undefined;
   const brochureDone =
+    studentReportDone ||
     !!br?.generated ||
     !!br?.sentWhatsApp ||
     !!br?.sentEmail ||
