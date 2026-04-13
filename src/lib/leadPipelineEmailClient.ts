@@ -3,6 +3,10 @@ export async function sendLeadPipelineEmail(
   body: {
     templateKey: string;
     demoRowIndex?: number;
+    demoStatusEmail?: {
+      status: "Scheduled" | "Completed" | "Cancelled";
+      row?: Record<string, unknown>;
+    };
     brochureEmail?: {
       selectionKeys: string[];
       includeStudentReportPdf: boolean;

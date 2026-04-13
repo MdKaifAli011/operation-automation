@@ -151,6 +151,7 @@ export function LeadManagementPage() {
         const exams = l.targetExams.join(" ").toLowerCase();
         return (
           l.studentName.toLowerCase().includes(q) ||
+          (l.email ?? "").toLowerCase().includes(q) ||
           l.phone.includes(q) ||
           exams.includes(q) ||
           l.country.toLowerCase().includes(q) ||
@@ -750,6 +751,7 @@ export function LeadManagementPage() {
                         ? exams.map((v) => targetExamLabel(v)).join(", ")
                         : "—"
                     }
+                    actionMenuHideOptions={{ interested: true }}
                     className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                     leads={applyDraftToList(ongoingInterestedLeads)}
                     sheetEditMode={sheetEditMode}
@@ -778,6 +780,7 @@ export function LeadManagementPage() {
               <LeadSheetTable
                 showFollowUpColumn
                 showPipelineColumn
+                actionMenuHideOptions={{ followUp: true }}
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(followUpLeads)}
                 sheetEditMode={sheetEditMode}
@@ -805,6 +808,7 @@ export function LeadManagementPage() {
                 showFollowUpColumn={false}
                 showPipelineColumn
                 showNotInterestedRemark
+                actionMenuHideOptions={{ notInterested: true }}
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(notInterestedLeads)}
                 sheetEditMode={sheetEditMode}

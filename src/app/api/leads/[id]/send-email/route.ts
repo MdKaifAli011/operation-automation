@@ -18,6 +18,7 @@ import {
 import { sendFeesEnrollmentBundleEmail } from "@/lib/email/sendFeesEnrollmentBundle";
 import { getEnrollmentTeamBccEmails } from "@/lib/email/enrollmentRecipients";
 import { normalizeMailRecipients } from "@/lib/email/mailRecipients";
+import { resolveTeacherEmailFromFacultyName } from "@/lib/faculty/resolveTeacherEmail";
 import {
   isEmailTemplateKey,
   type EmailTemplateKey,
@@ -28,6 +29,11 @@ export const runtime = "nodejs";
 type PostBody = {
   templateKey?: string;
   demoRowIndex?: number;
+  /** Step 1: status change email — row snapshot so copy matches UI before debounced save. */
+  demoStatusEmail?: {
+    status: "Scheduled" | "Completed" | "Cancelled";
+    row?: Record<string, unknown>;
+  };
   /** Step 2: which catalog brochures + optional PDF to include in one email. */
   brochureEmail?: {
     selectionKeys: string[];
@@ -116,6 +122,127 @@ export async function POST(
           { status: 400 },
         );
       }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (templateKey === "demo_status_update") {
+      const dse = body.demoStatusEmail;
+      if (!dse || typeof dse !== "object") {
+        return NextResponse.json(
+          {
+            error:
+              "demo_status_update requires demoStatusEmail: { status, row? }.",
+          },
+          { status: 400 },
+        );
+      }
+      const st = dse.status;
+      if (st !== "Scheduled" && st !== "Completed" && st !== "Cancelled") {
+        return NextResponse.json({ error: "Invalid demo status." }, { status: 400 });
+      }
+      if (typeof demoRowIndex !== "number" || demoRowIndex < 0) {
+        return NextResponse.json(
+          { error: "demoRowIndex is required for demo_status_update." },
+          { status: 400 },
+        );
+      }
+      const toAddr = typeof lead.email === "string" ? lead.email.trim() : "";
+      if (!toAddr) {
+        return NextResponse.json(
+          {
+            error:
+              "This lead has no email address. Add one on the lead first.",
+          },
+          { status: 400 },
+        );
+      }
+      const tmpl = await EmailTemplateModel.findOne({
+        key: "demo_status_update",
+      }).lean();
+      if (!tmpl) {
+        return NextResponse.json(
+          {
+            error:
+              "Template demo_status_update not found. Open Email templates to seed or create it.",
+          },
+          { status: 404 },
+        );
+      }
+      if (tmpl.enabled === false) {
+        return NextResponse.json(
+          {
+            error:
+              "The demo status update template is disabled. Enable it under Email Templates Management.",
+          },
+          { status: 400 },
+        );
+      }
+
+      const meta = (lead.pipelineMeta ?? {}) as Record<string, unknown>;
+      const demo = meta.demo as { rows?: unknown[] } | Record<string, unknown> | undefined;
+      const list = Array.isArray(demo?.rows) ? [...(demo as { rows: unknown[] }).rows] : [];
+      if (demoRowIndex >= list.length) {
+        return NextResponse.json(
+          { error: "Invalid demo row index." },
+          { status: 400 },
+        );
+      }
+      const snapshot =
+        dse.row && typeof dse.row === "object" && !Array.isArray(dse.row)
+          ? (dse.row as Record<string, unknown>)
+          : {};
+      const prevRow =
+        list[demoRowIndex] &&
+        typeof list[demoRowIndex] === "object" &&
+        list[demoRowIndex] !== null
+          ? (list[demoRowIndex] as Record<string, unknown>)
+          : {};
+      list[demoRowIndex] = { ...prevRow, ...snapshot, status: st };
+
+      const demoBucket =
+        demo && typeof demo === "object" && !Array.isArray(demo)
+          ? { ...demo, rows: list }
+          : { rows: list };
+      const mergedLead = {
+        ...lead,
+        pipelineMeta: { ...meta, demo: demoBucket },
+      };
+
+      const vars = buildLeadEmailVars(mergedLead, "demo_status_update", {
+        demoRowIndex,
+      });
+      const subject = renderTemplate(String(tmpl.subject), vars);
+      const html = renderTemplate(String(tmpl.bodyHtml), vars);
+
+      const teacherName = String(
+        (list[demoRowIndex] as { teacher?: string }).teacher ?? "",
+      ).trim();
+      const teacherEmail = teacherName
+        ? await resolveTeacherEmailFromFacultyName(teacherName)
+        : undefined;
+      const bccList = getEnrollmentTeamBccEmails();
+      const { to: toNorm, cc, bcc } = normalizeMailRecipients(
+        toAddr,
+        teacherEmail,
+        bccList,
+      );
+      await sendMail({ to: toNorm, subject, html, cc, bcc });
+
+      await LeadModel.findByIdAndUpdate(id, {
+        $push: {
+          activityLog: {
+            $each: [
+              {
+                at: new Date().toISOString(),
+                kind: "demo",
+                message: `Demo status email sent (${vars.demoStatusLabel}): ${vars.demoSummary}`,
+              },
+            ],
+            $position: 0,
+          },
+        },
+      });
+
       return NextResponse.json({ ok: true });
     }
 

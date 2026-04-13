@@ -56,6 +56,7 @@ export function AddStudentLeadDialog({
   }, [open, onClose]);
 
   const [studentName, setStudentName] = useState("");
+  const [email, setEmail] = useState("");
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [dialCode, setDialCode] = useState(() =>
     dialCodeForCountry(DEFAULT_COUNTRY),
@@ -112,6 +113,16 @@ export function AddStudentLeadDialog({
   const nationalHint =
     optionForCountry(country)?.nationalHint ?? "Local number";
 
+  const emailTrimmed = email.trim();
+  const emailError = useMemo(() => {
+    if (!emailTrimmed) return null;
+    if (emailTrimmed.length > 254) return "Email is too long.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+      return "Enter a valid email address.";
+    }
+    return null;
+  }, [emailTrimmed]);
+
   const toggleTarget = (exam: string) => {
     setTargetExams((prev) => {
       if (prev.includes(exam)) {
@@ -143,6 +154,10 @@ export function AddStudentLeadDialog({
       setError("Select at least one target exam.");
       return;
     }
+    if (emailError) {
+      setError(emailError);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -159,6 +174,7 @@ export function AddStudentLeadDialog({
           targetExams: [...targetExams],
           country: country.trim() || DEFAULT_COUNTRY,
           phone: national,
+          email: emailTrimmed,
           pipelineSteps: 0,
           rowTone: "new",
           sheetTab: "today",
@@ -175,6 +191,7 @@ export function AddStudentLeadDialog({
       }
       await onAdded();
       setStudentName("");
+      setEmail("");
       setNationalNumber("");
       setDialCode(dialCodeForCountry(DEFAULT_COUNTRY));
       setParentName("");
@@ -242,6 +259,36 @@ export function AddStudentLeadDialog({
               autoFocus={open}
               required
             />
+          </label>
+
+          <label className="block min-w-0 text-[12px] font-medium text-slate-700">
+            Student email
+            <input
+              type="email"
+              className={cn(
+                fieldFull,
+                emailError ? "border-rose-400 focus:border-rose-500 focus:ring-rose-200/80" : "",
+              )}
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError(null);
+              }}
+              placeholder="name@example.com (optional)"
+              autoComplete="email"
+              inputMode="email"
+              aria-invalid={Boolean(emailError)}
+            />
+            {emailError ? (
+              <p className="mt-1 text-[11px] text-rose-700" role="alert">
+                {emailError}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                Used for pipeline emails (documents, fees, enrollment). Optional —
+                edit anytime in the sheet.
+              </p>
+            )}
           </label>
 
           <label className="block min-w-0 text-[12px] font-medium text-slate-700">

@@ -1,5 +1,7 @@
 export const EMAIL_TEMPLATE_KEYS = [
   "demo_invite",
+  /** Fired when a demo row status becomes Scheduled, Completed, or Cancelled (student + teacher CC + enrollment BCC). */
+  "demo_status_update",
   "brochure",
   "fees",
   "enrollment",
@@ -41,6 +43,32 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
       "{{targetExams}}",
       "{{demoSummary}}",
       "{{meetLink}}",
+    ],
+  },
+  demo_status_update: {
+    name: "Demo status update",
+    description:
+      "Sent automatically when staff sets a trial row to scheduled, conducted, or canceled. Same routing as demo invite: student To, teacher CC when on file, enrollment BCC from ENROLLMENT_TEAM_BCC. Copy is parent-friendly; meeting links appear only for scheduled rows.",
+    editorTips: [
+      "Use {{demoStatusEmailSubject}} for the full subject line (set per status by the app).",
+      "{{demoStatusEmailBodyHtml}} is the main letter; {{demoStatusMeetSectionHtml}} adds the green join button (scheduled + link) or a “link pending” note — empty after conduct/cancel.",
+      "{{demoSummary}} remains a plain one-line summary for custom blocks; {{demoStatusLabel}} is a short log label.",
+    ],
+    placeholders: [
+      "{{studentName}}",
+      "{{parentName}}",
+      "{{email}}",
+      "{{phone}}",
+      "{{country}}",
+      "{{grade}}",
+      "{{targetExams}}",
+      "{{demoStatus}}",
+      "{{demoStatusLabel}}",
+      "{{demoSummary}}",
+      "{{meetLink}}",
+      "{{demoStatusEmailSubject}}",
+      "{{demoStatusEmailBodyHtml}}",
+      "{{demoStatusMeetSectionHtml}}",
     ],
   },
   brochure: {

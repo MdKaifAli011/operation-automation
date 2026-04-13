@@ -25,6 +25,19 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
 <p>Regards,<br/>Team</p>`,
   },
   {
+    key: "demo_status_update",
+    name: "Demo status update",
+    description:
+      "Automatic family email when a trial is scheduled, completed, or canceled — premium layout; link only when scheduled.",
+    sortOrder: 15,
+    subject: "{{demoStatusEmailSubject}}",
+    bodyHtml: `<div style="max-width:600px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;color:#212121;">
+{{demoStatusEmailBodyHtml}}
+{{demoStatusMeetSectionHtml}}
+<p style="margin:28px 0 0;padding-top:20px;border-top:1px solid #e0e0e0;font-size:14px;line-height:1.6;color:#546e7a;">With best wishes,<br/><span style="font-weight:600;color:#1565c0;letter-spacing:0.02em;">Admissions Team</span></p>
+</div>`,
+  },
+  {
     key: "brochure",
     name: "Brochure & documents",
     description: "Step 2 · catalog brochures and optional progress report PDF.",

@@ -277,7 +277,10 @@ function catalogSubjectNamesForExam(
 }
 
 /** Legacy: subjects from free-text faculty tags + course filter. */
-function subjectsForDemoCourseLegacy(faculties: Faculty[], course: string): string[] {
+function subjectsForDemoCourseLegacy(
+  faculties: Faculty[],
+  course: string,
+): string[] {
   const c = course.trim();
   if (!c) return [];
   const relevant = faculties.filter(
@@ -382,6 +385,89 @@ type DemoTableRow = {
   teacherFeedbackFollowUpHomework?: string;
 };
 
+/**
+ * Row text colors in Step 1 demo table by persisted `status`.
+ * Scheduled: yellow–gold (amber/yellow), not deep orange/rust.
+ * Cancelled: cool crimson/rose — visually far from scheduled browns.
+ */
+function demoRowTextTone(status: string) {
+  const slate = {
+    strong: "text-slate-900",
+    mid: "text-slate-800",
+    sub: "text-slate-600",
+    faint: "text-slate-500",
+    faint2: "text-slate-400",
+    cell: "",
+    cellMuted: "",
+    action: "",
+  };
+  switch (status) {
+    case "Scheduled":
+      return {
+        strong: "text-amber-900",
+        mid: "text-amber-800",
+        sub: "text-amber-700",
+        faint: "text-amber-600",
+        faint2: "text-amber-600",
+        cell: "text-amber-800",
+        cellMuted: "text-amber-700",
+        action: "text-amber-800",
+      };
+    case "Completed":
+      return {
+        strong: "text-emerald-900",
+        mid: "text-emerald-800",
+        sub: "text-emerald-700",
+        faint: "text-emerald-600",
+        faint2: "text-emerald-600",
+        cell: "text-emerald-900",
+        cellMuted: "text-emerald-800",
+        action: "text-emerald-900",
+      };
+    case "Cancelled":
+      return {
+        strong: "text-rose-900",
+        mid: "text-rose-800",
+        sub: "text-rose-700",
+        faint: "text-rose-600",
+        faint2: "text-rose-700",
+        cell: "text-rose-900",
+        cellMuted: "text-rose-800",
+        action: "text-rose-900",
+      };
+    default:
+      return slate;
+  }
+}
+
+function demoTableRowBg(status: string, rowIndex: number): string {
+  switch (status) {
+    case "Scheduled":
+      return "bg-amber-50";
+    case "Completed":
+      return "bg-emerald-50";
+    case "Cancelled":
+      return "bg-rose-50";
+    default:
+      return rowIndex % 2 === 1 ? SX.zebraRow : "";
+  }
+}
+
+/** Human-readable countdown: days, then hours, then minutes (omit zero units). */
+function formatDurationDaysHoursMinutes(totalMinutes: number): string {
+  let n = Math.max(0, Math.round(totalMinutes));
+  const days = Math.floor(n / (24 * 60));
+  n -= days * 24 * 60;
+  const hours = Math.floor(n / 60);
+  const mins = n - hours * 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} day${days === 1 ? "" : "s"}`);
+  if (hours > 0)
+    parts.push(`${hours} hr${hours === 1 ? "" : "s"}`);
+  if (mins > 0 || parts.length === 0) parts.push(`${mins} min`);
+  return parts.join(", ");
+}
+
 function activityIconForKind(kind: PipelineActivity["kind"]) {
   switch (kind) {
     case "demo":
@@ -412,7 +498,9 @@ function formatActivityTime(iso: string): string {
 function leadDateForInput(leadDate: string): string {
   if (/^\d{4}-\d{2}-\d{2}/.test(leadDate)) return leadDate.slice(0, 10);
   const parsed = parseISO(leadDate);
-  return isValid(parsed) ? format(parsed, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+  return isValid(parsed)
+    ? format(parsed, "yyyy-MM-dd")
+    : format(new Date(), "yyyy-MM-dd");
 }
 
 type HeroEditDraft = {
@@ -655,8 +743,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
     const gradeOk = (GRADE_OPTIONS as readonly string[]).includes(lead.grade);
     setHeroDraft({
       studentName: lead.studentName,
-      parentName:
-        lead.parentName.trim() === "—" ? "" : lead.parentName,
+      parentName: lead.parentName.trim() === "—" ? "" : lead.parentName,
       email: lead.email?.trim() ?? "",
       country,
       dialCode: dialCodeForCountry(country),
@@ -973,7 +1060,10 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                       className={cn(HERO_EDIT_INPUT, "mt-1")}
                       value={heroDraft.parentName}
                       onChange={(e) =>
-                        setHeroDraft({ ...heroDraft, parentName: e.target.value })
+                        setHeroDraft({
+                          ...heroDraft,
+                          parentName: e.target.value,
+                        })
                       }
                       placeholder="Optional"
                       autoComplete="name"
@@ -1019,10 +1109,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                       aria-label="Lead source"
                     >
                       {leadSources.map((o) => (
-                        <option
-                          key={`${o.abbrev}-${o.value}`}
-                          value={o.value}
-                        >
+                        <option key={`${o.abbrev}-${o.value}`} value={o.value}>
                           {o.abbrev} — {o.label}
                         </option>
                       ))}
@@ -1185,10 +1272,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
               {!heroEditing ? (
                 <p className="mt-2">
                   <span className={SX.studentHeroSubLabel}>Email</span>{" "}
-                  <span
-                    className={SX.studentHeroSubVal}
-                    title={extras.email}
-                  >
+                  <span className={SX.studentHeroSubVal} title={extras.email}>
                     {extras.email}
                   </span>
                 </p>
@@ -2024,6 +2108,11 @@ function DemoSection({
   >(null);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [demoStatusConfirm, setDemoStatusConfirm] = useState<{
+    rowIndex: number;
+    nextStatus: "Completed" | "Cancelled";
+    label: string;
+  } | null>(null);
   const [, bumpFeedbackClock] = useState(0);
 
   useEffect(() => {
@@ -2139,11 +2228,14 @@ function DemoSection({
       .catch(() => {});
   }, []);
 
+  const demoStatusEmailPrevRef = useRef<string[]>([]);
+
   useEffect(() => {
     lastFailedSlotRef.current = {};
     setMeetErrors({});
     prevMeetRowIdsRef.current = new Set();
     prevDemoStatusRef.current = {};
+    demoStatusEmailPrevRef.current = [];
   }, [lead.id]);
 
   useEffect(() => {
@@ -2266,6 +2358,68 @@ function DemoSection({
     lead.email,
     lead.id,
   ]);
+
+  const sendDemoStatusUpdateEmail = useCallback(
+    async (rowIndex: number, row: DemoTableRow) => {
+      const status = row.status;
+      if (
+        status !== "Scheduled" &&
+        status !== "Completed" &&
+        status !== "Cancelled"
+      ) {
+        return;
+      }
+      if (!lead.email?.trim()) {
+        setFeedbackError(
+          "Add an email on this lead to send demo status updates to the family.",
+        );
+        return;
+      }
+      setFeedbackError(null);
+      try {
+        await sendLeadPipelineEmail(lead.id, {
+          templateKey: "demo_status_update",
+          demoRowIndex: rowIndex,
+          demoStatusEmail: {
+            status,
+            row: { ...row },
+          },
+        });
+        setFeedbackNotice(
+          status === "Completed"
+            ? "Conducted — status update emailed."
+            : status === "Cancelled"
+              ? "Canceled — status update emailed."
+              : "Scheduled — status update emailed.",
+        );
+        await refreshLead();
+      } catch (e) {
+        setFeedbackError(
+          e instanceof Error ? e.message : "Could not send status email.",
+        );
+      }
+    },
+    [lead.email, lead.id, refreshLead],
+  );
+
+  useEffect(() => {
+    const prevArr = demoStatusEmailPrevRef.current;
+    const nextPrev: string[] = [];
+    rows.forEach((row, i) => {
+      const prev = prevArr[i];
+      if (
+        prev !== undefined &&
+        prev !== row.status &&
+        (row.status === "Scheduled" ||
+          row.status === "Completed" ||
+          row.status === "Cancelled")
+      ) {
+        void sendDemoStatusUpdateEmail(i, row);
+      }
+      nextPrev[i] = row.status;
+    });
+    demoStatusEmailPrevRef.current = nextPrev;
+  }, [rows, sendDemoStatusUpdateEmail]);
 
   useEffect(() => {
     const r = (lead.pipelineMeta?.demo as { rows?: DemoTableRow[] } | undefined)
@@ -2659,13 +2813,16 @@ function DemoSection({
                       Boolean(feedbackEligibleAt) &&
                       feedbackCountdownMin === null &&
                       !r.teacherFeedbackSubmittedAt;
+                    const demoTx = demoRowTextTone(r.status);
+                    const demoRowBg = demoTableRowBg(r.status, i);
                     return (
                       <tr key={meetId ?? i} className="min-h-[44px]">
                         <td
                           className={cn(
                             SX.dataTd,
+                            demoTx.cell,
+                            demoRowBg,
                             "py-2.5 align-top tabular-nums",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           {i + 1}
@@ -2673,8 +2830,9 @@ function DemoSection({
                         <td
                           className={cn(
                             SX.dataTd,
+                            demoTx.cell,
+                            demoRowBg,
                             "max-w-[120px] py-2.5 align-top font-medium",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           {r.subject}
@@ -2682,8 +2840,9 @@ function DemoSection({
                         <td
                           className={cn(
                             SX.dataTd,
+                            demoTx.cell,
+                            demoRowBg,
                             "max-w-[min(200px,28vw)] py-2.5 align-top text-[12px] leading-snug",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           {r.teacher}
@@ -2691,21 +2850,34 @@ function DemoSection({
                         <td
                           className={cn(
                             SX.dataTd,
+                            demoTx.cell,
+                            demoRowBg,
                             "min-w-[128px] py-2.5 align-top",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           {slot ? (
                             <>
-                              <div className="text-[13px] font-medium leading-tight text-slate-900">
+                              <div
+                                className={cn(
+                                  "text-[13px] font-medium leading-tight",
+                                  demoTx.strong,
+                                )}
+                              >
                                 {format(parseISO(r.isoDate), "d MMM yyyy")}
                               </div>
-                              <div className="mt-0.5 text-[12px] leading-tight text-slate-600">
+                              <div
+                                className={cn(
+                                  "mt-0.5 text-[12px] leading-tight",
+                                  demoTx.sub,
+                                )}
+                              >
                                 {formatTime12hInZone(slot, "Asia/Kolkata")} IST
                               </div>
                             </>
                           ) : (
-                            <span className="text-[12px] text-slate-400">
+                            <span
+                              className={cn("text-[12px]", demoTx.faint2)}
+                            >
                               —
                             </span>
                           )}
@@ -2713,16 +2885,27 @@ function DemoSection({
                         <td
                           className={cn(
                             SX.dataTdMuted,
+                            demoTx.cellMuted,
+                            demoRowBg,
                             "min-w-[148px] py-2.5 align-top",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           {slot ? (
                             <>
-                              <div className="text-[13px] font-medium leading-tight text-slate-800">
+                              <div
+                                className={cn(
+                                  "text-[13px] font-medium leading-tight",
+                                  demoTx.mid,
+                                )}
+                              >
                                 {formatDateInZone(slot, r.studentTimeZone)}
                               </div>
-                              <div className="mt-0.5 text-[12px] leading-tight text-slate-600">
+                              <div
+                                className={cn(
+                                  "mt-0.5 text-[12px] leading-tight",
+                                  demoTx.sub,
+                                )}
+                              >
                                 {formatTime12hInZone(slot, r.studentTimeZone)}{" "}
                                 {timeZoneShortLabelForMessages(
                                   r.studentTimeZone,
@@ -2731,39 +2914,48 @@ function DemoSection({
                               </div>
                             </>
                           ) : (
-                            <span className="text-[12px]">—</span>
+                            <span className={cn("text-[12px]", demoTx.faint2)}>
+                              —
+                            </span>
                           )}
                         </td>
                         <td
                           className={cn(
                             SX.dataTd,
+                            demoTx.cell,
+                            demoRowBg,
                             "max-w-[min(220px,40vw)] py-2.5 align-top",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           {r.status === "Cancelled" ? (
-                            <span className="text-[11px] leading-snug text-slate-400">
+                            <span
+                              className={cn(
+                                "text-[11px] leading-snug",
+                                demoTx.faint2,
+                              )}
+                            >
                               Meet link and teacher slot released for this time.
                             </span>
                           ) : r.meetLinkUrl ? (
-                            <div className="flex items-center gap-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <button
                                 type="button"
                                 className={cn(
                                   demoActionBtn,
-                                  "h-7 w-7 px-0",
+                                  demoTx.action,
+                                  "h-7 px-2",
                                   copiedMeetRowId === meetId &&
                                     "border-emerald-500 bg-emerald-50 text-emerald-700",
                                 )}
-                                title="Copy meet link"
-                                aria-label="Copy meet link"
+                                title="Copy class link"
+                                aria-label="Copy class link"
                                 onClick={() => {
                                   void copyTextToClipboard(r.meetLinkUrl!).then(
                                     (ok) => {
                                       if (ok) {
                                         setCopiedMeetRowId(meetId ?? null);
                                         setFeedbackNotice(
-                                          "Meet link copied to clipboard.",
+                                          "Class link copied to clipboard.",
                                         );
                                       } else {
                                         setFeedbackError(
@@ -2774,7 +2966,7 @@ function DemoSection({
                                   );
                                 }}
                               >
-                                <IconClipboard className="h-3.5 w-3.5" />
+                                Class link
                               </button>
                               {copiedMeetRowId === meetId ? (
                                 <span className="text-[10px] font-medium text-emerald-700">
@@ -2788,12 +2980,16 @@ function DemoSection({
                                 {meetErrors[meetId]}
                               </span>
                             ) : (
-                              <span className="text-[11px] text-slate-500">
+                              <span
+                                className={cn("text-[11px]", demoTx.faint)}
+                              >
                                 Reserving a link…
                               </span>
                             )
                           ) : (
-                            <span className="text-[12px] text-slate-400">
+                            <span
+                              className={cn("text-[12px]", demoTx.faint2)}
+                            >
                               —
                             </span>
                           )}
@@ -2801,33 +2997,51 @@ function DemoSection({
                         <td
                           className={cn(
                             SX.dataTd,
+                            demoTx.cell,
+                            demoRowBg,
                             "max-w-[min(200px,34vw)] py-2.5 align-top",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           {r.status === "Cancelled" ? (
-                            <span className="text-[12px] text-slate-400">
+                            <span
+                              className={cn("text-[12px]", demoTx.faint2)}
+                            >
                               —
                             </span>
                           ) : r.teacherFeedbackSubmittedAt ? (
                             <button
                               type="button"
-                              className={demoActionBtn}
+                              className={cn(demoActionBtn, demoTx.action)}
                               onClick={() => setFeedbackViewRow(r)}
                             >
                               View feedback
                             </button>
                           ) : !meetId || !feedbackEligibleAt ? (
-                            <span className="text-[12px] text-slate-400">
+                            <span
+                              className={cn("text-[12px]", demoTx.faint2)}
+                            >
                               —
                             </span>
                           ) : feedbackCountdownMin !== null ? (
-                            <span className="text-[11px] leading-snug text-slate-500">
+                            <span
+                              className={cn(
+                                "text-[11px] leading-snug",
+                                demoTx.faint,
+                              )}
+                            >
                               Form unlocks in{" "}
                               <span className="tabular-nums font-medium">
-                                {feedbackCountdownMin}
+                                {formatDurationDaysHoursMinutes(
+                                  feedbackCountdownMin,
+                                )}
                               </span>{" "}
-                              min (after {feedbackAfterMin} min from start).
+                              (after{" "}
+                              <span className="tabular-nums font-medium">
+                                {formatDurationDaysHoursMinutes(
+                                  feedbackAfterMin,
+                                )}
+                              </span>{" "}
+                              from session start).
                             </span>
                           ) : feedbackCanSend ? (
                             <div className="flex flex-col gap-1.5">
@@ -2836,14 +3050,23 @@ function DemoSection({
                                   Awaiting teacher response
                                 </span>
                               ) : (
-                                <span className="inline-flex w-fit rounded-none border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-600">
+                                <span
+                                  className={cn(
+                                    "inline-flex w-fit rounded-none border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px]",
+                                    demoTx.sub,
+                                  )}
+                                >
                                   Ready to send
                                 </span>
                               )}
                               <div className="flex flex-wrap gap-1">
                                 <button
                                   type="button"
-                                  className={cn(demoActionBtn, "text-[10px]")}
+                                  className={cn(
+                                    demoActionBtn,
+                                    demoTx.action,
+                                    "text-[10px]",
+                                  )}
                                   disabled={feedbackBusyMeetRowId === meetId}
                                   onClick={() =>
                                     void sendTeacherFeedbackInvite(meetId, true)
@@ -2853,7 +3076,11 @@ function DemoSection({
                                 </button>
                                 <button
                                   type="button"
-                                  className={cn(demoActionBtn, "h-7 w-7 px-0")}
+                                  className={cn(
+                                    demoActionBtn,
+                                    demoTx.action,
+                                    "h-7 w-7 px-0",
+                                  )}
                                   disabled={feedbackBusyMeetRowId === meetId}
                                   title="Copy teacher feedback link"
                                   aria-label="Copy teacher feedback link"
@@ -2878,7 +3105,9 @@ function DemoSection({
                               </div>
                             </div>
                           ) : (
-                            <span className="text-[12px] text-slate-400">
+                            <span
+                              className={cn("text-[12px]", demoTx.faint2)}
+                            >
                               —
                             </span>
                           )}
@@ -2886,39 +3115,61 @@ function DemoSection({
                         <td
                           className={cn(
                             SX.dataTd,
+                            demoTx.cell,
+                            demoRowBg,
                             "min-w-[200px] py-2.5 align-top",
-                            i % 2 === 1 && SX.zebraRow,
                           )}
                         >
                           <div className="flex flex-col gap-2">
-                            <label className="sr-only" htmlFor={`demo-status-${meetId ?? i}`}>
+                            <label
+                              className="sr-only"
+                              htmlFor={`demo-status-${meetId ?? i}`}
+                            >
                               Demo status for {r.subject}
                             </label>
                             <select
                               id={`demo-status-${meetId ?? i}`}
                               className={cn(
                                 SX.select,
+                                demoTx.strong,
                                 "h-8 w-full min-w-[min(100%,12rem)] max-w-[220px] text-[12px]",
                               )}
                               value={r.status}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === "Completed" || v === "Cancelled") {
+                                  const label = [r.subject, r.teacher]
+                                    .map((x) => x?.trim())
+                                    .filter(Boolean)
+                                    .join(" · ");
+                                  setDemoStatusConfirm({
+                                    rowIndex: i,
+                                    nextStatus: v,
+                                    label: label || "This demo",
+                                  });
+                                  return;
+                                }
                                 setRows((prev) =>
                                   prev.map((row, j) =>
-                                    j === i
-                                      ? { ...row, status: e.target.value }
-                                      : row,
+                                    j === i ? { ...row, status: v } : row,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                             >
-                              <option value="Scheduled">Mark as scheduled</option>
-                              <option value="Completed">Mark as conducted</option>
-                              <option value="Cancelled">Mark as canceled</option>
+                              <option value="Scheduled">
+                                Mark as scheduled
+                              </option>
+                              <option value="Completed">
+                                Mark as conducted
+                              </option>
+                              <option value="Cancelled">
+                                Mark as canceled
+                              </option>
                             </select>
                             <div className="flex flex-wrap items-center gap-1">
                               <button
                                 type="button"
-                                className={demoActionBtn}
+                                className={cn(demoActionBtn, demoTx.action)}
                                 aria-label="Edit demo"
                                 onClick={() => {
                                   setEditDraft({ ...r });
@@ -2935,7 +3186,12 @@ function DemoSection({
                                   demoActionBtn,
                                   r.inviteSent
                                     ? "border-2 border-emerald-600 bg-emerald-50 font-semibold text-emerald-900 shadow-sm"
-                                    : "text-primary hover:border-primary/40 hover:bg-primary/10",
+                                    : demoTx.action
+                                      ? cn(
+                                          demoTx.action,
+                                          "hover:border-primary/40 hover:bg-primary/10",
+                                        )
+                                      : "text-primary hover:border-primary/40 hover:bg-primary/10",
                                 )}
                                 aria-label={
                                   r.inviteSent
@@ -3066,6 +3322,22 @@ function DemoSection({
           </p>
         </div>
       </div>
+      <DemoStatusChangeConfirmDialog
+        pending={demoStatusConfirm}
+        onDismiss={() => setDemoStatusConfirm(null)}
+        onConfirm={() => {
+          setDemoStatusConfirm((cur) => {
+            if (!cur) return null;
+            const { rowIndex, nextStatus } = cur;
+            setRows((prev) =>
+              prev.map((row, j) =>
+                j === rowIndex ? { ...row, status: nextStatus } : row,
+              ),
+            );
+            return null;
+          });
+        }}
+      />
       <DemoEditRowDialog
         open={rowAction?.type === "edit"}
         draft={editDraft}
@@ -3623,6 +3895,123 @@ function DemoScheduleSuccessDialog({
   );
 }
 
+function DemoStatusChangeConfirmDialog({
+  pending,
+  onDismiss,
+  onConfirm,
+}: {
+  pending: {
+    rowIndex: number;
+    nextStatus: "Completed" | "Cancelled";
+    label: string;
+  } | null;
+  onDismiss: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (pending) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [pending]);
+
+  useEffect(() => {
+    if (!pending) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdropMouseDown = (e: MouseEvent) => {
+      if (e.target === dlg) onDismiss();
+    };
+    dlg.addEventListener("mousedown", onBackdropMouseDown);
+    return () => dlg.removeEventListener("mousedown", onBackdropMouseDown);
+  }, [pending, onDismiss]);
+
+  const isConducted = pending?.nextStatus === "Completed";
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-1.5rem,26rem)] max-h-[min(90vh,520px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-[#d0d0d0] bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onDismiss}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="demo-status-confirm-title"
+      aria-describedby="demo-status-confirm-desc"
+    >
+      {pending ? (
+        <>
+          <div
+            className={cn(
+              "border-b px-3 py-2.5",
+              isConducted
+                ? "border-emerald-200 bg-emerald-50"
+                : "border-rose-200 bg-rose-50",
+            )}
+          >
+            <h2
+              id="demo-status-confirm-title"
+              className={cn(
+                "text-[13px] font-bold tracking-tight",
+                isConducted ? "text-emerald-900" : "text-rose-900",
+              )}
+            >
+              {isConducted
+                ? "Mark demo as conducted?"
+                : "Cancel this demo?"}
+            </h2>
+          </div>
+          <div className="max-h-[min(50vh,280px)] overflow-y-auto px-3 py-3">
+            <p
+              id="demo-status-confirm-desc"
+              className="text-[13px] leading-relaxed text-[#37474f]"
+            >
+              <span className="font-semibold text-[#263238]">
+                {pending.label}
+              </span>
+              {isConducted ? (
+                <>
+                  {" "}
+                  — Confirm only if this trial class took place. The teacher
+                  and Meet reservation will be released after you confirm.
+                </>
+              ) : (
+                <>
+                  {" "}
+                  — The Google Meet link and teacher slot will be released.
+                  This cannot be undone from here without rescheduling.
+                </>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-[#eceff1] bg-[#fafafa] px-3 py-2.5">
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              onClick={onDismiss}
+            >
+              Cancel
+            </button>
+            <button type="button" className={SX.btnPrimary} onClick={onConfirm}>
+              {isConducted ? "Yes, mark as conducted" : "Yes, cancel demo"}
+            </button>
+          </div>
+        </>
+      ) : null}
+    </dialog>
+  );
+}
+
 function DemoScheduleWarningDialog({
   message,
   onDismiss,
@@ -3932,7 +4321,7 @@ function DemoForm({
     setCourse((c) =>
       demoTargetOptions.includes(c)
         ? c
-        : demoTargetOptions[0] ?? canonicalTargetExams[0] ?? "",
+        : (demoTargetOptions[0] ?? canonicalTargetExams[0] ?? ""),
     );
   }, [demoTargetOptions, canonicalTargetExams]);
 
@@ -3958,7 +4347,7 @@ function DemoForm({
   const [teacher, setTeacher] = useState("");
 
   useEffect(() => {
-    const nextSub = subs.includes(subj) ? subj : subs[0] ?? "";
+    const nextSub = subs.includes(subj) ? subj : (subs[0] ?? "");
     if (nextSub !== subj) {
       setSubj(nextSub);
       setTeacher(
@@ -4018,12 +4407,7 @@ function DemoForm({
     const active = faculties.filter((f) => f.active);
     const pool =
       subj.trim() && course.trim()
-        ? facultiesTeachingSubject(
-            course,
-            subj,
-            active,
-            examSubjectNameById,
-          )
+        ? facultiesTeachingSubject(course, subj, active, examSubjectNameById)
         : active;
     const usePool = pool.length > 0 ? pool : active;
     return usePool.map((f) => f.name);
@@ -4663,7 +5047,9 @@ function BrochureSection({
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [brochureEmailBusy, setBrochureEmailBusy] = useState(false);
   const [brochureEmailErr, setBrochureEmailErr] = useState<string | null>(null);
-  const [selectedBrochureKeys, setSelectedBrochureKeys] = useState<string[]>([]);
+  const [selectedBrochureKeys, setSelectedBrochureKeys] = useState<string[]>(
+    [],
+  );
   const [includeReportInEmail, setIncludeReportInEmail] = useState(false);
 
   const persistedDemoRows: DemoTableRowPersisted[] =
@@ -4699,8 +5085,7 @@ function BrochureSection({
               title: typeof raw.title === "string" ? raw.title : "",
               summary: typeof raw.summary === "string" ? raw.summary : "",
               linkUrl: typeof raw.linkUrl === "string" ? raw.linkUrl : "",
-              linkLabel:
-                typeof raw.linkLabel === "string" ? raw.linkLabel : "",
+              linkLabel: typeof raw.linkLabel === "string" ? raw.linkLabel : "",
               storedFileUrl:
                 raw.storedFileUrl === null || raw.storedFileUrl === undefined
                   ? null
@@ -4742,7 +5127,9 @@ function BrochureSection({
 
   useEffect(() => {
     if (examBrochureTableLoading) return;
-    const withDoc = examBrochureTableRows.filter((r) => r.href).map((r) => r.key);
+    const withDoc = examBrochureTableRows
+      .filter((r) => r.href)
+      .map((r) => r.key);
     setSelectedBrochureKeys((prev) => {
       if (prev.length === 0 && withDoc.length > 0) return withDoc;
       return prev.filter((k) => withDoc.includes(k));
@@ -4826,75 +5213,76 @@ function BrochureSection({
                       </td>
                     </tr>
                   ) : (
-                    persistedDemoRows.map((row: DemoTableRowPersisted, i: number) => {
-                      const submitted = Boolean(
-                        row.teacherFeedbackSubmittedAt?.trim(),
-                      );
-                      const dateLabel = (() => {
-                        if (!row.isoDate?.trim()) return "—";
-                        try {
-                          return format(
-                            parseISO(row.isoDate),
-                            "d MMM yyyy",
-                          );
-                        } catch {
-                          return row.isoDate;
-                        }
-                      })();
-                      const feedbackLabel = submitted
-                        ? (() => {
-                            try {
-                              return format(
-                                parseISO(row.teacherFeedbackSubmittedAt!),
-                                "dd MMM yyyy, HH:mm",
-                              );
-                            } catch {
-                              return "Submitted";
-                            }
-                          })()
-                        : row.teacherFeedbackInviteSentAt?.trim()
-                          ? "Pending (invite sent)"
-                          : "—";
-                      return (
-                        <tr key={row.meetRowId || `${row.isoDate}-${i}`}>
-                          <td className={SX.dataTd}>{dateLabel}</td>
-                          <td className={cn(SX.dataTd, "tabular-nums")}>
-                            {row.timeHmIST?.trim() || "—"}
-                          </td>
-                          <td className={SX.dataTd}>
-                            {row.subject?.trim() || "—"}
-                          </td>
-                          <td className={SX.dataTd}>
-                            {row.teacher?.trim() || "—"}
-                          </td>
-                          <td className={SX.dataTd}>
-                            {overallDemoRatingLabel(row.teacherFeedbackRating)}
-                          </td>
-                          <td className={cn(SX.dataTd, "text-[12px]")}>
-                            {feedbackLabel}
-                          </td>
-                          <td className={SX.dataTd}>
-                            {submitted ? (
-                              <button
-                                type="button"
-                                className="text-[12px] font-semibold text-primary hover:underline"
-                                onClick={() =>
-                                  setDocStepFeedbackRow(
-                                    persistedDemoToTableRow(row),
-                                  )
-                                }
-                              >
-                                View
-                              </button>
-                            ) : (
-                              <span className="text-[12px] text-slate-400">
-                                —
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
+                    persistedDemoRows.map(
+                      (row: DemoTableRowPersisted, i: number) => {
+                        const submitted = Boolean(
+                          row.teacherFeedbackSubmittedAt?.trim(),
+                        );
+                        const dateLabel = (() => {
+                          if (!row.isoDate?.trim()) return "—";
+                          try {
+                            return format(parseISO(row.isoDate), "d MMM yyyy");
+                          } catch {
+                            return row.isoDate;
+                          }
+                        })();
+                        const feedbackLabel = submitted
+                          ? (() => {
+                              try {
+                                return format(
+                                  parseISO(row.teacherFeedbackSubmittedAt!),
+                                  "dd MMM yyyy, HH:mm",
+                                );
+                              } catch {
+                                return "Submitted";
+                              }
+                            })()
+                          : row.teacherFeedbackInviteSentAt?.trim()
+                            ? "Pending (invite sent)"
+                            : "—";
+                        return (
+                          <tr key={row.meetRowId || `${row.isoDate}-${i}`}>
+                            <td className={SX.dataTd}>{dateLabel}</td>
+                            <td className={cn(SX.dataTd, "tabular-nums")}>
+                              {row.timeHmIST?.trim() || "—"}
+                            </td>
+                            <td className={SX.dataTd}>
+                              {row.subject?.trim() || "—"}
+                            </td>
+                            <td className={SX.dataTd}>
+                              {row.teacher?.trim() || "—"}
+                            </td>
+                            <td className={SX.dataTd}>
+                              {overallDemoRatingLabel(
+                                row.teacherFeedbackRating,
+                              )}
+                            </td>
+                            <td className={cn(SX.dataTd, "text-[12px]")}>
+                              {feedbackLabel}
+                            </td>
+                            <td className={SX.dataTd}>
+                              {submitted ? (
+                                <button
+                                  type="button"
+                                  className="text-[12px] font-semibold text-primary hover:underline"
+                                  onClick={() =>
+                                    setDocStepFeedbackRow(
+                                      persistedDemoToTableRow(row),
+                                    )
+                                  }
+                                >
+                                  View
+                                </button>
+                              ) : (
+                                <span className="text-[12px] text-slate-400">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      },
+                    )
                   )}
                 </tbody>
               </table>
@@ -4931,11 +5319,15 @@ function BrochureSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {lead.targetExams.filter((x) => typeof x === "string" && x.trim())
-                      .length === 0 ? (
+                    {lead.targetExams.filter(
+                      (x) => typeof x === "string" && x.trim(),
+                    ).length === 0 ? (
                       <tr>
                         <td
-                          className={cn(SX.dataTd, "text-[13px] text-slate-500")}
+                          className={cn(
+                            SX.dataTd,
+                            "text-[13px] text-slate-500",
+                          )}
                           colSpan={5}
                         >
                           Add target exams on the lead row to list brochures
@@ -4945,7 +5337,10 @@ function BrochureSection({
                     ) : examBrochureTableRows.length === 0 ? (
                       <tr>
                         <td
-                          className={cn(SX.dataTd, "text-[13px] text-slate-500")}
+                          className={cn(
+                            SX.dataTd,
+                            "text-[13px] text-slate-500",
+                          )}
                           colSpan={5}
                         >
                           No brochure documents configured for these exams in{" "}
@@ -5013,7 +5408,9 @@ function BrochureSection({
                   className="font-medium text-primary underline"
                   onClick={() =>
                     setSelectedBrochureKeys(
-                      examBrochureTableRows.filter((r) => r.href).map((r) => r.key),
+                      examBrochureTableRows
+                        .filter((r) => r.href)
+                        .map((r) => r.key),
                     )
                   }
                 >
@@ -5040,9 +5437,9 @@ function BrochureSection({
             Generate student report
           </h3>
           <p className="mt-1 text-[12px] leading-snug text-slate-600">
-            Optional. Opens a form with demo feedback and your notes, builds a PDF
-            preview, and saves it on this lead. Confirm there when it is ready to
-            share, then use the buttons below.
+            Optional. Opens a form with demo feedback and your notes, builds a
+            PDF preview, and saves it on this lead. Confirm there when it is
+            ready to share, then use the buttons below.
           </p>
           {reportPdfUrl ? (
             <p className="mt-2 text-[12px] text-slate-700">
@@ -5081,7 +5478,8 @@ function BrochureSection({
               />
               <span>
                 Include the <strong>student progress report (PDF)</strong> in
-                the same email to the student (confirmed in the generator above).
+                the same email to the student (confirmed in the generator
+                above).
               </span>
             </label>
           ) : reportPdfUrl ? (
@@ -5188,8 +5586,7 @@ function BrochureSection({
                   return;
                 }
                 const now = new Date().toISOString();
-                const fn =
-                  sr?.fileName?.trim() || "Student progress report";
+                const fn = sr?.fileName?.trim() || "Student progress report";
                 setBrochureEmailErr(null);
                 setBrochureEmailBusy(true);
                 void (async () => {
@@ -5232,11 +5629,12 @@ function BrochureSection({
           <p className="mt-2 text-[12px] text-[#b71c1c]">{brochureEmailErr}</p>
         ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Check the rows you want (multiple exams supported). One email lists every
-          selected brochure link or uploaded file plus the optional progress report
-          PDF. When{" "}
-          <code className="rounded bg-slate-100 px-1">ENROLLMENT_TEAM_BCC</code> is
-          set, the enrollment team is BCC&apos;d on the same message as the student.
+          Check the rows you want (multiple exams supported). One email lists
+          every selected brochure link or uploaded file plus the optional
+          progress report PDF. When{" "}
+          <code className="rounded bg-slate-100 px-1">ENROLLMENT_TEAM_BCC</code>{" "}
+          is set, the enrollment team is BCC&apos;d on the same message as the
+          student.
         </p>
       </div>
       <StudentReportModal
@@ -5601,8 +5999,8 @@ function FeeSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Base fee can load from Fee Management defaults for each target exam on
-            this lead. Scholarship, final fee, and installments save
+            Base fee can load from Fee Management defaults for each target exam
+            on this lead. Scholarship, final fee, and installments save
             automatically.
           </p>
         </div>
@@ -6014,11 +6412,7 @@ function FeeSection({
           </button>
           <button
             type="button"
-            disabled={
-              feeEmailBusy ||
-              enrollmentBusy ||
-              feeEnrollmentBundleBusy
-            }
+            disabled={feeEmailBusy || enrollmentBusy || feeEnrollmentBundleBusy}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-none border border-emerald-700 bg-emerald-700 px-3 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800",
               feeFlags?.feeSentEmail && feeFlags?.enrollmentSent
@@ -6093,12 +6487,17 @@ function FeeSection({
         ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
           Scholarship and installments save automatically. Use send actions to
-          advance the pipeline. Fee emails include the bank account from this step
-          (or your institute default) plus{" "}
+          advance the pipeline. Fee emails include the bank account from this
+          step (or your institute default) plus{" "}
           <code className="rounded bg-slate-100 px-1">ENROLLMENT_TEAM_BCC</code>{" "}
           on the message. Set{" "}
-          <code className="rounded bg-slate-100 px-1">ENROLLMENT_FORM_LINK</code>{" "}
-          for <code className="rounded bg-slate-100 px-1">{"{{enrollmentLink}}"}</code>
+          <code className="rounded bg-slate-100 px-1">
+            ENROLLMENT_FORM_LINK
+          </code>{" "}
+          for{" "}
+          <code className="rounded bg-slate-100 px-1">
+            {"{{enrollmentLink}}"}
+          </code>
           .
         </p>
       </div>

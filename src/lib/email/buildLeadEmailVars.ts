@@ -4,6 +4,7 @@ import type {
 } from "@/lib/leadPipelineMetaTypes";
 import type { EmailTemplateKey } from "@/lib/email/templateKeys";
 import { demoInviteSummaryLine } from "@/lib/email/demoInviteSummary";
+import { buildDemoStatusUpdatePremiumPlaceholders } from "@/lib/email/demoStatusUpdatePremiumContent";
 import { getAppBaseUrl } from "@/lib/email/appBaseUrl";
 import { getEnrollmentFormLink } from "@/lib/email/enrollmentFormLink";
 
@@ -145,6 +146,27 @@ export function buildLeadEmailVars(
     const demoSummary = row ? demoInviteSummaryLine(row) : "—";
     const meetLink = str(row?.meetLinkUrl);
     return { ...base, demoSummary, meetLink };
+  }
+
+  if (key === "demo_status_update") {
+    const demo = meta.demo as { rows?: unknown[] } | undefined;
+    const rows = Array.isArray(demo?.rows) ? demo!.rows! : [];
+    const idx =
+      typeof opts?.demoRowIndex === "number" && opts.demoRowIndex >= 0
+        ? opts.demoRowIndex
+        : 0;
+    const row = rows[idx] as DemoTableRowPersisted | undefined;
+    const demoSummary = row ? demoInviteSummaryLine(row) : "—";
+    const premium = buildDemoStatusUpdatePremiumPlaceholders(
+      row,
+      base.parentName,
+      base.studentName,
+    );
+    return {
+      ...base,
+      ...premium,
+      demoSummary,
+    };
   }
 
   if (key === "brochure") {

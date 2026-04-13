@@ -36,13 +36,15 @@ type ColKey =
   | "grade"
   | "targetExams"
   | "country"
-  | "phone";
+  | "phone"
+  | "email";
 
 type TextColKey =
   | "parentName"
   | "dataType"
   | "grade"
-  | "country";
+  | "country"
+  | "email";
 
 const ACTION_MENU_W = 180;
 const DATA_TYPE_MENU_W = 216;
@@ -62,6 +64,7 @@ const COL_WIDTHS: Record<string, number> = {
   targetExams: 140,
   country: 96,
   phone: 124,
+  email: 176,
   status: 112,
   followUp: 104,
   remark: 168,
@@ -108,6 +111,15 @@ type Props = {
   targetExamsColumnTitle?: string;
   /** Custom display for target exams cells (e.g. labels from Settings). */
   formatTargetExamsDisplay?: (exams: string[]) => string;
+  /**
+   * Hide ⋮ menu entries that would be redundant on the current sheet (e.g. no
+   * “Interested” on Ongoing interested, no “Not interested” on that tab, no “Follow-up” on Follow-ups).
+   */
+  actionMenuHideOptions?: {
+    interested?: boolean;
+    notInterested?: boolean;
+    followUp?: boolean;
+  };
 };
 
 export function LeadSheetTable({
@@ -130,6 +142,7 @@ export function LeadSheetTable({
   leadSourceOptions = [],
   targetExamsColumnTitle = "Target (exams)",
   formatTargetExamsDisplay,
+  actionMenuHideOptions,
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -224,6 +237,10 @@ export function LeadSheetTable({
     [actionMenu, leads],
   );
 
+  const hideInterested = actionMenuHideOptions?.interested === true;
+  const hideNotInterested = actionMenuHideOptions?.notInterested === true;
+  const hideFollowUp = actionMenuHideOptions?.followUp === true;
+
   const dataTypeMenuLead = useMemo(
     () =>
       dataTypeMenu
@@ -283,6 +300,7 @@ export function LeadSheetTable({
             <SheetTh w={COL_WIDTHS.targetExams}>{targetExamsColumnTitle}</SheetTh>
             <SheetTh w={COL_WIDTHS.country}>Country</SheetTh>
             <SheetTh w={COL_WIDTHS.phone}>Phone</SheetTh>
+            <SheetTh w={COL_WIDTHS.email}>Email</SheetTh>
             {showPipelineColumn && (
               <SheetTh w={COL_WIDTHS.status}>Status</SheetTh>
             )}
@@ -605,6 +623,27 @@ export function LeadSheetTable({
                     </span>
                   )}
                 </td>
+                <TextCell
+                  lead={lead}
+                  field="email"
+                  width={COL_WIDTHS.email}
+                  selected={
+                    selectedCell?.leadId === lead.id &&
+                    selectedCell.field === "email"
+                  }
+                  onSelect={() =>
+                    setSelectedCell({ leadId: lead.id, field: "email" })
+                  }
+                  editing={
+                    activeEdit?.leadId === lead.id &&
+                    activeEdit.field === "email"
+                  }
+                  onEdit={() => startEdit(lead.id, "email")}
+                  onDraftPatch={onDraftPatch}
+                  onCancelEdit={() => setEditing(null)}
+                  tone={tone}
+                  sheetEditMode={sheetEditMode}
+                />
                 {showPipelineColumn && (
                   <td
                     style={{ width: COL_WIDTHS.status }}
@@ -816,43 +855,49 @@ export function LeadSheetTable({
               width: ACTION_MENU_W,
             }}
           >
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
-              onClick={() => {
-                setInterestedCourseLead(menuLead);
-                setActionMenu(null);
-              }}
-            >
-              Interested
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
-              onClick={() => {
-                setActionMenu(null);
-                setNotInterestedModalLead(menuLead);
-              }}
-            >
-              Not Interested
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
-              onClick={() => {
-                setActionMenu(null);
-                window.dispatchEvent(
-                  new CustomEvent("lead-followup", {
-                    detail: { id: menuLead.id },
-                  }),
-                );
-              }}
-            >
-              Follow-up
-            </button>
+            {!hideInterested ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
+                onClick={() => {
+                  setInterestedCourseLead(menuLead);
+                  setActionMenu(null);
+                }}
+              >
+                Interested
+              </button>
+            ) : null}
+            {!hideNotInterested ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
+                onClick={() => {
+                  setActionMenu(null);
+                  setNotInterestedModalLead(menuLead);
+                }}
+              >
+                Not Interested
+              </button>
+            ) : null}
+            {!hideFollowUp ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
+                onClick={() => {
+                  setActionMenu(null);
+                  window.dispatchEvent(
+                    new CustomEvent("lead-followup", {
+                      detail: { id: menuLead.id },
+                    }),
+                  );
+                }}
+              >
+                Follow-up
+              </button>
+            ) : null}
           </div>,
           document.body,
         )}
@@ -1126,6 +1171,7 @@ function TextCell({
   sheetEditMode: boolean;
 }) {
   const val = lead[field];
+  const strVal = val == null ? "" : String(val);
   return (
     <td
       style={{ width, minWidth: width }}
@@ -1139,8 +1185,9 @@ function TextCell({
     >
       {editing ? (
         <input
+          type={field === "email" ? "email" : "text"}
           className="w-full rounded-md border border-primary bg-white px-1 py-1"
-          defaultValue={val}
+          defaultValue={strVal}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.preventDefault();
@@ -1148,11 +1195,23 @@ function TextCell({
             }
           }}
           onBlur={(e) => {
-            onDraftPatch(lead.id, { [field]: e.target.value });
+            const next =
+              field === "email" ? e.target.value.trim() : e.target.value;
+            onDraftPatch(lead.id, { [field]: next });
             onCancelEdit();
           }}
           autoFocus
         />
+      ) : field === "email" ? (
+        <span
+          className={cn(
+            "block truncate text-[12px]",
+            !strVal.trim() && "text-slate-400",
+          )}
+          title={strVal.trim() || undefined}
+        >
+          {strVal.trim() || "—"}
+        </span>
       ) : (
         val
       )}
