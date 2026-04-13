@@ -3,9 +3,11 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
-import FacultyModel from "@/models/Faculty";
 import DemoTeacherFeedbackTokenModel from "@/models/DemoTeacherFeedbackToken";
 import { sendMail } from "@/lib/email/sendMail";
+import { getEnrollmentTeamBccEmails } from "@/lib/email/enrollmentRecipients";
+import { normalizeMailRecipients } from "@/lib/email/mailRecipients";
+import { resolveTeacherEmailFromFacultyName } from "@/lib/faculty/resolveTeacherEmail";
 import { getAppBaseUrl } from "@/lib/email/appBaseUrl";
 import { isTeacherFeedbackEligible } from "@/lib/demoFeedback/eligibility";
 import { getDemoTeacherFeedbackAfterMinutes } from "@/lib/demoFeedback/config";
@@ -100,17 +102,18 @@ export async function POST(req: Request, context: Ctx) {
 
     let emailSent = false;
     let emailSkippedReason: string | null = null;
+    let feedbackInviteEnrollmentBcc = false;
 
     if (sendEmail) {
-      const faculty = await FacultyModel.findOne({
-        name: teacherName,
-        active: true,
-      }).lean();
-      const to = faculty && typeof faculty.email === "string" ? faculty.email.trim() : "";
+      const toRaw = await resolveTeacherEmailFromFacultyName(teacherName);
+      const to = toRaw?.trim() ?? "";
       if (!to) {
         emailSkippedReason =
           "No email found for this teacher on the Faculties record. You can still copy the link below.";
       } else {
+        const bccList = getEnrollmentTeamBccEmails();
+        feedbackInviteEnrollmentBcc = bccList.length > 0;
+        const { to: toNorm, bcc } = normalizeMailRecipients(to, undefined, bccList);
         const subject = `Demo feedback — ${studentName}`;
         const html = `<p>Hello ${teacherName.split(" ")[0] || teacherName},</p>
 <p>Please share brief feedback for your <strong>trial class</strong> with <strong>${studentName}</strong>.</p>
@@ -119,7 +122,7 @@ export async function POST(req: Request, context: Ctx) {
 <p><small>This link works until you submit the form once. After submission it cannot be used again.</small></p>
 <p><small>If the button does not work, paste this URL into your browser:<br/>${feedbackUrl}</small></p>
 <p>Thank you,<br/>Team</p>`;
-        await sendMail({ to, subject, html });
+        await sendMail({ to: toNorm, subject, html, bcc });
         emailSent = true;
       }
     }
@@ -132,7 +135,7 @@ export async function POST(req: Request, context: Ctx) {
       {
         kind: "demo",
         message: emailSent
-          ? `Teacher feedback link emailed to ${teacherName} for ${demoLine}`
+          ? `Teacher feedback link emailed to ${teacherName}${feedbackInviteEnrollmentBcc ? " (enrollment BCC)" : ""} for ${demoLine}`
           : `Teacher feedback link created for ${teacherName} (${demoLine})`,
       },
     );

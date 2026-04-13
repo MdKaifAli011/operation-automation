@@ -26,27 +26,27 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   },
   {
     key: "brochure",
-    name: "Brochure",
-    description: "Course brochure and overview.",
+    name: "Brochure & documents",
+    description: "Step 2 · catalog brochures and optional progress report PDF.",
     sortOrder: 20,
-    subject: "Course brochure — {{studentName}}",
+    subject: "Course materials — {{studentName}}",
     bodyHtml: `<p>Hello {{parentName}},</p>
-<p>Please find the course information for <strong>{{studentName}}</strong> below.</p>
-<p><strong>{{brochureLabel}}</strong></p>
-<p><a href="{{brochureLink}}">Open brochure</a></p>
-<p><small>If the link is empty, add a document URL or upload on the lead first.</small></p>
+<p>Please find the course information and documents for <strong>{{studentName}}</strong> below.</p>
+{{brochureBundleHtml}}
+<p><small>If a link does not open, reply to this email for help.</small></p>
 <p>Regards,<br/>Team</p>`,
   },
   {
     key: "fees",
     name: "Fee structure",
-    description: "Fee and installment summary.",
+    description: "Fee, installments, and bank details for payment.",
     sortOrder: 30,
-    subject: "Fee structure — {{studentName}}",
+    subject: "Fee & payment details — {{studentName}}",
     bodyHtml: `<p>Hello {{parentName}},</p>
-<p>Sharing the fee details for <strong>{{studentName}}</strong>:</p>
-<pre style="font-family:inherit;white-space:pre-wrap;">{{feeSummary}}</pre>
-<p>Regards,<br/>Team</p>`,
+<p>Sharing the fee and payment details for <strong>{{studentName}}</strong>:</p>
+{{feeSummaryHtml}}
+{{feeBankDetailsHtml}}
+<p style="margin-top:20px;">Regards,<br/>Team</p>`,
   },
   {
     key: "enrollment",

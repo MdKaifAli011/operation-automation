@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { assignMeetLinkForDemoRow } from "@/lib/meetLinks/assignMeetLink";
+import { sendDemoInviteMailSafe } from "@/lib/email/sendDemoInviteMail";
+import { isDemoAutoSendInviteEnabled } from "@/lib/email/enrollmentRecipients";
 
 export const runtime = "nodejs";
 
@@ -80,5 +82,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.error, code: result.code }, { status });
   }
 
-  return NextResponse.json(result);
+  let demoInviteEmail:
+    | { sent: boolean; skippedReason?: string; error?: string }
+    | undefined;
+  if (isDemoAutoSendInviteEnabled()) {
+    const invite = await sendDemoInviteMailSafe({
+      leadId,
+      meetRowId,
+      meetLinkUrlOverride: result.meetLinkUrl,
+      persistInviteOnLead: true,
+      assignSnapshot: {
+        teacher,
+        subject,
+        isoDate,
+        timeHmIST,
+      },
+    });
+    demoInviteEmail = {
+      sent: invite.sent,
+      skippedReason: invite.skippedReason,
+      error: invite.error,
+    };
+  }
+
+  return NextResponse.json({ ...result, demoInviteEmail });
 }

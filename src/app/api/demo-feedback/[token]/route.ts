@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
 import DemoTeacherFeedbackTokenModel from "@/models/DemoTeacherFeedbackToken";
 import { patchDemoRowTeacherFeedback } from "@/lib/demoFeedback/persistLeadRow";
+import { notifyEnrollmentTeacherFeedbackSubmitted } from "@/lib/email/teacherFeedbackEmails";
 import {
   examTrackLabel,
   inferExamTrackFromLead,
@@ -204,6 +205,40 @@ export async function POST(req: Request, context: Ctx) {
         message: `Teacher submitted demo feedback (${ratingLabel[rating] ?? rating} · ${trackLbl} · next: ${summaryNext})`,
       },
     );
+
+    try {
+      const leadForNotify = await LeadModel.findById(leadId)
+        .select({ studentName: 1, pipelineMeta: 1 })
+        .lean();
+      const studentName = String(
+        (leadForNotify as { studentName?: string } | null)?.studentName ?? "Student",
+      ).trim();
+      const rows =
+        (
+          leadForNotify as {
+            pipelineMeta?: {
+              demo?: { rows?: Array<{ meetRowId?: string; subject?: string; isoDate?: string; timeHmIST?: string }> };
+            };
+          }
+        )?.pipelineMeta?.demo?.rows ?? [];
+      const demoRow = rows.find(
+        (r) => String(r.meetRowId ?? "").trim() === meetRowId.trim(),
+      );
+      const demoSummary = demoRow
+        ? `${demoRow.subject ?? "Demo"} · ${demoRow.isoDate ? format(parseISO(String(demoRow.isoDate)), "d MMM yyyy") : ""} · ${demoRow.timeHmIST ?? ""} IST`
+        : "Trial class";
+      await notifyEnrollmentTeacherFeedbackSubmitted({
+        leadId,
+        studentName: studentName || "Student",
+        teacherName: String(doc.teacherName ?? "").trim() || "Teacher",
+        demoSummary,
+        ratingLabel: ratingLabel[rating] ?? rating,
+        trackLabel: trackLbl,
+        recommendedNextLabel: summaryNext,
+      });
+    } catch (notifyErr) {
+      console.error("Enrollment notification after teacher feedback:", notifyErr);
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {

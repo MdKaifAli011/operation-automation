@@ -1,6 +1,13 @@
 export async function sendLeadPipelineEmail(
   leadId: string,
-  body: { templateKey: string; demoRowIndex?: number },
+  body: {
+    templateKey: string;
+    demoRowIndex?: number;
+    brochureEmail?: {
+      selectionKeys: string[];
+      includeStudentReportPdf: boolean;
+    };
+  },
 ): Promise<void> {
   const res = await fetch(`/api/leads/${encodeURIComponent(leadId)}/send-email`, {
     method: "POST",

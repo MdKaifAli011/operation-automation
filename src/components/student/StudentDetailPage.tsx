@@ -2253,7 +2253,7 @@ function DemoSection({
       activityLog: appendActivity(
         lead.activityLog,
         "demo",
-        `Demo invite emailed to family: ${demoRowSummaryLine(row)}`,
+        `Demo invite emailed (student, teacher CC if on file, enrollment BCC if configured): ${demoRowSummaryLine(row)}`,
       ),
     });
   }, [
@@ -2437,6 +2437,11 @@ function DemoSection({
             meetBookingId?: string;
             meetWindowStartIso?: string;
             meetWindowEndIso?: string;
+            demoInviteEmail?: {
+              sent?: boolean;
+              skippedReason?: string;
+              error?: string;
+            };
           };
 
           if (gen !== assignGenRef.current) return;
@@ -2455,11 +2460,15 @@ function DemoSection({
           }
 
           delete lastFailedSlotRef.current[meetRowId];
+          const inviteAt = new Date().toISOString();
           updates.set(meetRowId, {
             meetLinkUrl: data.meetLinkUrl ?? "",
             meetBookingId: data.meetBookingId ?? "",
             meetWindowStartIso: data.meetWindowStartIso ?? "",
             meetWindowEndIso: data.meetWindowEndIso ?? "",
+            ...(data.demoInviteEmail?.sent
+              ? { inviteSent: true, inviteSentAt: inviteAt }
+              : {}),
           });
         }
 
@@ -3087,7 +3096,7 @@ function DemoSection({
         onDismiss={dismissShareSuccess}
         headerTitle="Sent"
         headline="Invite sent"
-        body="The demo invite email was sent to the address on this lead."
+        body="The demo invite was sent to the lead email, teacher (CC when listed in Faculties), and enrollment team (BCC from ENROLLMENT_TEAM_BCC) when configured."
         autoCloseMs={DEMO_SCHEDULE_SUCCESS_AUTO_CLOSE_MS}
       />
       <DemoTeacherFeedbackViewDialog
@@ -4060,6 +4069,11 @@ function DemoForm({
         meetBookingId?: string;
         meetWindowStartIso?: string;
         meetWindowEndIso?: string;
+        demoInviteEmail?: {
+          sent?: boolean;
+          skippedReason?: string;
+          error?: string;
+        };
       };
       if (!res.ok) {
         setShareSlotConfirm(null);
@@ -4085,6 +4099,7 @@ function DemoForm({
         return;
       }
       setShareSlotConfirm(null);
+      const inviteAt = new Date().toISOString();
       onSchedule({
         subject: p.subject,
         teacher: p.teacher,
@@ -4097,6 +4112,9 @@ function DemoForm({
         meetBookingId: data.meetBookingId ?? "",
         meetWindowStartIso: data.meetWindowStartIso ?? "",
         meetWindowEndIso: data.meetWindowEndIso ?? "",
+        ...(data.demoInviteEmail?.sent
+          ? { inviteSent: true, inviteSentAt: inviteAt }
+          : {}),
       });
     } finally {
       setShareConfirmBusy(false);
@@ -4416,6 +4434,11 @@ function DemoForm({
                       meetBookingId?: string;
                       meetWindowStartIso?: string;
                       meetWindowEndIso?: string;
+                      demoInviteEmail?: {
+                        sent?: boolean;
+                        skippedReason?: string;
+                        error?: string;
+                      };
                     };
                     if (!res.ok) {
                       const code = data.code;
@@ -4468,6 +4491,7 @@ function DemoForm({
                       }
                       return;
                     }
+                    const inviteAt = new Date().toISOString();
                     onSchedule({
                       subject: subj,
                       teacher: effectiveTeacher,
@@ -4480,6 +4504,9 @@ function DemoForm({
                       meetBookingId: data.meetBookingId ?? "",
                       meetWindowStartIso: data.meetWindowStartIso ?? "",
                       meetWindowEndIso: data.meetWindowEndIso ?? "",
+                      ...(data.demoInviteEmail?.sent
+                        ? { inviteSent: true, inviteSentAt: inviteAt }
+                        : {}),
                     });
                   } finally {
                     setMeetGateBusy(false);
@@ -4638,6 +4665,8 @@ function BrochureSection({
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [brochureEmailBusy, setBrochureEmailBusy] = useState(false);
   const [brochureEmailErr, setBrochureEmailErr] = useState<string | null>(null);
+  const [selectedBrochureKeys, setSelectedBrochureKeys] = useState<string[]>([]);
+  const [includeReportInEmail, setIncludeReportInEmail] = useState(false);
 
   const persistedDemoRows: DemoTableRowPersisted[] =
     (lead.pipelineMeta?.demo as LeadPipelineDemo | undefined)?.rows ?? [];
@@ -4709,6 +4738,19 @@ function BrochureSection({
     };
   }, [lead.id, lead.targetExams, targetExamLabelFor]);
 
+  useEffect(() => {
+    setSelectedBrochureKeys([]);
+  }, [lead.id]);
+
+  useEffect(() => {
+    if (examBrochureTableLoading) return;
+    const withDoc = examBrochureTableRows.filter((r) => r.href).map((r) => r.key);
+    setSelectedBrochureKeys((prev) => {
+      if (prev.length === 0 && withDoc.length > 0) return withDoc;
+      return prev.filter((k) => withDoc.includes(k));
+    });
+  }, [lead.id, examBrochureTableRows, examBrochureTableLoading]);
+
   const formatSentAt = (iso?: string) => {
     if (!iso) return "";
     try {
@@ -4721,9 +4763,14 @@ function BrochureSection({
   const step1StudentLabel = lead.studentName?.trim() || "Student";
 
   const reportPdfUrl = sr?.pdfUrl?.trim() ?? "";
-  const sendLabelBase = reportPdfUrl
-    ? "Send progress report"
-    : "Send course brochure";
+  const reportReadyForEmail = Boolean(
+    reportPdfUrl && sr?.sendConfirmedAt?.trim(),
+  );
+  const sendLabelBase = "Send course brochure";
+
+  const canSendDocumentsEmail =
+    selectedBrochureKeys.length > 0 ||
+    (includeReportInEmail && reportReadyForEmail);
 
   return (
     <section className={SX.section}>
@@ -4738,9 +4785,10 @@ function BrochureSection({
             ) : null}
           </div>
           <p className="mt-1 max-w-xl text-xs text-slate-500">
-            Review demo feedback, browse course brochures, then generate a student
-            progress report (PDF) when you are ready. Confirm in the generator
-            before sending by email or WhatsApp.
+            Review demo feedback, pick which brochures to email (you can choose
+            several), optionally include the progress report PDF after it is
+            confirmed in the generator, then send to the student email on this
+            lead.
           </p>
         </div>
       </div>
@@ -4872,9 +4920,10 @@ function BrochureSection({
               />
             ) : (
               <div className="overflow-auto rounded-md border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.03]">
-                <table className={cn(SX.dataTable, "min-w-[560px]")}>
+                <table className={cn(SX.dataTable, "min-w-[640px]")}>
                   <thead>
                     <tr>
+                      <th className={cn(SX.dataTh, "w-[1%]")}>Email</th>
                       <th className={SX.dataTh}>Exam</th>
                       <th className={SX.dataTh}>Document</th>
                       <th className={SX.dataTh}>Type</th>
@@ -4889,7 +4938,7 @@ function BrochureSection({
                       <tr>
                         <td
                           className={cn(SX.dataTd, "text-[13px] text-slate-500")}
-                          colSpan={4}
+                          colSpan={5}
                         >
                           Add target exams on the lead row to list brochures
                           from your catalog.
@@ -4899,7 +4948,7 @@ function BrochureSection({
                       <tr>
                         <td
                           className={cn(SX.dataTd, "text-[13px] text-slate-500")}
-                          colSpan={4}
+                          colSpan={5}
                         >
                           No brochure documents configured for these exams in{" "}
                           <Link
@@ -4914,6 +4963,23 @@ function BrochureSection({
                     ) : (
                       examBrochureTableRows.map((r) => (
                         <tr key={r.key}>
+                          <td className={cn(SX.dataTd, "text-center")}>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-primary"
+                              checked={selectedBrochureKeys.includes(r.key)}
+                              disabled={!r.href}
+                              onChange={() => {
+                                if (!r.href) return;
+                                setSelectedBrochureKeys((prev) =>
+                                  prev.includes(r.key)
+                                    ? prev.filter((k) => k !== r.key)
+                                    : [...prev, r.key],
+                                );
+                              }}
+                              aria-label={`Include ${r.title} in email`}
+                            />
+                          </td>
                           <td className={SX.dataTd}>{r.examLabel}</td>
                           <td className={SX.dataTd}>{r.title}</td>
                           <td className={cn(SX.dataTd, "text-[12px]")}>
@@ -4942,6 +5008,32 @@ function BrochureSection({
                 </table>
               </div>
             )}
+            {examBrochureTableRows.some((r) => r.href) ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                <button
+                  type="button"
+                  className="font-medium text-primary underline"
+                  onClick={() =>
+                    setSelectedBrochureKeys(
+                      examBrochureTableRows.filter((r) => r.href).map((r) => r.key),
+                    )
+                  }
+                >
+                  Select all with files
+                </button>
+                <button
+                  type="button"
+                  className="font-medium text-slate-600 underline"
+                  onClick={() => setSelectedBrochureKeys([])}
+                >
+                  Clear selection
+                </button>
+                <span className="text-slate-400">
+                  Checked items are included in &ldquo;Send course brochure ·
+                  Email&rdquo;.
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -4981,6 +5073,25 @@ function BrochureSection({
           >
             {reportPdfUrl ? "Open report generator" : "Generate student report"}
           </button>
+          {reportReadyForEmail ? (
+            <label className="mt-3 flex cursor-pointer items-start gap-2 text-[12px] text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-primary"
+                checked={includeReportInEmail}
+                onChange={(e) => setIncludeReportInEmail(e.target.checked)}
+              />
+              <span>
+                Include the <strong>student progress report (PDF)</strong> in
+                the same email to the student (confirmed in the generator above).
+              </span>
+            </label>
+          ) : reportPdfUrl ? (
+            <p className="mt-2 text-[11px] text-amber-800">
+              Open the report generator and confirm when the PDF is ready to
+              attach it to the student email.
+            </p>
+          ) : null}
         </div>
         <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
           <button
@@ -4992,12 +5103,13 @@ function BrochureSection({
                 : "bg-[#25d366] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]",
             )}
             onClick={() => {
+              const parts: string[] = [];
+              if (selectedBrochureKeys.length)
+                parts.push(`${selectedBrochureKeys.length} brochure(s)`);
+              if (includeReportInEmail && reportReadyForEmail)
+                parts.push("progress report PDF");
               const label =
-                reportPdfUrl && sr?.fileName?.trim()
-                  ? sr.fileName.trim()
-                  : reportPdfUrl
-                    ? "Student progress report"
-                    : "Course brochure";
+                parts.length > 0 ? parts.join(" + ") : "Course materials";
               const now = new Date().toISOString();
               void onPatchLead({
                 pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
@@ -5030,7 +5142,7 @@ function BrochureSection({
           </button>
           <button
             type="button"
-            disabled={brochureEmailBusy}
+            disabled={brochureEmailBusy || !canSendDocumentsEmail}
             className={cn(
               "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold transition-colors",
               br?.sentEmail
@@ -5038,12 +5150,6 @@ function BrochureSection({
                 : SX.btnPrimary,
             )}
             onClick={() => {
-              const label =
-                reportPdfUrl && sr?.fileName?.trim()
-                  ? sr.fileName.trim()
-                  : reportPdfUrl
-                    ? "Student progress report"
-                    : "Course brochure";
               const now = new Date().toISOString();
               const to = lead.email?.trim();
               if (!to) {
@@ -5052,12 +5158,30 @@ function BrochureSection({
                 );
                 return;
               }
+              if (!canSendDocumentsEmail) {
+                setBrochureEmailErr(
+                  "Select at least one brochure with a file, and/or include the progress report.",
+                );
+                return;
+              }
+              const parts: string[] = [];
+              if (selectedBrochureKeys.length)
+                parts.push(`${selectedBrochureKeys.length} brochure(s)`);
+              if (includeReportInEmail && reportReadyForEmail)
+                parts.push("progress report PDF");
+              const label =
+                parts.length > 0 ? parts.join(" + ") : "Course materials";
               setBrochureEmailErr(null);
               setBrochureEmailBusy(true);
               void (async () => {
                 try {
                   await sendLeadPipelineEmail(lead.id, {
                     templateKey: "brochure",
+                    brochureEmail: {
+                      selectionKeys: selectedBrochureKeys,
+                      includeStudentReportPdf:
+                        includeReportInEmail && reportReadyForEmail,
+                    },
                   });
                   await onPatchLead({
                     pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
@@ -5069,7 +5193,7 @@ function BrochureSection({
                     activityLog: appendActivity(
                       lead.activityLog,
                       "brochure",
-                      `"${label}" sent by email (saved on this lead).`,
+                      `"${label}" sent by email to student (saved on this lead).`,
                     ),
                   });
                 } catch (e) {
@@ -5098,12 +5222,69 @@ function BrochureSection({
               `${sendLabelBase} · Email`
             )}
           </button>
+          {reportReadyForEmail ? (
+            <button
+              type="button"
+              disabled={brochureEmailBusy}
+              className="inline-flex items-center justify-center gap-2 rounded-none border border-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-slate-800 hover:bg-slate-50"
+              onClick={() => {
+                const to = lead.email?.trim();
+                if (!to) {
+                  setBrochureEmailErr(
+                    "Add an email on this lead before sending by email.",
+                  );
+                  return;
+                }
+                const now = new Date().toISOString();
+                const fn =
+                  sr?.fileName?.trim() || "Student progress report";
+                setBrochureEmailErr(null);
+                setBrochureEmailBusy(true);
+                void (async () => {
+                  try {
+                    await sendLeadPipelineEmail(lead.id, {
+                      templateKey: "brochure",
+                      brochureEmail: {
+                        selectionKeys: [],
+                        includeStudentReportPdf: true,
+                      },
+                    });
+                    await onPatchLead({
+                      pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                        brochure: {
+                          sentEmail: true,
+                          sentEmailAt: now,
+                        },
+                      }),
+                      activityLog: appendActivity(
+                        lead.activityLog,
+                        "brochure",
+                        `"${fn}" (progress report only) sent by email to student (saved on this lead).`,
+                      ),
+                    });
+                  } catch (e) {
+                    setBrochureEmailErr(
+                      e instanceof Error ? e.message : "Email send failed.",
+                    );
+                  } finally {
+                    setBrochureEmailBusy(false);
+                  }
+                })();
+              }}
+            >
+              Send progress report only · Email
+            </button>
+          ) : null}
         </div>
         {brochureEmailErr ? (
           <p className="mt-2 text-[12px] text-[#b71c1c]">{brochureEmailErr}</p>
         ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Saving a generated PDF or marking send advances the Documents step.
+          Check the rows you want (multiple exams supported). One email lists every
+          selected brochure link or uploaded file plus the optional progress report
+          PDF. When{" "}
+          <code className="rounded bg-slate-100 px-1">ENROLLMENT_TEAM_BCC</code> is
+          set, the enrollment team is BCC&apos;d on the same message as the student.
         </p>
       </div>
       <StudentReportModal
@@ -5205,6 +5386,10 @@ function FeeSection({
   const [feeEmailErr, setFeeEmailErr] = useState<string | null>(null);
   const [enrollmentBusy, setEnrollmentBusy] = useState(false);
   const [enrollmentErr, setEnrollmentErr] = useState<string | null>(null);
+  const [feeEnrollmentBundleBusy, setFeeEnrollmentBundleBusy] = useState(false);
+  const [feeEnrollmentBundleErr, setFeeEnrollmentBundleErr] = useState<
+    string | null
+  >(null);
   const feesSkipAutosave = useRef(true);
   const leadFeesRef = useRef(lead);
   leadFeesRef.current = lead;
@@ -5791,7 +5976,7 @@ function FeeSection({
           </button>
           <button
             type="button"
-            disabled={feeEmailBusy}
+            disabled={feeEmailBusy || feeEnrollmentBundleBusy}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold transition-colors",
               feeFlags?.feeSentEmail
@@ -5825,7 +6010,7 @@ function FeeSection({
                     activityLog: appendActivity(
                       lead.activityLog,
                       "fees",
-                      `Fee structure (₹${finalFee.toLocaleString("en-IN")} final) sent by email — saved on lead.`,
+                      `Fee structure and bank payment details (₹${finalFee.toLocaleString("en-IN")} final) sent by email — saved on lead.`,
                     ),
                   });
                 } catch (e) {
@@ -5856,7 +6041,7 @@ function FeeSection({
           </button>
           <button
             type="button"
-            disabled={enrollmentBusy}
+            disabled={enrollmentBusy || feeEnrollmentBundleBusy}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold transition-colors",
               feeFlags?.enrollmentSent
@@ -5922,15 +6107,94 @@ function FeeSection({
               "Send enrollment form"
             )}
           </button>
+          <button
+            type="button"
+            disabled={
+              feeEmailBusy ||
+              enrollmentBusy ||
+              feeEnrollmentBundleBusy
+            }
+            className={cn(
+              "inline-flex items-center justify-center gap-1.5 rounded-none border border-emerald-700 bg-emerald-700 px-3 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800",
+              feeFlags?.feeSentEmail && feeFlags?.enrollmentSent
+                ? "border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 hover:bg-emerald-100"
+                : "",
+            )}
+            onClick={() => {
+              const to = lead.email?.trim();
+              if (!to) {
+                setFeeEnrollmentBundleErr(
+                  "Add an email on this lead before sending.",
+                );
+                return;
+              }
+              setFeeEnrollmentBundleErr(null);
+              setFeeEnrollmentBundleBusy(true);
+              const now = new Date().toISOString();
+              void (async () => {
+                try {
+                  await sendLeadPipelineEmail(lead.id, {
+                    templateKey: "fees_enrollment_bundle",
+                  });
+                  await onPatchLead({
+                    pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+                      fees: {
+                        ...buildFeesMeta(),
+                        feeSentEmail: true,
+                        feeSentEmailAt: now,
+                        enrollmentSent: true,
+                        enrollmentSentAt: now,
+                      },
+                    }),
+                    activityLog: appendActivity(
+                      lead.activityLog,
+                      "fees",
+                      `Fee structure (₹${finalFee.toLocaleString("en-IN")} final) and enrollment form sent together by email (enrollment team BCC when configured) — saved on lead.`,
+                    ),
+                  });
+                } catch (e) {
+                  setFeeEnrollmentBundleErr(
+                    e instanceof Error ? e.message : "Email send failed.",
+                  );
+                } finally {
+                  setFeeEnrollmentBundleBusy(false);
+                }
+              })();
+            }}
+          >
+            {feeFlags?.feeSentEmail && feeFlags?.enrollmentSent ? (
+              <>
+                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                Sent · Fee + enrollment
+                {feeFlags.feeSentEmailAt ? (
+                  <span className="font-normal opacity-90">
+                    · {feeSentAtLabel(feeFlags.feeSentEmailAt)}
+                  </span>
+                ) : null}
+              </>
+            ) : feeEnrollmentBundleBusy ? (
+              "Sending…"
+            ) : (
+              "Send fee + enrollment (email)"
+            )}
+          </button>
         </div>
-        {feeEmailErr || enrollmentErr ? (
+        {feeEmailErr || enrollmentErr || feeEnrollmentBundleErr ? (
           <p className="mt-2 text-[12px] text-[#b71c1c]">
-            {[feeEmailErr, enrollmentErr].filter(Boolean).join(" ")}
+            {[feeEmailErr, enrollmentErr, feeEnrollmentBundleErr]
+              .filter(Boolean)
+              .join(" ")}
           </p>
         ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
           Scholarship and installments save automatically. Use send actions to
-          advance the pipeline.
+          advance the pipeline. Fee emails include the bank account from this step
+          (or your institute default) plus{" "}
+          <code className="rounded bg-slate-100 px-1">ENROLLMENT_TEAM_BCC</code>{" "}
+          on the message. Set{" "}
+          <code className="rounded bg-slate-100 px-1">ENROLLMENT_FORM_LINK</code>{" "}
+          for <code className="rounded bg-slate-100 px-1">{"{{enrollmentLink}}"}</code>
+          .
         </p>
       </div>
     </section>

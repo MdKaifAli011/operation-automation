@@ -16,6 +16,10 @@ import { buildEmailPreviewHtml } from "@/lib/email/emailPreviewHtml";
 import { getPreviewSampleVars } from "@/lib/email/previewSampleVars";
 import { renderTemplate } from "@/lib/email/renderTemplate";
 import {
+  ensureBrochureBundleHtmlInRenderedHtml,
+  ensureFeeBankDetailsInRenderedHtml,
+} from "@/lib/email/templateRenderedEnsures";
+import {
   EMAIL_TEMPLATE_META,
   type EmailTemplateKey,
 } from "@/lib/email/templateKeys";
@@ -114,10 +118,24 @@ function TemplateEditorPanel({
     () => renderTemplate(r.subject, previewVars),
     [r.subject, previewVars],
   );
-  const previewBodyHtml = useMemo(
-    () => renderTemplate(r.bodyHtml, previewVars),
-    [r.bodyHtml, previewVars],
-  );
+  const previewBodyHtml = useMemo(() => {
+    let html = renderTemplate(r.bodyHtml, previewVars);
+    if (r.key === "fees") {
+      html = ensureFeeBankDetailsInRenderedHtml(
+        r.bodyHtml,
+        html,
+        previewVars.feeBankDetailsHtml ?? "",
+      );
+    }
+    if (r.key === "brochure") {
+      html = ensureBrochureBundleHtmlInRenderedHtml(
+        r.bodyHtml,
+        html,
+        previewVars.brochureBundleHtml ?? "",
+      );
+    }
+    return html;
+  }, [r.bodyHtml, r.key, previewVars]);
   const iframeSrcDoc = useMemo(
     () => buildEmailPreviewHtml(previewBodyHtml),
     [previewBodyHtml],
@@ -125,6 +143,17 @@ function TemplateEditorPanel({
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
+      {meta?.editorTips && meta.editorTips.length > 0 ? (
+        <div className="border border-[#e1f5fe] bg-[#f1f8ff] p-4 shadow-sm">
+          <SectionLabel>How this email sends</SectionLabel>
+          <ul className="mt-2 list-inside list-disc space-y-1.5 text-[13px] leading-snug text-[#37474f]">
+            {meta.editorTips.map((tip) => (
+              <li key={tip}>{tip}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {/* Delivery toggle */}
       <div className="border border-[#e0e0e0] bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -223,8 +252,9 @@ function TemplateEditorPanel({
               </span>
             </div>
             <p className="mb-3 text-[11px] leading-relaxed text-[#546e7a]">
-              Shows how this template looks with example names and numbers. Real
-              emails use each lead&apos;s fields.
+              Sample data only. For <strong>Fee</strong> and <strong>Brochure</strong>,
+              the preview matches post-send behavior (including auto-appended bank /
+              document blocks when placeholders are missing).
             </p>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-[#cfd8dc] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
               <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] px-3 py-2.5">
@@ -407,11 +437,24 @@ export default function EmailTemplatesPage() {
             Email Templates Management
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-[#757575]">
-            Messages for the student pipeline: demo invite, brochure, fees,
-            enrollment link, and schedule. Edit HTML here; sends use data from
-            each lead. Placeholders look like{" "}
-            <code className="border border-[#e0e0e0] bg-[#fafafa] px-1.5 py-0.5 font-mono text-[13px] text-[#424242]">
-              {"{{studentName}}"}
+            Pipeline mail: demo invite, Step 2 documents (brochures + optional
+            report), Step 3 fees (summary + bank details), enrollment link, class
+            schedule. Each expandable card explains placeholders, live preview, and
+            sending rules (e.g. BCC via{" "}
+            <code className="border border-[#e0e0e0] bg-[#fafafa] px-1 py-0.5 font-mono text-[12px]">
+              ENROLLMENT_TEAM_BCC
+            </code>
+            ). Use{" "}
+            <code className="border border-[#e0e0e0] bg-[#fafafa] px-1 py-0.5 font-mono text-[12px]">
+              {"{{placeholders}}"}
+            </code>{" "}
+            like{" "}
+            <code className="border border-[#e0e0e0] bg-[#fafafa] px-1 py-0.5 font-mono text-[12px]">
+              {"{{brochureBundleHtml}}"}
+            </code>{" "}
+            or{" "}
+            <code className="border border-[#e0e0e0] bg-[#fafafa] px-1 py-0.5 font-mono text-[12px]">
+              {"{{feeBankDetailsHtml}}"}
             </code>
             .
           </p>
@@ -505,24 +548,34 @@ export default function EmailTemplatesPage() {
                 <li>
                   Add{" "}
                   <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
-                    SMTP_HOST
+                    MAIL_HOST
                   </code>
                   ,{" "}
                   <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
-                    SMTP_PORT
+                    MAIL_PORT
                   </code>
                   ,{" "}
                   <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
-                    SMTP_USER
+                    MAIL_USERNAME
                   </code>
                   ,{" "}
                   <code className="bg-[#ffebee] px-1 font-mono text-[13px] text-[#b71c1c]">
-                    SMTP_PASS
+                    MAIL_PASSWORD
                   </code>{" "}
-                  to <span className="font-semibold">.env</span>
+                  (or legacy{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">SMTP_*</code>) to{" "}
+                  <span className="font-semibold">.env</span>
                 </li>
                 <li>
                   Optional:{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    MAIL_FROM_NAME
+                  </code>
+                  ,{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    MAIL_FROM_ADDRESS
+                  </code>
+                  ,{" "}
                   <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
                     EMAIL_FROM
                   </code>
@@ -532,12 +585,68 @@ export default function EmailTemplatesPage() {
                   </code>{" "}
                   for links in emails
                 </li>
+                <li>
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    ENROLLMENT_FORM_LINK
+                  </code>{" "}
+                  (or{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    ENROLLMENT_FORM_URL
+                  </code>
+                  ): full URL for{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    {"{{enrollmentLink}}"}
+                  </code>{" "}
+                  in enrollment emails (student and BCC see the same message). Relative paths are resolved with{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    NEXT_PUBLIC_APP_URL
+                  </code>
+                  . If unset, defaults to{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    /enroll-student
+                  </code>{" "}
+                  on your app origin.
+                </li>
+                <li>
+                  Fee emails: include{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    {"{{feeSummaryHtml}}"}
+                  </code>{" "}
+                  and{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    {"{{feeBankDetailsHtml}}"}
+                  </code>{" "}
+                  in the Fee template body (defaults are seeded for new installs). Bank rows follow the account on the
+                  lead&rsquo;s Fees step or your institute default under Bank &amp; A/c Details.
+                </li>
+                <li>
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    ENROLLMENT_TEAM_BCC
+                  </code>
+                  : BCC enrollment on Documents (brochure) emails, fee emails, fee+enrollment bundle, demo invites, and teacher-feedback flows. Optional:{" "}
+                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
+                    DEMO_AUTO_SEND_INVITE=false
+                  </code>{" "}
+                  to disable auto-send when a Meet link is assigned.
+                </li>
               </ul>
             ) : (
-              <p className="text-sm font-medium text-[#2e7d32]">
-                SMTP is configured. Pipeline actions on a student will send using
-                the templates below.
-              </p>
+              <div className="space-y-2 text-sm text-[#424242]">
+                <p className="font-medium text-[#2e7d32]">
+                  SMTP is configured. Pipeline actions on a student will send using
+                  the templates below.
+                </p>
+                <p className="leading-snug text-[#616161]">
+                  If logs show &ldquo;SMTP accepted&rdquo; but nobody receives mail: check Spam/Promotions, make sure{" "}
+                  <code className="rounded bg-[#f5f5f5] px-1 font-mono text-[12px]">EMAIL_FROM</code> /{" "}
+                  <code className="rounded bg-[#f5f5f5] px-1 font-mono text-[12px]">MAIL_FROM_ADDRESS</code> matches
+                  your provider&rsquo;s allowed sender (or enable &ldquo;Send mail as&rdquo;), and set SPF/DKIM for your
+                  domain. Optional:{" "}
+                  <code className="rounded bg-[#f5f5f5] px-1 font-mono text-[12px]">MAIL_REPLY_TO</code> for replies,{" "}
+                  <code className="rounded bg-[#f5f5f5] px-1 font-mono text-[12px]">MAIL_SMTP_DEBUG=1</code> for raw SMTP
+                  traces in the server console.
+                </p>
+              </div>
             )}
           </div>
         </div>

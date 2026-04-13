@@ -5,6 +5,7 @@ import type {
 import type { EmailTemplateKey } from "@/lib/email/templateKeys";
 import { demoInviteSummaryLine } from "@/lib/email/demoInviteSummary";
 import { getAppBaseUrl } from "@/lib/email/appBaseUrl";
+import { getEnrollmentFormLink } from "@/lib/email/enrollmentFormLink";
 
 type LeanLead = {
   studentName?: string;
@@ -19,6 +20,34 @@ type LeanLead = {
 
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
+}
+
+/** Safe for HTML text nodes and template placeholders. */
+export function escapeHtmlForEmail(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+export function buildLeadPipelineBaseVars(lead: LeanLead): Record<string, string> {
+  const targetExams = Array.isArray(lead.targetExams)
+    ? lead.targetExams.filter((x) => typeof x === "string" && x.trim())
+    : [];
+  return {
+    studentName: str(lead.studentName) || "Student",
+    parentName: str(lead.parentName) || "Parent",
+    email: str(lead.email),
+    phone: str(lead.phone),
+    country: str(lead.country),
+    grade: str(lead.grade),
+    targetExams: targetExams.join(", ") || "—",
+  };
 }
 
 function absUrl(pathOrUrl: string): string {
@@ -103,18 +132,7 @@ export function buildLeadEmailVars(
 ): Record<string, string> {
   const meta = (lead.pipelineMeta ?? {}) as LeadPipelineMeta &
     Record<string, unknown>;
-  const targetExams = Array.isArray(lead.targetExams)
-    ? lead.targetExams.filter((x) => typeof x === "string" && x.trim())
-    : [];
-  const base: Record<string, string> = {
-    studentName: str(lead.studentName) || "Student",
-    parentName: str(lead.parentName) || "Parent",
-    email: str(lead.email),
-    phone: str(lead.phone),
-    country: str(lead.country),
-    grade: str(lead.grade),
-    targetExams: targetExams.join(", ") || "—",
-  };
+  const base = buildLeadPipelineBaseVars(lead);
 
   if (key === "demo_invite") {
     const demo = meta.demo as { rows?: unknown[] } | undefined;
@@ -138,7 +156,8 @@ export function buildLeadEmailVars(
       const brochureLink = absUrl(reportPath);
       const brochureLabel =
         str(sr?.fileName) || "Student progress report";
-      return { ...base, brochureLabel, brochureLink };
+      const brochureBundleHtml = `<p style="margin:12px 0 6px;font-weight:600;">Student progress report</p><p style="margin:4px 0;"><a href="${escapeAttr(brochureLink)}">${escapeHtmlForEmail(brochureLabel)}</a></p>`;
+      return { ...base, brochureLabel, brochureLink, brochureBundleHtml };
     }
     const br = meta.brochure as
       | {
@@ -153,7 +172,10 @@ export function buildLeadEmailVars(
     const brochureLabel =
       str(br?.fileName) ||
       (doc ? "Linked document" : stored ? "Uploaded brochure" : "Course brochure");
-    return { ...base, brochureLabel, brochureLink };
+    const brochureBundleHtml = brochureLink
+      ? `<p style="margin:12px 0 6px;font-weight:600;">Document</p><ul style="margin:0;padding-left:20px;"><li style="margin:6px 0;"><strong>${escapeHtmlForEmail(brochureLabel)}</strong> — <a href="${escapeAttr(brochureLink)}">Open</a></li></ul>`
+      : '<p style="color:#757575;">No brochure link is set on this lead yet. Add a document under Step 2 or pick catalog brochures when sending.</p>';
+    return { ...base, brochureLabel, brochureLink, brochureBundleHtml };
   }
 
   if (key === "fees") {
@@ -168,15 +190,25 @@ export function buildLeadEmailVars(
         ? `₹${finalFee.toLocaleString("en-IN")}`
         : `${finalFee} ${feeCurrency}`;
     const feeSummary = feeSummaryText(meta);
-    return { ...base, feeFinal, feeCurrency, feeSummary };
+    const feeSummaryHtml = `<div style="margin:12px 0 16px;border:1px solid #bbdefb;border-radius:8px;overflow:hidden;max-width:560px;">
+<div style="background:#e3f2fd;padding:10px 14px;font-weight:700;font-size:13px;color:#0d47a1;letter-spacing:0.03em;">Fee summary</div>
+<div style="background:#fafafa;padding:14px 16px;">
+<pre style="margin:0;font-family:ui-monospace,Consolas,'Segoe UI Mono',monospace;font-size:14px;line-height:1.55;white-space:pre-wrap;color:#212121;">${escapeHtmlForEmail(feeSummary)}</pre>
+</div>
+</div>`;
+    return {
+      ...base,
+      feeFinal,
+      feeCurrency,
+      feeSummary,
+      feeSummaryHtml,
+      /** Filled server-side when sending (see mergeFeeEmailVarsWithBankDetails). */
+      feeBankDetailsHtml: "",
+    };
   }
 
   if (key === "enrollment") {
-    const enrollmentLink =
-      process.env.ENROLLMENT_FORM_URL?.trim() ||
-      process.env.NEXT_PUBLIC_ENROLLMENT_FORM_URL?.trim() ||
-      `${getAppBaseUrl()}/enroll-student`;
-    return { ...base, enrollmentLink };
+    return { ...base, enrollmentLink: getEnrollmentFormLink() };
   }
 
   if (key === "schedule") {

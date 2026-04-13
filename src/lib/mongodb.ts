@@ -14,7 +14,8 @@ const cache: MongooseCache = g.__mongoose ?? {
   promise: null,
 };
 
-if (process.env.NODE_ENV !== "production") {
+/** Always pin the cache on globalThis so Next.js production bundles share one connection. */
+if (!g.__mongoose) {
   g.__mongoose = cache;
 }
 
@@ -29,7 +30,8 @@ export default async function connectDB(): Promise<typeof mongoose> {
   if (cache.conn) return cache.conn;
   if (!cache.promise) {
     cache.promise = mongoose.connect(uri, {
-      bufferCommands: false,
+      /** Queue commands until connect completes (avoids races with bufferCommands=false). */
+      bufferCommands: true,
     });
   }
   cache.conn = await cache.promise;
