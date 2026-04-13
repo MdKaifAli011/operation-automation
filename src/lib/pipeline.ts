@@ -32,7 +32,6 @@ export function computePipelineStepsFromMeta(
 
   const br = m.brochure as {
     generated?: boolean;
-    sentWhatsApp?: boolean;
     sentEmail?: boolean;
     fileName?: string | null;
     storedFileUrl?: string | null;
@@ -41,7 +40,6 @@ export function computePipelineStepsFromMeta(
   const brochureDone =
     studentReportDone ||
     !!br?.generated ||
-    !!br?.sentWhatsApp ||
     !!br?.sentEmail ||
     (!!br?.fileName && String(br.fileName).trim().length > 0) ||
     (!!br?.storedFileUrl && String(br.storedFileUrl).trim().length > 0) ||
@@ -49,22 +47,18 @@ export function computePipelineStepsFromMeta(
   if (!brochureDone) return 1;
 
   const fees = m.fees as {
-    feeSentWhatsApp?: boolean;
     feeSentEmail?: boolean;
     enrollmentSent?: boolean;
   } | undefined;
   const feesDone =
-    !!fees?.feeSentWhatsApp ||
     !!fees?.feeSentEmail ||
     !!fees?.enrollmentSent;
   if (!feesDone) return 2;
 
   const sch = m.schedule as {
-    scheduleSentWhatsApp?: boolean;
     scheduleSentEmail?: boolean;
   } | undefined;
-  const scheduleDone =
-    !!sch?.scheduleSentWhatsApp || !!sch?.scheduleSentEmail;
+  const scheduleDone = !!sch?.scheduleSentEmail;
   if (!scheduleDone) return 3;
 
   return 4;

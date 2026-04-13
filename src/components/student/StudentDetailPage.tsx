@@ -4639,9 +4639,7 @@ function BrochureSection({
 }) {
   const br = lead.pipelineMeta?.brochure as
     | {
-        sentWhatsApp?: boolean;
         sentEmail?: boolean;
-        sentWhatsAppAt?: string;
         sentEmailAt?: string;
       }
     | undefined;
@@ -5061,7 +5059,7 @@ function BrochureSection({
                 </span>
               ) : (
                 <span className="ml-2 text-amber-800">
-                  Confirm in the generator when ready to email/WhatsApp the family.
+                  Confirm in the generator when ready to email the family.
                 </span>
               )}
             </p>
@@ -5094,52 +5092,6 @@ function BrochureSection({
           ) : null}
         </div>
         <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            className={cn(
-              "inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-[13px] font-semibold shadow-sm transition-colors",
-              br?.sentWhatsApp
-                ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
-                : "bg-[#25d366] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-[#1fb855]",
-            )}
-            onClick={() => {
-              const parts: string[] = [];
-              if (selectedBrochureKeys.length)
-                parts.push(`${selectedBrochureKeys.length} brochure(s)`);
-              if (includeReportInEmail && reportReadyForEmail)
-                parts.push("progress report PDF");
-              const label =
-                parts.length > 0 ? parts.join(" + ") : "Course materials";
-              const now = new Date().toISOString();
-              void onPatchLead({
-                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                  brochure: {
-                    sentWhatsApp: true,
-                    sentWhatsAppAt: now,
-                  },
-                }),
-                activityLog: appendActivity(
-                  lead.activityLog,
-                  "brochure",
-                  `"${label}" marked sent via WhatsApp (saved on this lead).`,
-                ),
-              });
-            }}
-          >
-            {br?.sentWhatsApp ? (
-              <>
-                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
-                Sent · WhatsApp
-                {br?.sentWhatsAppAt ? (
-                  <span className="font-normal opacity-90">
-                    · {formatSentAt(br.sentWhatsAppAt)}
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              `${sendLabelBase} · WhatsApp`
-            )}
-          </button>
           <button
             type="button"
             disabled={brochureEmailBusy || !canSendDocumentsEmail}
@@ -5574,13 +5526,8 @@ function FeeSection({
       currency,
       baseTotal,
       finalFee,
-      feeSentWhatsApp: !!prev?.feeSentWhatsApp,
       feeSentEmail: !!prev?.feeSentEmail,
       enrollmentSent: !!prev?.enrollmentSent,
-      feeSentWhatsAppAt:
-        typeof prev?.feeSentWhatsAppAt === "string"
-          ? prev.feeSentWhatsAppAt
-          : undefined,
       feeSentEmailAt:
         typeof prev?.feeSentEmailAt === "string"
           ? prev.feeSentEmailAt
@@ -5626,10 +5573,8 @@ function FeeSection({
 
   const feeFlags = lead.pipelineMeta?.fees as
     | {
-        feeSentWhatsApp?: boolean;
         feeSentEmail?: boolean;
         enrollmentSent?: boolean;
-        feeSentWhatsAppAt?: string;
         feeSentEmailAt?: string;
         enrollmentSentAt?: string;
       }
@@ -5934,46 +5879,6 @@ function FeeSection({
           <span className="mr-1 text-[13px] font-semibold text-[#424242]">
             Send fee structure
           </span>
-          <button
-            type="button"
-            className={cn(
-              "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-2 text-[13px] font-semibold shadow-sm transition-colors",
-              feeFlags?.feeSentWhatsApp
-                ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
-                : "bg-[#25d366] font-medium text-white hover:bg-[#1fb855]",
-            )}
-            onClick={() => {
-              const now = new Date().toISOString();
-              void onPatchLead({
-                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                  fees: {
-                    ...buildFeesMeta(),
-                    feeSentWhatsApp: true,
-                    feeSentWhatsAppAt: now,
-                  },
-                }),
-                activityLog: appendActivity(
-                  lead.activityLog,
-                  "fees",
-                  `Fee structure (₹${finalFee.toLocaleString("en-IN")} final) marked sent on WhatsApp — saved on lead.`,
-                ),
-              });
-            }}
-          >
-            {feeFlags?.feeSentWhatsApp ? (
-              <>
-                <IconCheck className="h-4 w-4 shrink-0 stroke-[2.5]" />
-                Sent · WhatsApp
-                {feeFlags.feeSentWhatsAppAt ? (
-                  <span className="font-normal opacity-90">
-                    · {feeSentAtLabel(feeFlags.feeSentWhatsAppAt)}
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              "WhatsApp"
-            )}
-          </button>
           <button
             type="button"
             disabled={feeEmailBusy || feeEnrollmentBundleBusy}
@@ -6351,9 +6256,7 @@ function ScheduleSection({
 
   const schedSend = lead.pipelineMeta?.schedule as
     | {
-        scheduleSentWhatsApp?: boolean;
         scheduleSentEmail?: boolean;
-        scheduleSentWhatsAppAt?: string | null;
         scheduleSentEmailAt?: string | null;
       }
     | undefined;
@@ -6643,53 +6546,6 @@ function ScheduleSection({
           <span className="text-[13px] font-semibold">Send schedule</span>
           <button
             type="button"
-            className={cn(
-              "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
-              schedSend?.scheduleSentWhatsApp
-                ? "border-2 border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
-                : "bg-[#25d366] text-white hover:bg-[#1fb855]",
-            )}
-            onClick={() => {
-              const now = new Date().toISOString();
-              const prev =
-                lead.pipelineMeta?.schedule &&
-                typeof lead.pipelineMeta.schedule === "object" &&
-                !Array.isArray(lead.pipelineMeta.schedule)
-                  ? (lead.pipelineMeta.schedule as Record<string, unknown>)
-                  : {};
-              void onPatchLead({
-                pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
-                  schedule: {
-                    ...prev,
-                    view,
-                    scheduleSentWhatsApp: true,
-                    scheduleSentWhatsAppAt: now,
-                  },
-                }),
-                activityLog: appendActivity(
-                  lead.activityLog,
-                  "schedule",
-                  "Class schedule sent via WhatsApp.",
-                ),
-              });
-            }}
-          >
-            {schedSend?.scheduleSentWhatsApp ? (
-              <>
-                <IconCheck className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
-                Sent · WhatsApp
-                {schedSend.scheduleSentWhatsAppAt ? (
-                  <span className="font-normal opacity-90">
-                    · {schedSentAtLabel(schedSend.scheduleSentWhatsAppAt)}
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              "WhatsApp"
-            )}
-          </button>
-          <button
-            type="button"
             disabled={scheduleEmailBusy}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-none px-3 py-1.5 text-[13px] font-semibold transition-colors",
@@ -6765,8 +6621,8 @@ function ScheduleSection({
           <p className="mt-2 text-[12px] text-[#b71c1c]">{scheduleEmailErr}</p>
         ) : null}
         <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Table / Calendar choice saves automatically. Send via WhatsApp or
-          email to complete the pipeline.
+          Table / Calendar choice saves automatically. Send by email to complete
+          the pipeline.
         </p>
       </div>
     </section>

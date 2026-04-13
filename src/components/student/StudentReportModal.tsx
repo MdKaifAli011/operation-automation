@@ -302,8 +302,8 @@ export function StudentReportModal({
             <p className="px-3 py-2 text-[11px] text-slate-500">
               Saved on this lead. Use{" "}
               <span className="font-medium">Confirm for sending</span> when you are
-              ready to share it with the family (then send via email or WhatsApp
-              below).
+              ready to share it with the family; send by email from Step 2 ·
+              Documents.
             </p>
           </div>
         ) : null}
