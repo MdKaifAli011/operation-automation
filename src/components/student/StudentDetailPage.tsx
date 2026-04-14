@@ -848,7 +848,13 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                 canonicalTargetExams={targetExamActiveValues}
               />
             )}
-            {activeStep === 2 && <DocumentsStepPanel lead={lead} />}
+            {activeStep === 2 && (
+              <DocumentsStepPanel
+                lead={lead}
+                onPatchLead={patchLead}
+                refreshLead={refreshLead}
+              />
+            )}
             {activeStep === 3 && <FeesStepPanel lead={lead} />}
             {activeStep === 4 && <ScheduleStepPanel lead={lead} />}
             <StepFooter

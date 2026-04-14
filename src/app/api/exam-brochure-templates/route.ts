@@ -11,6 +11,7 @@ import {
   MAX_BROCHURES_PER_EXAM,
   isValidBrochureKey,
 } from "@/lib/examBrochureTemplates";
+import { ensureExamBrochureTemplateIndexes } from "@/lib/examBrochureTemplateIndexes";
 import { getActiveTargetExamValues } from "@/lib/serverTargetExams";
 import { getExamCourseCatalog } from "@/lib/serverExamCourseCatalog";
 import ExamBrochureTemplateModel from "@/models/ExamBrochureTemplate";
@@ -79,6 +80,7 @@ async function loadBrochureRows(): Promise<ExamBrochureGroupRow[]> {
   const examListActive = await getActiveTargetExamValues();
   const catalog = await getExamCourseCatalog();
   await connectDB();
+  await ensureExamBrochureTemplateIndexes(ExamBrochureTemplateModel);
   const docs = await ExamBrochureTemplateModel.find({}).lean();
 
   const activeLower = new Set(examListActive.map((e) => e.toLowerCase()));
@@ -163,6 +165,7 @@ export async function PUT(req: Request) {
       );
     }
     await connectDB();
+    await ensureExamBrochureTemplateIndexes(ExamBrochureTemplateModel);
     const allowedList = await getActiveTargetExamValues();
     const catalog = await getExamCourseCatalog();
 

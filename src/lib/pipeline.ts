@@ -11,6 +11,7 @@ const NESTED_META_KEYS = [
   "demo",
   "brochure",
   "studentReport",
+  "documents",
   "fees",
   "schedule",
 ] as const;

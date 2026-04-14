@@ -11,6 +11,8 @@ import { cn } from "@/lib/cn";
 import { useExamSubjectCatalog } from "@/hooks/useExamSubjectCatalog";
 import { mergePipelineMeta, appendActivity } from "@/lib/pipeline";
 import { parseIstSlot, getMeetHoldDurationMinutes } from "@/lib/meetLinks/window";
+import { suggestNextFutureIstSlot } from "@/lib/demoSchedule/suggestNextFutureIstSlot";
+import { defaultTimeZoneForCountry } from "@/lib/timezones/countryDefaultTimeZone";
 import {
   getGroupedTimeZoneSelectOptions,
   ensureSelectedTimeZoneOption,
@@ -21,8 +23,14 @@ import { getTeacherBlockDurationMinutes } from "@/lib/demoSchedule/durations";
 import { getDemoAutoCompleteAfterMinutes } from "@/lib/demoSchedule/durations";
 import { getDemoTeacherFeedbackAfterMinutes } from "@/lib/demoFeedback/config";
 import { PipelineStepFrame } from "./PipelineStepFrame";
+import { PipelineMessageDialog } from "./PipelineMessageDialog";
 import type { DemoStepPanelProps } from "./pipelineStepTypes";
-import { IconCheck, IconClipboard, IconPencil } from "@/components/icons/CrmIcons";
+import {
+  IconCheck,
+  IconClipboard,
+  IconCalendarLarge,
+  IconPencil,
+} from "@/components/icons/CrmIcons";
 import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
 
 function formatTime12hInZone(d: Date, timeZone: string): string {
@@ -42,6 +50,20 @@ function formatDateInZone(d: Date, timeZone: string): string {
     month: "short",
     year: "numeric",
   }).format(d);
+}
+
+function formatIsoDateInZone(d: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === "year")?.value ?? "";
+  const m = parts.find((p) => p.type === "month")?.value ?? "";
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+  if (!y || !m || !day) return "";
+  return `${y}-${m}-${day}`;
 }
 
 function timeZoneShortLabel(tz: string, at: Date): string {
@@ -94,16 +116,19 @@ function teachersForSubject(
   return matched;
 }
 
-function validateSlot(
+/** Rich message for modal when slot is in the past (IST + student zone). */
+function validateScheduleSlotDetailed(
   isoDate: string,
   timeHmIST: string,
+  studentTz: string,
 ): string | null {
   const slot = parseIstSlot(isoDate, timeHmIST);
   if (!slot) return "Enter a valid date and time.";
-  if (slot.getTime() < Date.now()) {
-    return "This demo time is already in the past (IST). Choose a future slot.";
-  }
-  return null;
+  if (slot.getTime() >= Date.now()) return null;
+  const istLine = `${format(slot, "d MMM yyyy")}, ${formatTime12hInZone(slot, "Asia/Kolkata")} IST`;
+  const tz = studentTz?.trim() || "Asia/Kolkata";
+  const stuLine = `${formatDateInZone(slot, tz)} · ${formatTime12hInZone(slot, tz)} ${timeZoneShortLabel(tz, slot)}`;
+  return `This demo time is already in the past — it cannot be created. Checked in India (IST) and in the student timezone.\n\nIndia: ${istLine}.\nStudent (${tz}): ${stuLine}.\n\nChoose a later time or a future date.`;
 }
 
 const STATUS_OPTIONS = ["Scheduled", "Completed", "Cancelled"] as const;
@@ -115,16 +140,29 @@ const DEMO_TABLE_TD =
 
 function demoStatusRowClasses(status: string | undefined): {
   text: string;
-  bg: string;
+  cellBg: string;
+  cellBorder: string;
 } {
   const s = String(status ?? "Scheduled").trim();
   if (s === "Cancelled") {
-    return { text: "!text-red-800", bg: "bg-red-50/70" };
+    return {
+      text: "!text-red-900",
+      cellBg: "[&>td]:!bg-red-50/85",
+      cellBorder: "[&>td]:!border-red-200/80",
+    };
   }
   if (s === "Completed") {
-    return { text: "!text-emerald-900", bg: "bg-emerald-50/60" };
+    return {
+      text: "!text-emerald-900",
+      cellBg: "[&>td]:!bg-emerald-50/80",
+      cellBorder: "[&>td]:!border-emerald-200/70",
+    };
   }
-  return { text: "!text-amber-900", bg: "bg-amber-50/60" };
+  return {
+    text: "!text-orange-900",
+    cellBg: "[&>td]:!bg-orange-50/85",
+    cellBorder: "[&>td]:!border-orange-200/80",
+  };
 }
 
 function istWhenLines(isoDate: string, timeHmIST: string): { date: string; time: string } | null {
@@ -148,6 +186,30 @@ function studentWhenLines(
     date: formatDateInZone(slot, tz),
     time: `${formatTime12hInZone(slot, tz)} ${timeZoneShortLabel(tz, slot)}`,
   };
+}
+
+function demoInviteHighlight(row: DemoTableRowPersisted): string {
+  if (!row.isoDate || !row.timeHmIST) {
+    return `${row.subject || "Demo"} · ${row.teacher || "—"}`;
+  }
+  const ist = istWhenLines(row.isoDate, row.timeHmIST);
+  const line = ist ? `${ist.date} · ${ist.time}` : "—";
+  return `${row.subject || "Demo"} · ${row.teacher || "—"} · ${line}`;
+}
+
+function leadContactMeta(lead: Lead): string {
+  const name = lead.studentName?.trim() || "Student";
+  const phone = lead.phone?.trim() || "—";
+  const email = (lead.email?.trim() || "—").toUpperCase();
+  return `${name} · ${phone}\nEmail: ${email}`;
+}
+
+function pickDefaultExamForLead(lead: Lead, examChoices: string[]): string {
+  for (const raw of lead.targetExams ?? []) {
+    const t = typeof raw === "string" ? raw.trim() : "";
+    if (t && examChoices.includes(t)) return t;
+  }
+  return examChoices[0] ?? "";
 }
 
 export function DemoStepPanel({
@@ -195,15 +257,43 @@ export function DemoStepPanel({
   const [saving, setSaving] = useState(false);
   /** While a row status PATCH is in flight — avoids acting on stale row data. */
   const [statusSavingMeetId, setStatusSavingMeetId] = useState<string | null>(null);
-  const [scheduleFormErr, setScheduleFormErr] = useState<string | null>(null);
   const autoFeedbackEmailSentRef = useRef<Set<string>>(new Set());
+
+  type DemoMessageDialogState =
+    | { open: false }
+    | {
+        open: true;
+        mode: "alert";
+        variant: "default" | "error";
+        title: string;
+        description: string;
+        highlight?: string;
+        meta?: string;
+        okLabel?: string;
+      }
+    | {
+        open: true;
+        mode: "confirm";
+        variant: "default" | "error";
+        title: string;
+        description: string;
+        highlight?: string;
+        meta?: string;
+        confirmLabel: string;
+        cancelLabel?: string;
+        onConfirm: () => void;
+      };
+  const [msgDlg, setMsgDlg] = useState<DemoMessageDialogState>({ open: false });
+  const closeMsgDlg = () => setMsgDlg({ open: false });
 
   const [examDraft, setExamDraft] = useState("");
   const [subjectDraft, setSubjectDraft] = useState("");
   const [teacherDraft, setTeacherDraft] = useState("");
-  const [isoDate, setIsoDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
-  const [timeHmIST, setTimeHmIST] = useState("10:00");
-  const [studentTz, setStudentTz] = useState("Asia/Kolkata");
+  const [isoDate, setIsoDate] = useState(() => suggestNextFutureIstSlot().isoDate);
+  const [timeHmIST, setTimeHmIST] = useState(() => suggestNextFutureIstSlot().timeHmIST);
+  const [studentTz, setStudentTz] = useState(() =>
+    defaultTimeZoneForCountry(lead.country ?? ""),
+  );
 
   const subjectsForExam = useMemo(() => {
     const list = subjectsByExam.get(examDraft.trim()) ?? [];
@@ -237,29 +327,43 @@ export function DemoStepPanel({
     const g = [...new Set(timeZoneOptions.map((o) => o.group))];
     return g.sort((a, b) => a.localeCompare(b));
   }, [timeZoneOptions]);
+  const minDemoIsoDate = useMemo(
+    () => formatIsoDateInZone(new Date(), "Asia/Kolkata"),
+    [],
+  );
 
   const openNew = () => {
     setEditingMeetRowId(null);
-    setScheduleFormErr(null);
-    const ex = examChoices[0] ?? "";
+    const ex = pickDefaultExamForLead(lead, examChoices);
+    const list = (subjectsByExam.get(ex) ?? [])
+      .filter((e) => e.isActive !== false)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const firstSubj = list[0]?.name ?? "";
+    const pool = firstSubj
+      ? teachersForSubject(faculties, ex, firstSubj, catalogSubjects)
+      : [];
+    const firstTeacher = pool[0]?.name ?? "";
+    const slot = suggestNextFutureIstSlot();
     setExamDraft(ex);
-    setSubjectDraft("");
-    setTeacherDraft("");
-    setIsoDate(format(new Date(), "yyyy-MM-dd"));
-    setTimeHmIST("10:00");
-    setStudentTz("Asia/Kolkata");
+    setSubjectDraft(firstSubj);
+    setTeacherDraft(firstTeacher);
+    setIsoDate(slot.isoDate);
+    setTimeHmIST(slot.timeHmIST);
+    setStudentTz(defaultTimeZoneForCountry(lead.country ?? ""));
     setScheduleFormOpen(true);
   };
 
   const openEdit = (row: DemoTableRowPersisted) => {
     setEditingMeetRowId(row.meetRowId ?? "");
-    setScheduleFormErr(null);
     setExamDraft(row.examValue?.trim() || examChoices[0] || "");
     setSubjectDraft(row.subject ?? "");
     setTeacherDraft(row.teacher ?? "");
     setIsoDate(row.isoDate || format(new Date(), "yyyy-MM-dd"));
     setTimeHmIST(row.timeHmIST || "10:00");
-    setStudentTz(row.studentTimeZone?.trim() || "Asia/Kolkata");
+    setStudentTz(
+      row.studentTimeZone?.trim() ||
+        defaultTimeZoneForCountry(lead.country ?? ""),
+    );
     setScheduleFormOpen(true);
   };
 
@@ -293,6 +397,8 @@ export function DemoStepPanel({
       if (idx < 0) return;
       const st = status as "Scheduled" | "Completed" | "Cancelled";
       if (st !== "Scheduled" && st !== "Completed" && st !== "Cancelled") return;
+      const to = typeof lead.email === "string" ? lead.email.trim() : "";
+      if (!to) return;
       const rowSnap = next[idx] as unknown as Record<string, unknown>;
       try {
         await sendLeadPipelineEmail(lead.id, {
@@ -302,11 +408,16 @@ export function DemoStepPanel({
           demoStatusEmail: { status: st, row: rowSnap },
         });
       } catch (e) {
-        window.alert(
-          e instanceof Error
-            ? `${e.message}\n\nStatus was saved; fix email or template and resend from Email templates if needed.`
-            : "Status email could not be sent. Status was still saved.",
-        );
+        setMsgDlg({
+          open: true,
+          mode: "alert",
+          variant: "error",
+          title: "Status email not sent",
+          description:
+            e instanceof Error
+              ? `${e.message}\n\nStatus was saved. Fix the lead email, SMTP, or the demo status template, then try changing status again if you need the email.`
+              : "Status email could not be sent. Status was still saved.",
+        });
       }
     } finally {
       setStatusSavingMeetId(null);
@@ -332,16 +443,27 @@ export function DemoStepPanel({
     const subj = subjectDraft.trim();
     const teach = teacherDraft.trim();
     if (!ex || !subj || !teach) {
-      setScheduleFormErr("Exam, subject, and teacher are required.");
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "error",
+        title: "Cannot schedule demo",
+        description: "Exam, subject, and teacher are all required before saving.",
+      });
       return;
     }
-    const err = validateSlot(isoDate, timeHmIST);
-    if (err) {
-      setScheduleFormErr(err);
+    const pastMsg = validateScheduleSlotDetailed(isoDate, timeHmIST, studentTz);
+    if (pastMsg) {
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "error",
+        title: "Cannot schedule demo",
+        description: pastMsg,
+      });
       return;
     }
     setSaving(true);
-    setScheduleFormErr(null);
     try {
       const meetRowId = editingMeetRowId ?? randomUuid();
       if (editingMeetRowId) {
@@ -419,15 +541,32 @@ export function DemoStepPanel({
 
       if (!assignRes.ok) {
         if (assignData.code === "teacher_busy_joinable" && !confirmShared) {
-          const ok = window.confirm(
-            `${assignData.error ?? "Share Meet?"}\n\nUse the same Google Meet as the other student in this slot?`,
-          );
           setSaving(false);
-          if (ok) await submitModal(true);
+          setMsgDlg({
+            open: true,
+            mode: "confirm",
+            variant: "default",
+            title: "Share this Meet link?",
+            description:
+              (assignData.error ?? "This teacher already has a student in this slot.") +
+              "\n\nUse the same Google Meet as the other student in this slot?",
+            highlight: `${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
+            confirmLabel: "Share & continue",
+            cancelLabel: "Cancel",
+            onConfirm: () => {
+              void submitModal(true);
+            },
+          });
           return;
         }
-        setScheduleFormErr(assignData.error || "Could not reserve Meet link.");
         setSaving(false);
+        setMsgDlg({
+          open: true,
+          mode: "alert",
+          variant: "error",
+          title: "Could not reserve Meet",
+          description: assignData.error || "Could not reserve Meet link.",
+        });
         await refreshLead();
         return;
       }
@@ -447,73 +586,132 @@ export function DemoStepPanel({
       await persistDemoRows(patched);
       setScheduleFormOpen(false);
       await refreshLead();
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "default",
+        title: editingMeetRowId ? "Demo updated" : "Demo scheduled",
+        description:
+          "The trial class was saved and the Google Meet link is attached to this lead.",
+        highlight: `${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
+      });
     } catch (e) {
-      setScheduleFormErr(e instanceof Error ? e.message : "Save failed.");
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "error",
+        title: "Save failed",
+        description: e instanceof Error ? e.message : "Something went wrong while saving.",
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  const sendDemoInviteEmail = async (meetRowId: string, isResend: boolean) => {
-    const ok = window.confirm(
-      isResend
-        ? "Send the demo invite again to the student? Previous sends stay in the activity log. Teacher is CC when on file; enrollment may be BCC per your settings."
-        : "Send the demo invite email to the student? The teacher is copied (CC) when their email is on file; enrollment may be BCC per your settings.",
-    );
-    if (!ok) return;
-    setSaving(true);
-    try {
-      const res = await fetch(
-        `/api/leads/${encodeURIComponent(lead.id)}/send-email`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ templateKey: "demo_invite", meetRowId }),
-        },
-      );
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        throw new Error(data.error || "Could not send demo invite.");
-      }
-      await refreshLead();
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Failed.");
-    } finally {
-      setSaving(false);
-    }
+  const sendDemoInviteEmail = (row: DemoTableRowPersisted, isResend: boolean) => {
+    const meetRowId = String(row.meetRowId ?? "");
+    if (!meetRowId) return;
+    setMsgDlg({
+      open: true,
+      mode: "confirm",
+      variant: "default",
+      title: isResend ? "Resend demo link" : "Send demo link",
+      description: isResend
+        ? "Send the join link to the parent again. Previous sends stay in the activity log. The teacher is copied (CC) when on file; enrollment may be BCC per your settings."
+        : "Share the join link with the parent for this trial class. The teacher is copied (CC) when on file; enrollment may be BCC per your settings.",
+      highlight: demoInviteHighlight(row),
+      meta: leadContactMeta(lead),
+      confirmLabel: isResend ? "Send again" : "Send link",
+      cancelLabel: "Cancel",
+      onConfirm: () => {
+        void (async () => {
+          setSaving(true);
+          try {
+            const res = await fetch(
+              `/api/leads/${encodeURIComponent(lead.id)}/send-email`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ templateKey: "demo_invite", meetRowId }),
+              },
+            );
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            if (!res.ok) {
+              throw new Error(data.error || "Could not send demo invite.");
+            }
+            await refreshLead();
+          } catch (e) {
+            setMsgDlg({
+              open: true,
+              mode: "alert",
+              variant: "error",
+              title: "Could not send invite",
+              description: e instanceof Error ? e.message : "Something went wrong.",
+            });
+          } finally {
+            setSaving(false);
+          }
+        })();
+      },
+    });
   };
 
-  const sendTeacherFeedback = async (meetRowId: string, isResend: boolean) => {
-    const ok = window.confirm(
-      isResend
-        ? "Send the feedback email to the teacher again? The same link is reused until they submit."
-        : "Email the teacher a one-time feedback link? The link stops working after they submit once.",
-    );
-    if (!ok) return;
-    setSaving(true);
-    try {
-      const res = await fetch(
-        `/api/leads/${encodeURIComponent(lead.id)}/demo-feedback`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ meetRowId, sendEmail: true }),
-        },
-      );
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        feedbackUrl?: string;
-      };
-      if (!res.ok) throw new Error(data.error || "Could not send feedback invite.");
-      if (data.feedbackUrl) {
-        await navigator.clipboard.writeText(data.feedbackUrl).catch(() => {});
-      }
-      await refreshLead();
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Failed.");
-    } finally {
-      setSaving(false);
-    }
+  const sendTeacherFeedback = (meetRowId: string, isResend: boolean) => {
+    setMsgDlg({
+      open: true,
+      mode: "confirm",
+      variant: "default",
+      title: isResend ? "Resend feedback email" : "Email teacher",
+      description: isResend
+        ? "Send the feedback email to the teacher again? The same link is reused until they submit the form once."
+        : "Send a one-time feedback link to the teacher? The link stops working after they submit once.",
+      confirmLabel: isResend ? "Resend email" : "Send email",
+      cancelLabel: "Cancel",
+      onConfirm: () => {
+        void (async () => {
+          setSaving(true);
+          try {
+            const res = await fetch(
+              `/api/leads/${encodeURIComponent(lead.id)}/demo-feedback`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ meetRowId, sendEmail: true }),
+              },
+            );
+            const data = (await res.json().catch(() => ({}))) as {
+              error?: string;
+              feedbackUrl?: string;
+            };
+            if (!res.ok) {
+              throw new Error(data.error || "Could not send feedback invite.");
+            }
+            if (data.feedbackUrl) {
+              await navigator.clipboard.writeText(data.feedbackUrl).catch(() => {});
+            }
+            await refreshLead();
+            setMsgDlg({
+              open: true,
+              mode: "alert",
+              variant: "default",
+              title: "Feedback email sent",
+              description:
+                "The teacher was emailed when their address is on file. The link was also copied to your clipboard when available.",
+            });
+          } catch (e) {
+            setMsgDlg({
+              open: true,
+              mode: "alert",
+              variant: "error",
+              title: "Could not send",
+              description: e instanceof Error ? e.message : "Something went wrong.",
+            });
+          } finally {
+            setSaving(false);
+          }
+        })();
+      },
+    });
   };
 
   useEffect(() => {
@@ -577,10 +775,35 @@ export function DemoStepPanel({
       };
       if (!res.ok) throw new Error(data.error || "Could not create feedback link.");
       if (data.feedbackUrl) {
-        await navigator.clipboard.writeText(data.feedbackUrl);
+        try {
+          await navigator.clipboard.writeText(data.feedbackUrl);
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "default",
+            title: "Link copied",
+            description: "The teacher feedback link is on your clipboard.",
+          });
+        } catch {
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "error",
+            title: "Copy failed",
+            description:
+              "The link was created but could not be copied automatically. Open this lead again and use Copy, or check browser permissions for the clipboard.",
+            highlight: data.feedbackUrl,
+          });
+        }
       }
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Failed.");
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "error",
+        title: "Could not copy link",
+        description: e instanceof Error ? e.message : "Something went wrong.",
+      });
     } finally {
       setSaving(false);
     }
@@ -620,14 +843,16 @@ export function DemoStepPanel({
                 before moving to Documents.
               </p>
             </div>
-            <button
-              type="button"
-              className={SX.leadBtnGreen}
-              disabled={saving || examChoices.length === 0}
-              onClick={openNew}
-            >
-              + Add another demo
-            </button>
+            {rows.length > 0 ? (
+              <button
+                type="button"
+                className={SX.leadBtnGreen}
+                disabled={saving || examChoices.length === 0}
+                onClick={openNew}
+              >
+                + Add another demo
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -648,14 +873,6 @@ export function DemoStepPanel({
                   for country → default mapping.
                 </p>
               </div>
-              {scheduleFormErr ? (
-                <p
-                  className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-[13px] text-rose-700"
-                  role="alert"
-                >
-                  {scheduleFormErr}
-                </p>
-              ) : null}
               <div className="divide-y divide-slate-200">
                 <div className="grid grid-cols-1 sm:grid-cols-[minmax(120px,160px)_1fr]">
                   <div className="flex items-center border-b border-slate-200 bg-slate-100 px-3 py-3 text-[10px] font-bold uppercase tracking-wide text-slate-700 sm:border-b-0 sm:border-r sm:border-slate-200">
@@ -666,9 +883,25 @@ export function DemoStepPanel({
                       className={cn(SX.select, "w-full")}
                       value={examDraft}
                       onChange={(e) => {
-                        setExamDraft(e.target.value);
-                        setSubjectDraft("");
-                        setTeacherDraft("");
+                        const next = e.target.value;
+                        setExamDraft(next);
+                        const list = (subjectsByExam.get(next) ?? [])
+                          .filter((s) => s.isActive !== false)
+                          .sort(
+                            (a, b) =>
+                              a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+                          );
+                        const sub = list[0]?.name ?? "";
+                        setSubjectDraft(sub);
+                        const pool = sub
+                          ? teachersForSubject(
+                              faculties,
+                              next,
+                              sub,
+                              catalogSubjects,
+                            )
+                          : [];
+                        setTeacherDraft(pool[0]?.name ?? "");
                       }}
                     >
                       {examChoices.map((e) => (
@@ -684,7 +917,13 @@ export function DemoStepPanel({
                           type="button"
                           onClick={() => {
                             setSubjectDraft(s.name);
-                            setTeacherDraft("");
+                            const pool = teachersForSubject(
+                              faculties,
+                              examDraft,
+                              s.name,
+                              catalogSubjects,
+                            );
+                            setTeacherDraft(pool[0]?.name ?? "");
                           }}
                           className={cn(
                             "rounded-none border px-2.5 py-1 text-[12px] font-medium transition-colors",
@@ -732,7 +971,15 @@ export function DemoStepPanel({
                           type="date"
                           className={cn(SX.input, "w-full max-w-[11rem]")}
                           value={isoDate}
-                          onChange={(e) => setIsoDate(e.target.value)}
+                          min={!editingMeetRowId ? minDemoIsoDate || undefined : undefined}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (!editingMeetRowId && minDemoIsoDate && next < minDemoIsoDate) {
+                              setIsoDate(minDemoIsoDate);
+                              return;
+                            }
+                            setIsoDate(next);
+                          }}
                         />
                         <span className="text-[11px] text-slate-500">at</span>
                         <input
@@ -799,12 +1046,38 @@ export function DemoStepPanel({
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-white px-1 py-2 sm:px-2">
-          {rows.length === 0 ? (
-            <div className="mx-1 my-2 border border-dashed border-slate-200 bg-slate-50/60 px-4 py-10 text-center text-[13px] text-slate-600 sm:mx-2">
-              No demos yet. Use <strong>Add another demo</strong> to schedule a
-              trial class.
+          {!scheduleFormOpen && rows.length === 0 ? (
+            <div className="mx-1 my-3 flex flex-col items-center sm:mx-2">
+              <div
+                className={cn(
+                  "w-full max-w-lg border border-dashed border-slate-200 bg-slate-50/50 px-6 py-11 text-center",
+                  "shadow-none",
+                )}
+              >
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center text-primary">
+                  <IconCalendarLarge className="h-12 w-12" />
+                </div>
+                <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">
+                  No demo scheduled yet
+                </h3>
+                <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-slate-600">
+                  Use <span className="font-medium text-slate-800">Create demo</span> to add
+                  date, time, and teacher. Everything stays in the table below.
+                </p>
+                <button
+                  type="button"
+                  className={cn(
+                    "mt-6 inline-flex h-9 items-center justify-center rounded-none px-4 text-[13px] font-medium transition-colors",
+                    "border border-primary bg-white text-primary hover:bg-sky-50/90",
+                  )}
+                  disabled={saving || examChoices.length === 0}
+                  onClick={openNew}
+                >
+                  + Create demo
+                </button>
+              </div>
             </div>
-          ) : (
+          ) : rows.length > 0 ? (
             <div className="w-full min-w-0">
               <table
                 className={cn(
@@ -861,7 +1134,12 @@ export function DemoStepPanel({
                     return (
                       <tr
                         key={r.meetRowId || i}
-                        className={cn("align-top transition-colors", tone.text, tone.bg)}
+                        className={cn(
+                          "align-top transition-colors",
+                          tone.text,
+                          tone.cellBg,
+                          tone.cellBorder,
+                        )}
                       >
                         <td className={cn(DEMO_TABLE_TD, "min-w-0 tabular-nums text-center")}>
                           {i + 1}
@@ -900,12 +1178,19 @@ export function DemoStepPanel({
                           {meetUrl ? (
                             <button
                               type="button"
-                              className="max-w-full cursor-pointer break-all text-left font-semibold underline decoration-2 underline-offset-2 hover:opacity-90"
+                              className="max-w-full cursor-pointer break-all text-left font-semibold text-current underline decoration-2 underline-offset-2 hover:opacity-90"
                               disabled={rowBusy}
                               title="Click to copy Meet link"
                               onClick={() =>
                                 void navigator.clipboard.writeText(meetUrl).catch(() => {
-                                  window.alert("Could not copy to clipboard.");
+                                  setMsgDlg({
+                                    open: true,
+                                    mode: "alert",
+                                    variant: "error",
+                                    title: "Copy failed",
+                                    description:
+                                      "Your browser did not allow copying. Try again or copy the link from the address bar after opening it in a new tab.",
+                                  });
                                 })
                               }
                             >
@@ -1047,7 +1332,7 @@ export function DemoStepPanel({
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    void sendDemoInviteEmail(rowMeetId, inviteSent);
+                                    sendDemoInviteEmail(r, inviteSent);
                                   }}
                                 >
                                   {inviteSent ? (
@@ -1073,7 +1358,7 @@ export function DemoStepPanel({
                 </tbody>
               </table>
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-3 text-[11px] leading-relaxed text-slate-600 sm:px-4">
@@ -1113,6 +1398,35 @@ export function DemoStepPanel({
           </p>
         </div>
       </div>
+
+      {msgDlg.open && msgDlg.mode === "alert" ? (
+        <PipelineMessageDialog
+          open
+          onClose={closeMsgDlg}
+          mode="alert"
+          variant={msgDlg.variant}
+          title={msgDlg.title}
+          description={msgDlg.description}
+          highlight={msgDlg.highlight}
+          meta={msgDlg.meta}
+          okLabel={msgDlg.okLabel}
+        />
+      ) : null}
+      {msgDlg.open && msgDlg.mode === "confirm" ? (
+        <PipelineMessageDialog
+          open
+          onClose={closeMsgDlg}
+          mode="confirm"
+          variant={msgDlg.variant}
+          title={msgDlg.title}
+          description={msgDlg.description}
+          highlight={msgDlg.highlight}
+          meta={msgDlg.meta}
+          confirmLabel={msgDlg.confirmLabel}
+          cancelLabel={msgDlg.cancelLabel}
+          onConfirm={msgDlg.onConfirm}
+        />
+      ) : null}
     </PipelineStepFrame>
   );
 }

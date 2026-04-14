@@ -119,11 +119,33 @@ export type LeadPipelineStudentReport = {
   sendConfirmedAt?: string | null;
 };
 
+/** Step 2 tracker rows (sheet-like Documents table). */
+export type LeadPipelineDocumentItem = {
+  /** Stable key in table (report, brochure, enrollment, courier, ranking, bank, custom-*) */
+  key: string;
+  title: string;
+  countLabel?: string;
+  status?: string;
+  sentAt?: string | null;
+  isCustom?: boolean;
+  /** Optional direct URL entered by staff for custom docs. */
+  documentUrl?: string | null;
+  /** Optional uploaded file (stored under /public/uploads/lead-documents/{leadId}/...). */
+  storedFileUrl?: string | null;
+  fileName?: string | null;
+};
+
+export type LeadPipelineDocuments = {
+  items?: LeadPipelineDocumentItem[];
+};
+
 export type LeadPipelineMeta = {
   demo?: LeadPipelineDemo;
   brochure?: LeadPipelineBrochure;
   /** Optional: generated PDF report for the student (Step 2) */
   studentReport?: LeadPipelineStudentReport;
+  /** Step 2 documents table status + custom rows */
+  documents?: LeadPipelineDocuments;
   fees?: LeadPipelineFees;
   schedule?: LeadPipelineSchedule;
 };

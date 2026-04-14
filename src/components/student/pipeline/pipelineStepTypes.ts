@@ -12,3 +12,9 @@ export type DemoStepPanelProps = PipelineStepPanelProps & {
   labelForTargetExam: (value: string) => string;
   canonicalTargetExams: readonly string[];
 };
+
+/** Documents step also patches lead + refreshes for send/status actions. */
+export type DocumentsStepPanelProps = PipelineStepPanelProps & {
+  onPatchLead: (updates: Partial<Lead>) => Promise<Lead>;
+  refreshLead: () => Promise<void>;
+};

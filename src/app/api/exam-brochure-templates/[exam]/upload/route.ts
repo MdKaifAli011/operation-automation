@@ -9,6 +9,7 @@ import {
   normalizeBrochureCourseId,
   resolveCanonicalTargetExam,
 } from "@/lib/examBrochureTemplates";
+import { ensureExamBrochureTemplateIndexes } from "@/lib/examBrochureTemplateIndexes";
 import { getActiveTargetExamValues } from "@/lib/serverTargetExams";
 import connectDB from "@/lib/mongodb";
 import ExamBrochureTemplateModel from "@/models/ExamBrochureTemplate";
@@ -208,6 +209,7 @@ export async function POST(req: Request, context: Ctx) {
     );
 
     await connectDB();
+    await ensureExamBrochureTemplateIndexes(ExamBrochureTemplateModel);
     const examRe = new RegExp(`^${escapeRegexLiteral(exam)}$`, "i");
     const existing = await ExamBrochureTemplateModel.findOne(
       courseId
@@ -326,6 +328,7 @@ export async function DELETE(req: Request, context: Ctx) {
     );
 
     await connectDB();
+    await ensureExamBrochureTemplateIndexes(ExamBrochureTemplateModel);
     const examRe = new RegExp(`^${escapeRegexLiteral(exam)}$`, "i");
     const existing = await ExamBrochureTemplateModel.findOne(
       courseId

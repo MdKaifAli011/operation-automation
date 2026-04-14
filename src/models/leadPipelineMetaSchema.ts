@@ -25,6 +25,8 @@ export const DemoRowSchema = new Schema(
     meetBookingId: { type: String, default: "" },
     meetWindowStartIso: { type: String, default: "" },
     meetWindowEndIso: { type: String, default: "" },
+    /** When true, server/client may email the teacher once the feedback window opens */
+    teacherFeedbackAutoEmail: { type: Boolean, default: false },
     /** ISO — staff sent the one-time teacher feedback link */
     teacherFeedbackInviteSentAt: { type: String, default: null },
     /** ISO — teacher submitted the feedback form (link no longer valid) */
@@ -82,6 +84,28 @@ const StudentReportBlockSchema = new Schema(
     additionalNotes: { type: String, default: "" },
     recommendations: { type: String, default: "" },
     sendConfirmedAt: { type: String, default: null },
+  },
+  { _id: false },
+);
+
+const DocumentsItemSchema = new Schema(
+  {
+    key: { type: String, default: "" },
+    title: { type: String, default: "" },
+    countLabel: { type: String, default: "" },
+    status: { type: String, default: "" },
+    sentAt: { type: String, default: null },
+    isCustom: { type: Boolean, default: false },
+    documentUrl: { type: String, default: null },
+    storedFileUrl: { type: String, default: null },
+    fileName: { type: String, default: null },
+  },
+  { _id: false },
+);
+
+const DocumentsBlockSchema = new Schema(
+  {
+    items: { type: [DocumentsItemSchema], default: [] },
   },
   { _id: false },
 );
@@ -148,6 +172,7 @@ export const PipelineMetaSchema = new Schema(
     demo: { type: DemoBlockSchema, default: () => ({ rows: [] }) },
     brochure: { type: BrochureBlockSchema, default: () => ({}) },
     studentReport: { type: StudentReportBlockSchema, default: () => ({}) },
+    documents: { type: DocumentsBlockSchema, default: () => ({}) },
     fees: { type: FeesBlockSchema, default: () => ({}) },
     schedule: { type: ScheduleBlockSchema, default: () => ({}) },
   },
