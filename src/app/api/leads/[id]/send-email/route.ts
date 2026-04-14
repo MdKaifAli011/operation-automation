@@ -333,6 +333,13 @@ export async function POST(
       );
     }
 
+    const reportOnlyBrochureEmail =
+      templateKey === "brochure" &&
+      !!body.brochureEmail &&
+      Array.isArray(body.brochureEmail.selectionKeys) &&
+      body.brochureEmail.selectionKeys.length === 0 &&
+      body.brochureEmail.includeStudentReportPdf === true;
+
     let vars: Record<string, string>;
     if (templateKey === "brochure") {
       if (!body.brochureEmail || typeof body.brochureEmail !== "object") {
@@ -365,8 +372,29 @@ export async function POST(
       vars = await mergeFeeEmailVarsWithBankDetails(lead, vars);
     }
 
-    const subject = renderTemplate(String(tmpl.subject), vars);
+    let subject = renderTemplate(String(tmpl.subject), vars);
     let html = renderTemplate(String(tmpl.bodyHtml), vars);
+
+    if (reportOnlyBrochureEmail) {
+      const parentName = String(vars.parentName || "Parent").trim() || "Parent";
+      const studentName = String(vars.studentName || "Student").trim() || "Student";
+      const grade = String(vars.grade || "").trim();
+      const exams = String(vars.targetExams || "").trim();
+      subject = `Demo Session Report - ${studentName} | Testprepkart`;
+      html = `<div style="max-width:640px;margin:0 auto;font-family:Arial,'Segoe UI',sans-serif;color:#1f2937;line-height:1.6;">
+<p style="margin:0 0 14px;">Dear ${parentName},</p>
+<p style="margin:0 0 14px;">Greetings from <strong>Testprepkart</strong>.</p>
+<p style="margin:0 0 14px;">Please find the latest <strong>Demo Session Report</strong> for <strong>${studentName}</strong> attached below for your review.</p>
+<div style="margin:0 0 14px;padding:12px 14px;border:1px solid #e5e7eb;background:#f8fafc;">
+<p style="margin:0;font-size:13px;color:#475569;">
+Student: <strong>${studentName}</strong>${grade ? ` &nbsp;|&nbsp; Grade: <strong>${grade}</strong>` : ""}${exams && exams !== "—" ? ` &nbsp;|&nbsp; Exam track: <strong>${exams}</strong>` : ""}
+</p>
+</div>
+${vars.brochureBundleHtml ?? ""}
+<p style="margin:14px 0 0;">If you need any clarification, please reply to this email and our team will assist you.</p>
+<p style="margin:18px 0 0;">Warm regards,<br/><strong>Testprepkart Team</strong></p>
+</div>`;
+    }
 
     if (templateKey === "brochure") {
       html = ensureBrochureBundleHtmlInRenderedHtml(
