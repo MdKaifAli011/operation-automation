@@ -283,12 +283,7 @@ export function AddStudentLeadDialog({
               <p className="mt-1 text-[11px] text-rose-700" role="alert">
                 {emailError}
               </p>
-            ) : (
-              <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                Used for pipeline emails (documents, fees, enrollment). Optional —
-                edit anytime in the sheet.
-              </p>
-            )}
+            ) : null}
           </label>
 
           <label className="block min-w-0 text-[12px] font-medium text-slate-700">
