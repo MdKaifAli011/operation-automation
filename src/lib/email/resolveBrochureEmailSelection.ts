@@ -2,7 +2,6 @@ import connectDB from "@/lib/mongodb";
 import ExamBrochureTemplateModel from "@/models/ExamBrochureTemplate";
 import {
   brochureItemsFromDoc,
-  pickBrochureDocByExam,
   type BrochureTemplateItem,
 } from "@/lib/examBrochureTemplates";
 import { getAppBaseUrl } from "@/lib/email/appBaseUrl";
@@ -45,17 +44,22 @@ export async function resolveBrochureEmailItemsOrdered(
   const byComposite = new Map<string, { title: string; href: string }>();
 
   for (const exam of exams) {
-    const hit = pickBrochureDocByExam(docs, exam);
-    const items = brochureItemsFromDoc(hit ?? null);
-    for (const b of items) {
-      const composite = `${exam}-${b.key}`;
-      const href = hrefFromBrochureItem(b);
-      if (!href) continue;
-      const baseTitle = (b.title ?? "").trim() || "Course document";
-      byComposite.set(composite, {
-        title: `${exam} · ${baseTitle}`,
-        href,
-      });
+    const seen = new Set<string>();
+    for (const d of docs) {
+      const e = typeof d.exam === "string" ? d.exam.trim() : "";
+      if (e !== exam && e.toLowerCase() !== exam.toLowerCase()) continue;
+      for (const b of brochureItemsFromDoc(d)) {
+        const composite = `${exam}-${b.key}`;
+        if (seen.has(composite)) continue;
+        seen.add(composite);
+        const href = hrefFromBrochureItem(b);
+        if (!href) continue;
+        const baseTitle = (b.title ?? "").trim() || "Course document";
+        byComposite.set(composite, {
+          title: `${exam} · ${baseTitle}`,
+          href,
+        });
+      }
     }
   }
 

@@ -18,6 +18,9 @@ export type BrochureTemplateItem = {
 
 export type ExamBrochureGroupRow = {
   exam: string;
+  /** Catalog course id, or "" for legacy exam-only brochure doc */
+  courseId: string;
+  courseName: string;
   brochures: BrochureTemplateItem[];
   updatedAt: string | null;
 };
@@ -54,20 +57,35 @@ export function escapeRegexLiteral(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export function normalizeBrochureCourseId(raw: unknown): string {
+  if (typeof raw === "string") return raw.trim();
+  return "";
+}
+
 export function pickBrochureDocByExam<T extends { exam?: string }>(
   docs: T[],
   wanted: string,
 ): T | undefined {
-  const w = wanted.trim();
+  return pickBrochureDocByExamAndCourse(docs, wanted, "");
+}
+
+/** Match `exam` (case-insensitive) and `courseId` (exact; missing field = ""). */
+export function pickBrochureDocByExamAndCourse<
+  T extends { exam?: string; courseId?: string },
+>(docs: T[], wantedExam: string, wantedCourseId: string): T | undefined {
+  const w = wantedExam.trim();
+  const wc = normalizeBrochureCourseId(wantedCourseId);
   if (!w) return undefined;
   for (const d of docs) {
     const e = typeof d.exam === "string" ? d.exam.trim() : "";
-    if (e === w) return d;
+    const c = normalizeBrochureCourseId(d.courseId);
+    if (e === w && c === wc) return d;
   }
   const wl = w.toLowerCase();
   for (const d of docs) {
     const e = typeof d.exam === "string" ? d.exam.trim() : "";
-    if (e.toLowerCase() === wl) return d;
+    const c = normalizeBrochureCourseId(d.courseId);
+    if (e.toLowerCase() === wl && c === wc) return d;
   }
   return undefined;
 }
@@ -163,11 +181,15 @@ function dedupeKeys(items: BrochureTemplateItem[]): BrochureTemplateItem[] {
 
 export function groupRowFromDoc(
   exam: string,
+  courseId: string,
+  courseName: string,
   doc: unknown,
   updatedAt?: Date | null,
 ): ExamBrochureGroupRow {
   return {
     exam,
+    courseId: normalizeBrochureCourseId(courseId),
+    courseName: courseName.trim() || "Course",
     brochures: brochureItemsFromDoc(doc),
     updatedAt: updatedAt?.toISOString() ?? null,
   };

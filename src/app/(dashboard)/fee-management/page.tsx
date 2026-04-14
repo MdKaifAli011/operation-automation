@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SX } from "@/components/student/student-excel-ui";
+import { cn } from "@/lib/cn";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import type { FeeRecord } from "@/lib/types";
 
@@ -16,8 +19,10 @@ type FeeRow = {
   status: FeeRecord["status"];
 };
 
-type ExamFeeRow = {
+type ExamCourseFeeRow = {
   exam: string;
+  courseId: string;
+  courseName: string;
   baseFee: number;
   notes: string;
   updatedAt?: string | null;
@@ -36,7 +41,7 @@ export default function FeeManagementPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourse, setFilterCourse] = useState("");
 
-  const [examRows, setExamRows] = useState<ExamFeeRow[]>([]);
+  const [examRows, setExamRows] = useState<ExamCourseFeeRow[]>([]);
   const [examLoading, setExamLoading] = useState(true);
   const [examSaving, setExamSaving] = useState(false);
   const [examError, setExamError] = useState<string | null>(null);
@@ -48,11 +53,13 @@ export default function FeeManagementPage() {
     try {
       const res = await fetch("/api/exam-fee-structures", { cache: "no-store" });
       if (!res.ok) throw new Error("Could not load exam fee defaults.");
-      const data = (await res.json()) as ExamFeeRow[];
+      const data = (await res.json()) as ExamCourseFeeRow[];
       if (Array.isArray(data)) {
         setExamRows(
           data.map((d) => ({
             exam: typeof d.exam === "string" ? d.exam : "",
+            courseId: typeof d.courseId === "string" ? d.courseId : "",
+            courseName: typeof d.courseName === "string" ? d.courseName : "",
             baseFee:
               typeof d.baseFee === "number" && Number.isFinite(d.baseFee)
                 ? d.baseFee
@@ -78,19 +85,24 @@ export default function FeeManagementPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: examRows.map((r) => ({
-            exam: r.exam,
-            baseFee: r.baseFee,
-            notes: r.notes,
-          })),
+          items: examRows
+            .filter((r) => r.courseId)
+            .map((r) => ({
+              exam: r.exam,
+              courseId: r.courseId,
+              baseFee: r.baseFee,
+              notes: r.notes,
+            })),
         }),
       });
       if (!res.ok) throw new Error("Save failed.");
-      const data = (await res.json()) as ExamFeeRow[];
+      const data = (await res.json()) as ExamCourseFeeRow[];
       if (Array.isArray(data)) {
         setExamRows(
           data.map((d) => ({
             exam: typeof d.exam === "string" ? d.exam : "",
+            courseId: typeof d.courseId === "string" ? d.courseId : "",
+            courseName: typeof d.courseName === "string" ? d.courseName : "",
             baseFee:
               typeof d.baseFee === "number" && Number.isFinite(d.baseFee)
                 ? d.baseFee
@@ -180,126 +192,193 @@ export default function FeeManagementPage() {
     return map[s] ?? "bg-[#f5f5f5] text-[#757575]";
   };
 
-  const updateExamBaseFee = (exam: string, baseFee: number) => {
+  const updateExamBaseFee = (key: string, baseFee: number) => {
     setExamRows((prev) =>
-      prev.map((r) => (r.exam === exam ? { ...r, baseFee } : r)),
+      prev.map((r) =>
+        `${r.exam}::${r.courseId}` === key ? { ...r, baseFee } : r,
+      ),
     );
   };
 
-  const updateExamNotes = (exam: string, notes: string) => {
+  const updateExamNotes = (key: string, notes: string) => {
     setExamRows((prev) =>
-      prev.map((r) => (r.exam === exam ? { ...r, notes } : r)),
+      prev.map((r) =>
+        `${r.exam}::${r.courseId}` === key ? { ...r, notes } : r,
+      ),
     );
   };
+
+  const rowKey = (r: ExamCourseFeeRow) => `${r.exam}::${r.courseId}`;
 
   return (
-    <div className="space-y-8">
-      <section
-        id="exam-fee-defaults"
-        className="space-y-4 rounded-none border border-[#e0e0e0] bg-white p-4 shadow-sm"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-[#212121]">
-              Default fees by target exam
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm text-[#757575]">
-              Set the base fee (INR) for each target exam from your Exams &amp;
-              subjects settings. On a lead, when that exam is selected and the fee
-              step has no base amount yet, this value auto-fills on the student
-              workspace.
+    <div className={SX.pageWrap}>
+      <div className={SX.outerSheet} id="exam-fee-defaults">
+        <div className={SX.toolbar}>
+          <div className="min-w-0 flex-1">
+            <h2 className={SX.toolbarTitle}>Default fees by exam &amp; course</h2>
+            <p className={SX.toolbarMeta}>
+              Courses come from{" "}
+              <Link
+                href="/exam-courses"
+                className="font-medium text-primary underline"
+              >
+                Exam courses
+              </Link>
+              . Values here auto-fill the fee step on student workspaces when the
+              same exam and course apply.
             </p>
           </div>
           <button
             type="button"
-            className="rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className={SX.leadBtnGreen}
             disabled={examSaving || examLoading || targetExamsLoading}
             onClick={() => void saveExamStructures()}
           >
-            {examSaving ? "Saving…" : "Save exam defaults"}
+            {examSaving ? "Saving…" : "Save defaults"}
           </button>
         </div>
-        {examError && (
-          <p className="text-sm text-rose-700" role="alert">
-            {examError}
-          </p>
-        )}
-        {examSavedAt && (
-          <p className="text-xs text-[#2e7d32]">
-            Saved exam defaults ({new Date(examSavedAt).toLocaleString()}).
-          </p>
-        )}
-        {examLoading || targetExamsLoading ? (
-          <p className="text-sm text-[#757575]">Loading exam defaults…</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
+
+        <div
+          className={cn(
+            SX.leadStatBar,
+            "border-t-0",
+            examError && "bg-rose-50/80 text-rose-900",
+            !examError && examSavedAt && "bg-emerald-50/50 text-emerald-900",
+          )}
+        >
+          <span
+            className={cn(
+              "min-w-0 flex-1 text-[13px]",
+              !examError && !examSavedAt && "font-normal text-slate-600",
+            )}
+            role={examError ? "alert" : examSavedAt ? "status" : undefined}
+          >
+            {examError ? (
+              examError
+            ) : examSavedAt ? (
+              `Saved (${new Date(examSavedAt).toLocaleString()}).`
+            ) : examLoading || targetExamsLoading ? (
+              "Loading defaults…"
+            ) : (
+              "Edit base fee (₹) and notes per row, then save."
+            )}
+          </span>
+        </div>
+
+        {!examLoading && !targetExamsLoading ? (
+          <div className="overflow-x-auto border-b border-slate-200 bg-white">
+            <table className={cn(SX.dataTable, "min-w-[720px]")}>
               <thead>
-                <tr className="bg-[#f8f9fa] text-left text-xs uppercase text-[#757575]">
-                  <th className="border border-[#e0e0e0] px-2 py-2">Exam</th>
-                  <th className="border border-[#e0e0e0] px-2 py-2">
-                    Base fee (₹)
-                  </th>
-                  <th className="border border-[#e0e0e0] px-2 py-2">Notes</th>
-                  <th className="border border-[#e0e0e0] px-2 py-2">Updated</th>
+                <tr>
+                  <th className={SX.dataTh}>Exam</th>
+                  <th className={SX.dataTh}>Course</th>
+                  <th className={cn(SX.dataTh, "tabular-nums")}>Base fee (₹)</th>
+                  <th className={SX.dataTh}>Notes</th>
+                  <th className={SX.dataTh}>Updated</th>
                 </tr>
               </thead>
               <tbody>
-                {examRows.map((r) => (
-                  <tr key={r.exam}>
-                    <td className="border border-[#e0e0e0] px-2 py-2 font-semibold text-[#212121]">
-                      {targetCourseLabel(r.exam)}
-                    </td>
-                    <td className="border border-[#e0e0e0] px-2 py-2">
-                      <input
-                        type="number"
-                        min={0}
-                        className="w-32 rounded-none border border-[#e0e0e0] px-2 py-1 tabular-nums"
-                        value={r.baseFee}
-                        onChange={(e) =>
-                          updateExamBaseFee(
-                            r.exam,
-                            Math.max(0, Math.round(Number(e.target.value) || 0)),
-                          )
-                        }
-                        aria-label={`Base fee for ${targetCourseLabel(r.exam)}`}
-                      />
-                    </td>
-                    <td className="border border-[#e0e0e0] px-2 py-2">
-                      <input
-                        type="text"
-                        className="w-full min-w-[160px] max-w-md rounded-none border border-[#e0e0e0] px-2 py-1"
-                        placeholder="Optional"
-                        value={r.notes}
-                        onChange={(e) => updateExamNotes(r.exam, e.target.value)}
-                      />
-                    </td>
-                    <td className="border border-[#e0e0e0] px-2 py-2 text-xs text-[#9e9e9e]">
-                      {r.updatedAt
-                        ? new Date(r.updatedAt).toLocaleString()
-                        : "—"}
+                {examRows.length === 0 ? (
+                  <tr>
+                    <td className={SX.dataTd} colSpan={5}>
+                      No rows. Add target exams and courses under{" "}
+                      <Link
+                        href="/exam-courses"
+                        className="font-medium text-primary underline"
+                      >
+                        Exam courses
+                      </Link>
+                      .
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  examRows.map((r, i) => {
+                    const k = rowKey(r);
+                    const disabledRow = !r.courseId;
+                    return (
+                      <tr
+                        key={k}
+                        className={i % 2 === 1 ? SX.zebraRow : undefined}
+                      >
+                        <td className={cn(SX.dataTd, "font-medium text-slate-900")}>
+                          {targetCourseLabel(r.exam)}
+                        </td>
+                        <td className={SX.dataTd}>
+                          {disabledRow ? (
+                            <span className="text-slate-500">{r.courseName}</span>
+                          ) : (
+                            r.courseName
+                          )}
+                        </td>
+                        <td className={SX.dataTd}>
+                          <input
+                            type="number"
+                            min={0}
+                            disabled={disabledRow}
+                            className={cn(
+                              SX.input,
+                              "max-w-[140px] tabular-nums",
+                              disabledRow && "cursor-not-allowed opacity-50",
+                            )}
+                            value={r.baseFee}
+                            onChange={(e) =>
+                              updateExamBaseFee(
+                                k,
+                                Math.max(
+                                  0,
+                                  Math.round(Number(e.target.value) || 0),
+                                ),
+                              )
+                            }
+                            aria-label={`Base fee for ${targetCourseLabel(r.exam)} — ${r.courseName}`}
+                          />
+                        </td>
+                        <td className={SX.dataTd}>
+                          <input
+                            type="text"
+                            disabled={disabledRow}
+                            className={cn(
+                              SX.input,
+                              "min-w-[140px] max-w-md",
+                              disabledRow && "cursor-not-allowed opacity-50",
+                            )}
+                            placeholder="Optional"
+                            value={r.notes}
+                            onChange={(e) => updateExamNotes(k, e.target.value)}
+                          />
+                        </td>
+                        <td
+                          className={cn(SX.dataTd, "text-[11px] text-slate-500")}
+                        >
+                          {r.updatedAt
+                            ? new Date(r.updatedAt).toLocaleString()
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
+        ) : (
+          <p className="px-4 py-4 text-sm text-slate-600">Loading defaults…</p>
         )}
-      </section>
+      </div>
 
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-bold text-[#212121]">Fee Management</h1>
+          <h1 className={cn(SX.toolbarTitle, "text-lg")}>Student fee records</h1>
           <button
             type="button"
-            className="rounded-none border border-[#e0e0e0] bg-white px-4 py-2 text-sm font-medium text-[#424242]"
+            className={SX.btnSecondary}
             onClick={() => {
               document
                 .getElementById("exam-fee-defaults")
                 ?.scrollIntoView({ behavior: "smooth" });
             }}
           >
-            Exam defaults
+            Exam &amp; course defaults
           </button>
         </div>
 
@@ -308,28 +387,44 @@ export default function FeeManagementPage() {
             {error}
           </p>
         )}
-        {loading && <p className="text-sm text-[#757575]">Loading fees…</p>}
+        {loading && <p className="text-sm text-slate-600">Loading fees…</p>}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ["Total Revenue", `₹${totals.totalRev.toLocaleString("en-IN")}`, "text-[#1565c0]"],
-            ["Collected", `₹${totals.collected.toLocaleString("en-IN")}`, "text-[#2e7d32]"],
-            ["Pending", `₹${totals.pending.toLocaleString("en-IN")}`, "text-[#f57f17]"],
-            ["This Month", `₹${totals.month.toLocaleString("en-IN")}`, "text-[#212121]"],
+            [
+              "Total Revenue",
+              `₹${totals.totalRev.toLocaleString("en-IN")}`,
+              "text-[#1565c0]",
+            ],
+            [
+              "Collected",
+              `₹${totals.collected.toLocaleString("en-IN")}`,
+              "text-[#2e7d32]",
+            ],
+            [
+              "Pending",
+              `₹${totals.pending.toLocaleString("en-IN")}`,
+              "text-[#f57f17]",
+            ],
+            [
+              "This Month",
+              `₹${totals.month.toLocaleString("en-IN")}`,
+              "text-[#212121]",
+            ],
           ].map(([label, val, c]) => (
             <div
               key={label}
-              className="rounded-none border border-[#e0e0e0] bg-white p-4"
+              className="rounded-none border border-slate-200 bg-white p-4 shadow-sm"
             >
-              <p className="text-xs text-[#757575]">{label}</p>
-              <p className={`mt-1 text-lg font-bold ${c}`}>{val}</p>
+              <p className="text-xs text-slate-500">{label}</p>
+              <p className={cn("mt-1 text-lg font-bold", c)}>{val}</p>
             </div>
           ))}
         </div>
 
         <div className="flex flex-wrap gap-3">
           <select
-            className="rounded-none border border-[#e0e0e0] px-3 py-2 text-sm"
+            className={SX.select}
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
@@ -340,7 +435,7 @@ export default function FeeManagementPage() {
             <option value="Overdue">Overdue</option>
           </select>
           <select
-            className="rounded-none border border-[#e0e0e0] px-3 py-2 text-sm"
+            className={SX.select}
             value={filterCourse}
             onChange={(e) => setFilterCourse(e.target.value)}
           >
@@ -353,56 +448,56 @@ export default function FeeManagementPage() {
           </select>
         </div>
 
-        <div className="overflow-auto rounded-none border border-[#e0e0e0]">
+        <div className="overflow-auto rounded-none border border-slate-200 bg-white shadow-sm">
           <table className="w-full min-w-[900px] border-collapse text-sm">
             <thead>
-              <tr className="bg-[#f8f9fa] text-left text-xs uppercase text-[#757575]">
-                <th className="border-b border-[#e0e0e0] px-2 py-2">#</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Student</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">
-                  Target exam
-                </th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Total</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Discount</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Final</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Paid</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Balance</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">EMI</th>
-                <th className="border-b border-[#e0e0e0] px-2 py-2">Status</th>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-600">
+                <th className="px-2 py-2">#</th>
+                <th className="px-2 py-2">Student</th>
+                <th className="px-2 py-2">Target exam</th>
+                <th className="px-2 py-2">Total</th>
+                <th className="px-2 py-2">Discount</th>
+                <th className="px-2 py-2">Final</th>
+                <th className="px-2 py-2">Paid</th>
+                <th className="px-2 py-2">Balance</th>
+                <th className="px-2 py-2">EMI</th>
+                <th className="px-2 py-2">Status</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r, i) => (
-                <tr key={r.id} className="min-h-[40px] hover:bg-[#f5f5f5]">
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">{i + 1}</td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">{r.student}</td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                <tr key={r.id} className="min-h-[40px] hover:bg-slate-50/80">
+                  <td className="border-b border-slate-100 px-2 py-2">{i + 1}</td>
+                  <td className="border-b border-slate-100 px-2 py-2">
+                    {r.student}
+                  </td>
+                  <td className="border-b border-slate-100 px-2 py-2">
                     {targetCourseLabel(r.course) || r.course || "—"}
                   </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                  <td className="border-b border-slate-100 px-2 py-2">
                     ₹{r.total.toLocaleString("en-IN")}
                   </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                  <td className="border-b border-slate-100 px-2 py-2">
                     <input
                       type="number"
-                      className="w-14 rounded-none border border-[#e0e0e0] px-1"
+                      className="w-14 rounded-none border border-slate-200 px-1"
                       defaultValue={r.discount}
                     />
                     %
                   </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                  <td className="border-b border-slate-100 px-2 py-2">
                     ₹{r.final.toLocaleString("en-IN")}
                   </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                  <td className="border-b border-slate-100 px-2 py-2">
                     ₹{r.paid.toLocaleString("en-IN")}
                   </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                  <td className="border-b border-slate-100 px-2 py-2">
                     ₹{(r.final - r.paid).toLocaleString("en-IN")}
                   </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                  <td className="border-b border-slate-100 px-2 py-2">
                     {r.emi ? `${r.emi} mo` : "—"}
                   </td>
-                  <td className="border-b border-[#e0e0e0] px-2 py-2">
+                  <td className="border-b border-slate-100 px-2 py-2">
                     <span
                       className={`rounded-none px-2 py-0.5 text-xs font-medium ${badge(r.status)}`}
                     >
@@ -414,7 +509,7 @@ export default function FeeManagementPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-[#757575]">
+        <p className="text-xs text-slate-500">
           Fee records from database: {rows.length} row{rows.length === 1 ? "" : "s"}.
           {leadCount != null ? ` Leads in system: ${leadCount}.` : ""}
         </p>

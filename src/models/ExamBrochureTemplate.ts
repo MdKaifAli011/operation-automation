@@ -15,13 +15,13 @@ const BrochureItemSchema = new Schema(
 );
 
 /**
- * Default brochure content per target exam — shown on student pipeline step 2
- * and editable under Course Brochures. Multiple brochures per exam live in
- * `brochures`; legacy top-level title/link/file fields are migrated on read.
+ * Brochures per target exam **and** course (from Exam courses catalog).
+ * `courseId` empty string = legacy single-doc-per-exam before courses existed.
  */
 const ExamBrochureTemplateSchema = new Schema(
   {
-    exam: { type: String, required: true, unique: true, trim: true },
+    exam: { type: String, required: true, trim: true },
+    courseId: { type: String, required: true, trim: true, default: "" },
     brochures: { type: [BrochureItemSchema], default: [] },
     /** @deprecated Use `brochures` — kept for migration from older documents */
     title: { type: String, default: "", trim: true },
@@ -32,6 +32,11 @@ const ExamBrochureTemplateSchema = new Schema(
     storedFileName: { type: String, default: null },
   },
   { timestamps: true },
+);
+
+ExamBrochureTemplateSchema.index(
+  { exam: 1, courseId: 1 },
+  { unique: true },
 );
 
 export type ExamBrochureTemplateDocument = InferSchemaType<

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  IconBookMarked,
   IconBookOpen,
   IconClipboard,
   IconFileText,
@@ -22,6 +23,7 @@ const NAV = [
   { href: "/fee-management", label: "Fee Management", Icon: IconWallet },
   { href: "/faculties", label: "Faculties", Icon: IconGraduationCap },
   { href: "/exams-subjects", label: "Exams & subjects", Icon: IconBookOpen },
+  { href: "/exam-courses", label: "Exam courses", Icon: IconBookMarked },
   { href: "/course-brochure", label: "Course Brochure", Icon: IconFileText },
   { href: "/email-templates", label: "Email Templates", Icon: IconMail },
   { href: "/meet-links", label: "Meet links", Icon: IconLink },

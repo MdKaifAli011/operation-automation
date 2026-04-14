@@ -25,12 +25,49 @@ type BrochureItem = {
 
 type ExamGroup = {
   exam: string;
+  courseId: string;
+  courseName: string;
   brochures: BrochureItem[];
   updatedAt?: string | null;
 };
 
-function emptyGroup(exam: string): ExamGroup {
-  return { exam, brochures: [], updatedAt: null };
+function mapServerRow(raw: unknown): ExamGroup | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const exam = typeof o.exam === "string" ? o.exam.trim() : "";
+  const courseId = typeof o.courseId === "string" ? o.courseId.trim() : "";
+  const courseName =
+    typeof o.courseName === "string" ? o.courseName.trim() : "";
+  if (!exam) return null;
+  const brochures = Array.isArray(o.brochures)
+    ? o.brochures.map((b, i) => {
+        const x = b as Record<string, unknown>;
+        return {
+          key: String(x.key ?? ""),
+          title: typeof x.title === "string" ? x.title : "",
+          summary: typeof x.summary === "string" ? x.summary : "",
+          linkUrl: typeof x.linkUrl === "string" ? x.linkUrl : "",
+          linkLabel: typeof x.linkLabel === "string" ? x.linkLabel : "",
+          storedFileUrl:
+            x.storedFileUrl === null || x.storedFileUrl === undefined
+              ? null
+              : String(x.storedFileUrl),
+          storedFileName:
+            x.storedFileName === null || x.storedFileName === undefined
+              ? null
+              : String(x.storedFileName),
+          sortOrder:
+            typeof x.sortOrder === "number" ? x.sortOrder : i,
+        };
+      })
+    : [];
+  return {
+    exam,
+    courseId,
+    courseName: courseName || "Course",
+    brochures,
+    updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : null,
+  };
 }
 
 /** Settings order first, then any exams only present in API (orphans). */
@@ -38,7 +75,7 @@ function unionExamOrder(
   activeFromSettings: string[],
   serverRows: ExamGroup[],
 ): string[] {
-  const serverExams = serverRows.map((g) => g.exam).filter(Boolean);
+  const serverExams = [...new Set(serverRows.map((g) => g.exam).filter(Boolean))];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const e of activeFromSettings) {
@@ -56,7 +93,6 @@ function unionExamOrder(
   return out;
 }
 
-/** Href for opening a brochure in a new tab (uploaded path or external URL). */
 function brochureOpenHref(b: BrochureItem): string | null {
   const stored = b.storedFileUrl?.trim();
   const link = b.linkUrl?.trim();
@@ -76,43 +112,12 @@ export default function CourseBrochurePage() {
   const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<{
     exam: string;
+    courseId: string;
     at: string;
   } | null>(null);
 
   const groupsRef = useRef(groups);
   groupsRef.current = groups;
-
-  const mergeLoaded = useCallback(
-    (data: ExamGroup[], exams: string[]) =>
-      exams.map((exam) => {
-        const hit = data.find((d) => d.exam === exam);
-        const brochures = Array.isArray(hit?.brochures)
-          ? hit!.brochures.map((b, i) => ({
-              key: String(b.key ?? ""),
-              title: typeof b.title === "string" ? b.title : "",
-              summary: typeof b.summary === "string" ? b.summary : "",
-              linkUrl: typeof b.linkUrl === "string" ? b.linkUrl : "",
-              linkLabel: typeof b.linkLabel === "string" ? b.linkLabel : "",
-              storedFileUrl:
-                b.storedFileUrl === null || b.storedFileUrl === undefined
-                  ? null
-                  : String(b.storedFileUrl),
-              storedFileName:
-                b.storedFileName === null || b.storedFileName === undefined
-                  ? null
-                  : String(b.storedFileName),
-              sortOrder:
-                typeof b.sortOrder === "number" ? b.sortOrder : i,
-            }))
-          : [];
-        return {
-          exam,
-          brochures,
-          updatedAt: hit?.updatedAt ?? null,
-        };
-      }),
-    [],
-  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,30 +133,46 @@ export default function CourseBrochurePage() {
         exams = activeTargetExamValues(normalizeTargetExams(ex.exams));
       }
       if (!brochureRes.ok) throw new Error("Could not load templates.");
-      const data = (await brochureRes.json()) as ExamGroup[];
-      const list = Array.isArray(data) ? data : [];
+      const raw = (await brochureRes.json()) as unknown[];
+      const list = Array.isArray(raw)
+        ? raw.map(mapServerRow).filter((x): x is ExamGroup => Boolean(x))
+        : [];
       const merged = unionExamOrder(exams, list);
       const examKeys =
-        merged.length > 0 ? merged : list.map((g) => g.exam).filter(Boolean);
+        merged.length > 0 ? merged : [...new Set(list.map((g) => g.exam))];
       if (examKeys.length === 0) {
         setGroups([]);
       } else {
-        setGroups(mergeLoaded(list, examKeys));
+        const order = new Map(examKeys.map((e, i) => [e, i]));
+        const sorted = [...list].sort((a, b) => {
+          const ae = order.get(a.exam) ?? 99;
+          const be = order.get(b.exam) ?? 99;
+          if (ae !== be) return ae - be;
+          return a.courseName.localeCompare(b.courseName);
+        });
+        setGroups(sorted.filter((g) => examKeys.includes(g.exam)));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed.");
     } finally {
       setLoading(false);
     }
-  }, [mergeLoaded]);
+  }, []);
 
   useEffect(() => {
     if (!examsLoading) void load();
   }, [examsLoading, load]);
 
   const persistExamBrochure = useCallback(
-    async (exam: string, brochureKey: string, mode: "url" | "file") => {
-      const g = groupsRef.current.find((x) => x.exam === exam);
+    async (
+      exam: string,
+      courseId: string,
+      brochureKey: string,
+      mode: "url" | "file",
+    ) => {
+      const g = groupsRef.current.find(
+        (x) => x.exam === exam && x.courseId === courseId,
+      );
       if (!g) return;
       setSavingBrochureKey(brochureKey);
       setError(null);
@@ -176,52 +197,65 @@ export default function CourseBrochurePage() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            items: [{ exam, brochures }],
+            items: [{ exam, courseId, brochures }],
           }),
         });
         if (!res.ok) throw new Error("Save failed.");
-        const data = (await res.json()) as ExamGroup[];
-        if (Array.isArray(data)) {
-          setGroups((prev) => {
-            const examKeys = unionExamOrder(
-              activeValues.length > 0
-                ? activeValues
-                : prev.map((x) => x.exam).filter(Boolean),
-              data,
-            );
-            const keys =
-              examKeys.length > 0 ? examKeys : data.map((r) => r.exam);
-            return mergeLoaded(data, keys);
-          });
-        }
-        setLastSaved({ exam, at: new Date().toISOString() });
+        const raw = (await res.json()) as unknown[];
+        const data = Array.isArray(raw)
+          ? raw.map(mapServerRow).filter((x): x is ExamGroup => Boolean(x))
+          : [];
+        setGroups(data);
+        setLastSaved({
+          exam,
+          courseId,
+          at: new Date().toISOString(),
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Save failed.");
       } finally {
         setSavingBrochureKey(null);
       }
     },
-    [activeValues, mergeLoaded],
+    [],
   );
 
-  const setBrochuresForExam = (exam: string, brochures: BrochureItem[]) => {
+  const setBrochuresForSlot = (
+    exam: string,
+    courseId: string,
+    brochures: BrochureItem[],
+  ) => {
     setGroups((prev) => {
-      const ix = prev.findIndex((g) => g.exam === exam);
+      const ix = prev.findIndex(
+        (g) => g.exam === exam && g.courseId === courseId,
+      );
       if (ix >= 0) {
-        return prev.map((g) => (g.exam === exam ? { ...g, brochures } : g));
+        return prev.map((g) =>
+          g.exam === exam && g.courseId === courseId ? { ...g, brochures } : g,
+        );
       }
-      return [...prev, { exam, brochures, updatedAt: null }];
+      return [
+        ...prev,
+        {
+          exam,
+          courseId,
+          courseName: "",
+          brochures,
+          updatedAt: null,
+        },
+      ];
     });
   };
 
   const patchBrochure = (
     exam: string,
+    courseId: string,
     key: string,
     patch: Partial<BrochureItem>,
   ) => {
     setGroups((prev) =>
       prev.map((g) => {
-        if (g.exam !== exam) return g;
+        if (g.exam !== exam || g.courseId !== courseId) return g;
         return {
           ...g,
           brochures: g.brochures.map((b) =>
@@ -252,12 +286,31 @@ export default function CourseBrochurePage() {
     });
   }, [showSpinner, examTabKeys]);
 
+  const coursesForExam = useMemo(() => {
+    return groups
+      .filter((g) => g.exam === selectedExam)
+      .sort((a, b) => a.courseName.localeCompare(b.courseName));
+  }, [groups, selectedExam]);
+
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+
+  useEffect(() => {
+    if (!selectedExam || coursesForExam.length === 0) {
+      setSelectedCourseId("");
+      return;
+    }
+    setSelectedCourseId((prev) => {
+      const ids = coursesForExam.map((c) => c.courseId);
+      if (prev && ids.includes(prev)) return prev;
+      return ids[0] ?? "";
+    });
+  }, [selectedExam, coursesForExam]);
+
   const selectedGroup = useMemo((): ExamGroup | null => {
     if (!selectedExam) return null;
-    const hit = groups.find((g) => g.exam === selectedExam);
-    if (hit) return hit;
-    return emptyGroup(selectedExam);
-  }, [groups, selectedExam]);
+    const hit = coursesForExam.find((g) => g.courseId === selectedCourseId);
+    return hit ?? coursesForExam[0] ?? null;
+  }, [coursesForExam, selectedExam, selectedCourseId]);
 
   return (
     <div className={SX.pageWrap}>
@@ -266,12 +319,22 @@ export default function CourseBrochurePage() {
           <div className="min-w-0 flex-1">
             <h1 className={SX.toolbarTitle}>Course brochures</h1>
             <p className={SX.toolbarMeta}>
-              Pick an exam, then one row per document: title and either a link
-              or an upload — <strong className="font-semibold">Save</strong>{" "}
-              stores that exam&apos;s list (not a global save-all).
+              Choose a target exam, then a <strong className="font-semibold">course</strong>{" "}
+              (from{" "}
+              <Link
+                href="/exam-courses"
+                className="font-medium text-primary underline"
+              >
+                Exam courses
+              </Link>
+              ). Each row is one document — link or upload — then{" "}
+              <strong className="font-semibold">Save</strong> for that course.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/exam-courses" className={SX.btnSecondary}>
+              Exam courses
+            </Link>
             <Link href="/" className={SX.btnSecondary}>
               Leads
             </Link>
@@ -313,12 +376,30 @@ export default function CourseBrochurePage() {
             >
               Exams &amp; subjects
             </Link>
+            , then courses under{" "}
+            <Link
+              href="/exam-courses"
+              className="font-medium text-primary underline"
+            >
+              Exam courses
+            </Link>
             .
+          </p>
+        ) : !selectedGroup ? (
+          <p className="px-4 py-6 text-sm text-slate-600">
+            No brochure rows for the selected exam. Add courses under{" "}
+            <Link
+              href="/exam-courses"
+              className="font-medium text-primary underline"
+            >
+              Exam courses
+            </Link>{" "}
+            and reload.
           </p>
         ) : selectedGroup ? (
           <>
             <div
-              className="flex flex-wrap gap-2 border-b border-[#d0d0d0] bg-slate-50/60 px-4 py-3"
+              className="flex flex-wrap gap-2 border-b border-slate-200 bg-slate-50/60 px-4 py-3"
               role="tablist"
               aria-label="Target exam"
             >
@@ -340,19 +421,55 @@ export default function CourseBrochurePage() {
                 </button>
               ))}
             </div>
+
+            {coursesForExam.length > 1 ? (
+              <div
+                className="flex flex-wrap gap-2 border-b border-slate-100 bg-white px-4 py-2"
+                role="tablist"
+                aria-label="Course under exam"
+              >
+                {coursesForExam.map((g) => (
+                  <button
+                    key={g.courseId || "_legacy"}
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedCourseId === g.courseId}
+                    onClick={() => setSelectedCourseId(g.courseId)}
+                    className={cn(
+                      "rounded-none px-2.5 py-1 text-[12px] font-medium transition-colors",
+                      selectedCourseId === g.courseId
+                        ? "bg-sky-50 text-primary ring-1 ring-primary/30"
+                        : "text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    {g.courseName}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
             <ExamBrochureSection
-              key={selectedGroup.exam}
+              key={`${selectedGroup.exam}-${selectedGroup.courseId}`}
               group={selectedGroup}
               examLabel={labelFor(selectedGroup.exam)}
               savingBrochureKey={savingBrochureKey}
               onSetBrochures={(brochures) =>
-                setBrochuresForExam(selectedGroup.exam, brochures)
+                setBrochuresForSlot(
+                  selectedGroup.exam,
+                  selectedGroup.courseId,
+                  brochures,
+                )
               }
               onPatchBrochure={(key, patch) =>
-                patchBrochure(selectedGroup.exam, key, patch)
+                patchBrochure(selectedGroup.exam, selectedGroup.courseId, key, patch)
               }
               onPersistRow={(brochureKey, mode) =>
-                void persistExamBrochure(selectedGroup.exam, brochureKey, mode)
+                void persistExamBrochure(
+                  selectedGroup.exam,
+                  selectedGroup.courseId,
+                  brochureKey,
+                  mode,
+                )
               }
             />
           </>
@@ -394,6 +511,9 @@ function ExamBrochureSection({
     ]);
   };
 
+  const qCourse =
+    g.courseId ? `&courseId=${encodeURIComponent(g.courseId)}` : "";
+
   const removeBrochure = async (key: string) => {
     const row = g.brochures.find((b) => b.key === key);
     if (
@@ -408,7 +528,7 @@ function ExamBrochureSection({
     if (row?.storedFileUrl?.trim()) {
       try {
         await fetch(
-          `/api/exam-brochure-templates/${encodeURIComponent(g.exam)}/upload?brochureKey=${encodeURIComponent(key)}`,
+          `/api/exam-brochure-templates/${encodeURIComponent(g.exam)}/upload?brochureKey=${encodeURIComponent(key)}${qCourse}`,
           { method: "DELETE" },
         );
       } catch {
@@ -423,7 +543,12 @@ function ExamBrochureSection({
       <div className={cn(SX.sectionHead, "px-4")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className={SX.sectionTitle}>{examLabel}</h2>
+            <h2 className={SX.sectionTitle}>
+              {examLabel}
+              {g.courseName ? (
+                <span className="text-slate-500"> · {g.courseName}</span>
+              ) : null}
+            </h2>
             <span className={SX.leadSectionMeta}>
               {g.updatedAt
                 ? `Updated ${new Date(g.updatedAt).toLocaleString()}`
@@ -438,7 +563,7 @@ function ExamBrochureSection({
       <div className={cn(SX.sectionBody, "space-y-3 px-4 pb-6")}>
         {g.brochures.length === 0 ? (
           <div className="rounded-none border border-dashed border-slate-300 bg-slate-50/80 px-4 py-8 text-center text-[13px] text-slate-600">
-            No documents for this exam yet. Use <strong>Add document</strong>,
+            No documents for this course yet. Use <strong>Add document</strong>,
             fill the row, then <strong>Save</strong>.
           </div>
         ) : (
@@ -446,6 +571,7 @@ function ExamBrochureSection({
             <BrochureRow
               key={b.key}
               exam={g.exam}
+              courseId={g.courseId}
               row={b}
               rowIndex={idx + 1}
               saving={savingBrochureKey === b.key}
@@ -462,6 +588,7 @@ function ExamBrochureSection({
 
 function BrochureRow({
   exam,
+  courseId,
   row: b,
   rowIndex,
   saving,
@@ -470,6 +597,7 @@ function BrochureRow({
   onPersist,
 }: {
   exam: string;
+  courseId: string;
   row: BrochureItem;
   rowIndex: number;
   saving: boolean;
@@ -491,6 +619,9 @@ function BrochureRow({
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const qCourse =
+    courseId ? `&courseId=${encodeURIComponent(courseId)}` : "";
+
   const onFile = async (file: File | null) => {
     if (!file) return;
     setLocalError(null);
@@ -500,7 +631,7 @@ function BrochureRow({
       fd.set("file", file);
       fd.set("brochureKey", b.key);
       const res = await fetch(
-        `/api/exam-brochure-templates/${encodeURIComponent(exam)}/upload`,
+        `/api/exam-brochure-templates/${encodeURIComponent(exam)}/upload?brochureKey=${encodeURIComponent(b.key)}${qCourse}`,
         { method: "POST", body: fd },
       );
       const data = (await res.json().catch(() => ({}))) as {

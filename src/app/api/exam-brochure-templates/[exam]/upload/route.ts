@@ -6,6 +6,7 @@ import {
   brochureItemsFromDoc,
   escapeRegexLiteral,
   isValidBrochureKey,
+  normalizeBrochureCourseId,
   resolveCanonicalTargetExam,
 } from "@/lib/examBrochureTemplates";
 import { getActiveTargetExamValues } from "@/lib/serverTargetExams";
@@ -201,10 +202,21 @@ export async function POST(req: Request, context: Ctx) {
       );
     }
 
+    const url = new URL(req.url);
+    const courseId = normalizeBrochureCourseId(
+      url.searchParams.get("courseId"),
+    );
+
     await connectDB();
-    const existing = await ExamBrochureTemplateModel.findOne({
-      exam: new RegExp(`^${escapeRegexLiteral(exam)}$`, "i"),
-    }).lean();
+    const examRe = new RegExp(`^${escapeRegexLiteral(exam)}$`, "i");
+    const existing = await ExamBrochureTemplateModel.findOne(
+      courseId
+        ? { exam: examRe, courseId }
+        : {
+            exam: examRe,
+            $or: [{ courseId: "" }, { courseId: { $exists: false } }],
+          },
+    ).lean();
     const brochures = brochureItemsFromDoc(existing);
     const idx = brochures.findIndex((b) => b.key === brochureKey);
     const prevUrl =
@@ -251,11 +263,18 @@ export async function POST(req: Request, context: Ctx) {
     }
     next.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key));
 
-    const filter = existing?._id ? { _id: existing._id } : { exam };
+    const filter = existing?._id
+      ? { _id: existing._id }
+      : courseId
+        ? { exam, courseId }
+        : {
+            exam: examRe,
+            $or: [{ courseId: "" }, { courseId: { $exists: false } }],
+          };
     await ExamBrochureTemplateModel.findOneAndUpdate(
       filter,
       {
-        $set: { exam, brochures: next },
+        $set: { exam, courseId, brochures: next },
         $unset: {
           title: "",
           summary: "",
@@ -272,6 +291,7 @@ export async function POST(req: Request, context: Ctx) {
       storedFileUrl,
       storedFileName,
       exam,
+      courseId,
       brochureKey,
     });
   } catch (e) {
@@ -301,10 +321,20 @@ export async function DELETE(req: Request, context: Ctx) {
       );
     }
 
+    const courseId = normalizeBrochureCourseId(
+      url.searchParams.get("courseId"),
+    );
+
     await connectDB();
-    const existing = await ExamBrochureTemplateModel.findOne({
-      exam: new RegExp(`^${escapeRegexLiteral(exam)}$`, "i"),
-    }).lean();
+    const examRe = new RegExp(`^${escapeRegexLiteral(exam)}$`, "i");
+    const existing = await ExamBrochureTemplateModel.findOne(
+      courseId
+        ? { exam: examRe, courseId }
+        : {
+            exam: examRe,
+            $or: [{ courseId: "" }, { courseId: { $exists: false } }],
+          },
+    ).lean();
     const brochures = brochureItemsFromDoc(existing);
     const idx = brochures.findIndex((b) => b.key === brochureKey);
     if (idx < 0) {
@@ -320,11 +350,18 @@ export async function DELETE(req: Request, context: Ctx) {
         : { ...b },
     );
 
-    const filter = existing?._id ? { _id: existing._id } : { exam };
+    const filter = existing?._id
+      ? { _id: existing._id }
+      : courseId
+        ? { exam, courseId }
+        : {
+            exam: examRe,
+            $or: [{ courseId: "" }, { courseId: { $exists: false } }],
+          };
     await ExamBrochureTemplateModel.findOneAndUpdate(
       filter,
       {
-        $set: { exam, brochures: next },
+        $set: { exam, courseId, brochures: next },
         $unset: {
           title: "",
           summary: "",
