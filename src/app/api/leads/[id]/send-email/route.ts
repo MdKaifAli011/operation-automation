@@ -29,6 +29,8 @@ export const runtime = "nodejs";
 type PostBody = {
   templateKey?: string;
   demoRowIndex?: number;
+  /** Stable row id for demo_invite (preferred over demoRowIndex). */
+  meetRowId?: string;
   /** Step 1: status change email — row snapshot so copy matches UI before debounced save. */
   demoStatusEmail?: {
     status: "Scheduled" | "Completed" | "Cancelled";
@@ -84,10 +86,22 @@ export async function POST(
       const meta = (lead.pipelineMeta ?? {}) as Record<string, unknown>;
       const demo = meta.demo as { rows?: unknown[] } | undefined;
       const list = Array.isArray(demo?.rows) ? demo!.rows! : [];
-      const idx =
+      let idx =
         typeof demoRowIndex === "number" && demoRowIndex >= 0
           ? demoRowIndex
           : 0;
+      const wantMeet =
+        typeof body.meetRowId === "string" ? body.meetRowId.trim() : "";
+      if (wantMeet) {
+        const found = list.findIndex(
+          (r) =>
+            typeof r === "object" &&
+            r !== null &&
+            String((r as { meetRowId?: string }).meetRowId ?? "").trim() ===
+              wantMeet,
+        );
+        if (found >= 0) idx = found;
+      }
       const row = list[idx] as { meetRowId?: string } | undefined;
       const meetRowId = typeof row?.meetRowId === "string" ? row.meetRowId.trim() : "";
       if (!meetRowId) {
@@ -99,7 +113,7 @@ export async function POST(
       const invite = await sendDemoInviteMailSafe({
         leadId: id,
         meetRowId,
-        persistInviteOnLead: false,
+        persistInviteOnLead: true,
       });
       if (!invite.sent) {
         logDemoInviteEmail({
@@ -140,12 +154,6 @@ export async function POST(
       if (st !== "Scheduled" && st !== "Completed" && st !== "Cancelled") {
         return NextResponse.json({ error: "Invalid demo status." }, { status: 400 });
       }
-      if (typeof demoRowIndex !== "number" || demoRowIndex < 0) {
-        return NextResponse.json(
-          { error: "demoRowIndex is required for demo_status_update." },
-          { status: 400 },
-        );
-      }
       const toAddr = typeof lead.email === "string" ? lead.email.trim() : "";
       if (!toAddr) {
         return NextResponse.json(
@@ -181,23 +189,38 @@ export async function POST(
       const meta = (lead.pipelineMeta ?? {}) as Record<string, unknown>;
       const demo = meta.demo as { rows?: unknown[] } | Record<string, unknown> | undefined;
       const list = Array.isArray(demo?.rows) ? [...(demo as { rows: unknown[] }).rows] : [];
-      if (demoRowIndex >= list.length) {
+      let idx =
+        typeof demoRowIndex === "number" && demoRowIndex >= 0 ? demoRowIndex : 0;
+      const wantMeet =
+        typeof body.meetRowId === "string" ? body.meetRowId.trim() : "";
+      if (wantMeet) {
+        const found = list.findIndex(
+          (row) =>
+            typeof row === "object" &&
+            row !== null &&
+            String((row as { meetRowId?: string }).meetRowId ?? "").trim() ===
+              wantMeet,
+        );
+        if (found >= 0) idx = found;
+      }
+      if (list.length === 0 || idx < 0 || idx >= list.length) {
         return NextResponse.json(
-          { error: "Invalid demo row index." },
+          { error: "Invalid demo row (use meetRowId or demoRowIndex)." },
           { status: 400 },
         );
       }
+      const demoRowIndexResolved = idx;
       const snapshot =
         dse.row && typeof dse.row === "object" && !Array.isArray(dse.row)
           ? (dse.row as Record<string, unknown>)
           : {};
       const prevRow =
-        list[demoRowIndex] &&
-        typeof list[demoRowIndex] === "object" &&
-        list[demoRowIndex] !== null
-          ? (list[demoRowIndex] as Record<string, unknown>)
+        list[demoRowIndexResolved] &&
+        typeof list[demoRowIndexResolved] === "object" &&
+        list[demoRowIndexResolved] !== null
+          ? (list[demoRowIndexResolved] as Record<string, unknown>)
           : {};
-      list[demoRowIndex] = { ...prevRow, ...snapshot, status: st };
+      list[demoRowIndexResolved] = { ...prevRow, ...snapshot, status: st };
 
       const demoBucket =
         demo && typeof demo === "object" && !Array.isArray(demo)
@@ -209,13 +232,13 @@ export async function POST(
       };
 
       const vars = buildLeadEmailVars(mergedLead, "demo_status_update", {
-        demoRowIndex,
+        demoRowIndex: demoRowIndexResolved,
       });
       const subject = renderTemplate(String(tmpl.subject), vars);
       const html = renderTemplate(String(tmpl.bodyHtml), vars);
 
       const teacherName = String(
-        (list[demoRowIndex] as { teacher?: string }).teacher ?? "",
+        (list[demoRowIndexResolved] as { teacher?: string }).teacher ?? "",
       ).trim();
       const teacherEmail = teacherName
         ? await resolveTeacherEmailFromFacultyName(teacherName)

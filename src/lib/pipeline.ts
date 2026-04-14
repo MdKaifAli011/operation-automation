@@ -24,8 +24,16 @@ export function computePipelineStepsFromMeta(
       ? meta
       : {};
   const demo = m.demo as { rows?: unknown[] } | undefined;
-  const hasDemo = Array.isArray(demo?.rows) && demo.rows.length > 0;
-  if (!hasDemo) return 0;
+  const rows = Array.isArray(demo?.rows) ? demo!.rows! : [];
+  /** Step 1 counts as done only after at least one trial class is marked Completed (conducted). */
+  const hasConductedDemo = rows.some((r) => {
+    const st =
+      r && typeof r === "object" && !Array.isArray(r)
+        ? String((r as { status?: string }).status ?? "").trim()
+        : "";
+    return st === "Completed";
+  });
+  if (!hasConductedDemo) return 0;
 
   const sr = m.studentReport as { pdfUrl?: string | null } | undefined;
   const studentReportDone = !!sr?.pdfUrl && String(sr.pdfUrl).trim().length > 0;
@@ -102,6 +110,37 @@ export function appendActivity(
   return [entry, ...(current ?? [])];
 }
 
+/**
+ * When replacing `demo.rows`, merge each incoming row with the existing row for the same
+ * `meetRowId` so a stale client cannot wipe fields (e.g. meetLinkUrl) after a status-only update.
+ */
+function mergeDemoRowsByMeetRowId(
+  existing: unknown[] | undefined,
+  incoming: unknown[] | undefined,
+): unknown[] {
+  if (!Array.isArray(incoming)) {
+    return Array.isArray(existing) ? [...existing] : [];
+  }
+  const prevById = new Map<string, Record<string, unknown>>();
+  if (Array.isArray(existing)) {
+    for (const raw of existing) {
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        const row = raw as Record<string, unknown>;
+        const id = String(row.meetRowId ?? "").trim();
+        if (id) prevById.set(id, { ...row });
+      }
+    }
+  }
+  return incoming.map((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+    const inc = raw as Record<string, unknown>;
+    const id = String(inc.meetRowId ?? "").trim();
+    if (!id) return { ...inc };
+    const prev = prevById.get(id);
+    return prev ? { ...prev, ...inc } : { ...inc };
+  });
+}
+
 /** Deep-merge nested step buckets (demo, brochure, fees, schedule). */
 export function mergePipelineMeta(
   current: Lead["pipelineMeta"],
@@ -125,7 +164,16 @@ export function mergePipelineMeta(
         !Array.isArray(out[k])
           ? (out[k] as Record<string, unknown>)
           : {};
-      out[k] = { ...prev, ...(v as Record<string, unknown>) };
+      const patchNested = v as Record<string, unknown>;
+      if (k === "demo" && Array.isArray(patchNested.rows)) {
+        const mergedRows = mergeDemoRowsByMeetRowId(
+          Array.isArray(prev.rows) ? (prev.rows as unknown[]) : undefined,
+          patchNested.rows as unknown[],
+        );
+        out[k] = { ...prev, ...patchNested, rows: mergedRows };
+      } else {
+        out[k] = { ...prev, ...patchNested };
+      }
     } else {
       out[k] = v;
     }

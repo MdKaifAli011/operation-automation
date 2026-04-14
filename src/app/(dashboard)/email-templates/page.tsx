@@ -623,11 +623,7 @@ export default function EmailTemplatesPage() {
                   <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
                     ENROLLMENT_TEAM_BCC
                   </code>
-                  : BCC enrollment on Documents (brochure) emails, fee emails, fee+enrollment bundle, demo invites, and teacher-feedback flows. Optional:{" "}
-                  <code className="bg-[#f5f5f5] px-1 font-mono text-[13px]">
-                    DEMO_AUTO_SEND_INVITE=false
-                  </code>{" "}
-                  to disable auto-send when a Meet link is assigned.
+                  : BCC enrollment on Documents (brochure) emails, fee emails, fee+enrollment bundle, demo invites, and teacher-feedback flows. Demo invites are sent from the student&apos;s Demo step when you click <strong>Send Now</strong> (assigning a Meet link no longer sends email automatically).
                 </li>
               </ul>
             ) : (

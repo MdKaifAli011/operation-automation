@@ -8,6 +8,7 @@ import { Schema } from "mongoose";
 /** One scheduled demo class row (stored per student in MongoDB) */
 export const DemoRowSchema = new Schema(
   {
+    examValue: { type: String, default: "", trim: true },
     subject: { type: String, default: "" },
     teacher: { type: String, default: "" },
     studentTimeZone: { type: String, default: "Asia/Kolkata" },

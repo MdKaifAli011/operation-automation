@@ -3,6 +3,7 @@ export async function sendLeadPipelineEmail(
   body: {
     templateKey: string;
     demoRowIndex?: number;
+    meetRowId?: string;
     demoStatusEmail?: {
       status: "Scheduled" | "Completed" | "Cancelled";
       row?: Record<string, unknown>;

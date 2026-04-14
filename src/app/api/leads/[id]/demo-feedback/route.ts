@@ -35,7 +35,7 @@ export async function POST(req: Request, context: Ctx) {
     return NextResponse.json({ error: "Invalid lead id." }, { status: 400 });
   }
 
-  let body: { meetRowId?: unknown; sendEmail?: unknown };
+  let body: { meetRowId?: unknown; sendEmail?: unknown; linkOnly?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -43,10 +43,27 @@ export async function POST(req: Request, context: Ctx) {
   }
 
   const meetRowId = typeof body.meetRowId === "string" ? body.meetRowId.trim() : "";
-  const sendEmail = body.sendEmail !== false;
+  const sendEmail = body.sendEmail === true;
+  const linkOnly = body.linkOnly === true;
 
   if (!meetRowId) {
     return NextResponse.json({ error: "meetRowId is required." }, { status: 400 });
+  }
+
+  if (!sendEmail && !linkOnly) {
+    return NextResponse.json(
+      {
+        error:
+          "Pass sendEmail: true to email the teacher, or linkOnly: true to get a shareable link without emailing.",
+      },
+      { status: 400 },
+    );
+  }
+  if (sendEmail && linkOnly) {
+    return NextResponse.json(
+      { error: "Use only one of sendEmail or linkOnly." },
+      { status: 400 },
+    );
   }
 
   try {
@@ -64,15 +81,37 @@ export async function POST(req: Request, context: Ctx) {
       return NextResponse.json({ error: "Demo row not found." }, { status: 404 });
     }
 
-    if (!isTeacherFeedbackEligible(row as Parameters<typeof isTeacherFeedbackEligible>[0])) {
-      const after = getDemoTeacherFeedbackAfterMinutes();
+    const rowCancelled = String(row.status ?? "").trim() === "Cancelled";
+    const rowSubmitted =
+      row.teacherFeedbackSubmittedAt != null &&
+      String(row.teacherFeedbackSubmittedAt).trim() !== "";
+
+    if (rowCancelled) {
       return NextResponse.json(
-        {
-          error: `Feedback can only be sent at least ${after} minutes after the demo start (and not if the demo was cancelled or feedback was already submitted).`,
-          code: "not_eligible",
-        },
+        { error: "Feedback is not available for a cancelled demo.", code: "cancelled" },
         { status: 400 },
       );
+    }
+    if (rowSubmitted) {
+      return NextResponse.json(
+        { error: "Feedback was already submitted for this demo.", code: "submitted" },
+        { status: 400 },
+      );
+    }
+
+    if (sendEmail) {
+      if (
+        !isTeacherFeedbackEligible(row as Parameters<typeof isTeacherFeedbackEligible>[0])
+      ) {
+        const after = getDemoTeacherFeedbackAfterMinutes();
+        return NextResponse.json(
+          {
+            error: `Feedback email can only be sent at least ${after} minutes after the demo start.`,
+            code: "not_eligible",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     let tokenDoc = await DemoTeacherFeedbackTokenModel.findOne({
@@ -99,6 +138,15 @@ export async function POST(req: Request, context: Ctx) {
     const studentName = String((lead as { studentName?: string }).studentName ?? "Student").trim();
     const teacherName = String(row.teacher ?? "").trim();
     const demoLine = `${row.subject ?? "Demo"} · ${row.isoDate ? format(parseISO(String(row.isoDate)), "d MMM yyyy") : ""} · ${row.timeHmIST ?? ""} IST`;
+
+    if (linkOnly) {
+      return NextResponse.json({
+        ok: true,
+        feedbackUrl,
+        emailSent: false,
+        emailSkippedReason: null as string | null,
+      });
+    }
 
     let emailSent = false;
     let emailSkippedReason: string | null = null;

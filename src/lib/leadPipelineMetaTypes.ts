@@ -4,6 +4,8 @@
  */
 
 export type DemoTableRowPersisted = {
+  /** Target exam value (NEET, JEE, …) chosen when scheduling this row */
+  examValue?: string;
   subject: string;
   teacher: string;
   studentTimeZone: string;
@@ -19,6 +21,8 @@ export type DemoTableRowPersisted = {
   meetWindowStartIso?: string;
   meetWindowEndIso?: string;
   teacherFeedbackInviteSentAt?: string | null;
+  /** When true, email the teacher once as soon as the feedback window opens (client-triggered). */
+  teacherFeedbackAutoEmail?: boolean;
   teacherFeedbackSubmittedAt?: string | null;
   teacherFeedbackRating?: string;
   teacherFeedbackStrengths?: string;

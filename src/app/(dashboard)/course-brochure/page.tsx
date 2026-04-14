@@ -385,18 +385,7 @@ export default function CourseBrochurePage() {
             </Link>
             .
           </p>
-        ) : !selectedGroup ? (
-          <p className="px-4 py-6 text-sm text-slate-600">
-            No brochure rows for the selected exam. Add courses under{" "}
-            <Link
-              href="/exam-courses"
-              className="font-medium text-primary underline"
-            >
-              Exam courses
-            </Link>{" "}
-            and reload.
-          </p>
-        ) : selectedGroup ? (
+        ) : (
           <>
             <div
               className="flex flex-wrap gap-2 border-b border-slate-200 bg-slate-50/60 px-4 py-3"
@@ -422,58 +411,82 @@ export default function CourseBrochurePage() {
               ))}
             </div>
 
-            {coursesForExam.length > 1 ? (
-              <div
-                className="flex flex-wrap gap-2 border-b border-slate-100 bg-white px-4 py-2"
-                role="tablist"
-                aria-label="Course under exam"
-              >
-                {coursesForExam.map((g) => (
-                  <button
-                    key={g.courseId || "_legacy"}
-                    type="button"
-                    role="tab"
-                    aria-selected={selectedCourseId === g.courseId}
-                    onClick={() => setSelectedCourseId(g.courseId)}
-                    className={cn(
-                      "rounded-none px-2.5 py-1 text-[12px] font-medium transition-colors",
-                      selectedCourseId === g.courseId
-                        ? "bg-sky-50 text-primary ring-1 ring-primary/30"
-                        : "text-slate-600 hover:bg-slate-50",
-                    )}
+            {coursesForExam.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-slate-600">
+                No courses for this exam yet. Add them under{" "}
+                <Link
+                  href="/exam-courses"
+                  className="font-medium text-primary underline"
+                >
+                  Exam courses
+                </Link>{" "}
+                and reload.
+              </p>
+            ) : !selectedGroup ? (
+              <p className="px-4 py-6 text-sm text-slate-600">
+                Select a course tab above.
+              </p>
+            ) : (
+              <>
+                {coursesForExam.length > 1 ? (
+                  <div
+                    className="flex flex-wrap gap-2 border-b border-slate-100 bg-white px-4 py-2"
+                    role="tablist"
+                    aria-label="Course under exam"
                   >
-                    {g.courseName}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+                    {coursesForExam.map((g) => (
+                      <button
+                        key={g.courseId || "_legacy"}
+                        type="button"
+                        role="tab"
+                        aria-selected={selectedCourseId === g.courseId}
+                        onClick={() => setSelectedCourseId(g.courseId)}
+                        className={cn(
+                          "rounded-none px-2.5 py-1 text-[12px] font-medium transition-colors",
+                          selectedCourseId === g.courseId
+                            ? "bg-sky-50 text-primary ring-1 ring-primary/30"
+                            : "text-slate-600 hover:bg-slate-50",
+                        )}
+                      >
+                        {g.courseName}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
 
-            <ExamBrochureSection
-              key={`${selectedGroup.exam}-${selectedGroup.courseId}`}
-              group={selectedGroup}
-              examLabel={labelFor(selectedGroup.exam)}
-              savingBrochureKey={savingBrochureKey}
-              onSetBrochures={(brochures) =>
-                setBrochuresForSlot(
-                  selectedGroup.exam,
-                  selectedGroup.courseId,
-                  brochures,
-                )
-              }
-              onPatchBrochure={(key, patch) =>
-                patchBrochure(selectedGroup.exam, selectedGroup.courseId, key, patch)
-              }
-              onPersistRow={(brochureKey, mode) =>
-                void persistExamBrochure(
-                  selectedGroup.exam,
-                  selectedGroup.courseId,
-                  brochureKey,
-                  mode,
-                )
-              }
-            />
+                <ExamBrochureSection
+                  key={`${selectedGroup.exam}-${selectedGroup.courseId}`}
+                  group={selectedGroup}
+                  examLabel={labelFor(selectedGroup.exam)}
+                  savingBrochureKey={savingBrochureKey}
+                  onSetBrochures={(brochures) =>
+                    setBrochuresForSlot(
+                      selectedGroup.exam,
+                      selectedGroup.courseId,
+                      brochures,
+                    )
+                  }
+                  onPatchBrochure={(key, patch) =>
+                    patchBrochure(
+                      selectedGroup.exam,
+                      selectedGroup.courseId,
+                      key,
+                      patch,
+                    )
+                  }
+                  onPersistRow={(brochureKey, mode) =>
+                    void persistExamBrochure(
+                      selectedGroup.exam,
+                      selectedGroup.courseId,
+                      brochureKey,
+                      mode,
+                    )
+                  }
+                />
+              </>
+            )}
           </>
-        ) : null}
+        )}
       </div>
     </div>
   );

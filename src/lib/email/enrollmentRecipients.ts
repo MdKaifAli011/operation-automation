@@ -25,9 +25,3 @@ export function getEnrollmentTeamBccEmails(): string[] {
     "";
   return parseEmailList(raw);
 }
-
-export function isDemoAutoSendInviteEnabled(): boolean {
-  const v = process.env.DEMO_AUTO_SEND_INVITE?.trim().toLowerCase();
-  if (!v) return true;
-  return v !== "0" && v !== "false" && v !== "no" && v !== "off";
-}

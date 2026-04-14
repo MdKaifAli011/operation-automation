@@ -22,7 +22,12 @@ import {
 } from "@/lib/country-phone";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import { formatLeadPhone } from "@/lib/phone-display";
-import { appendActivity } from "@/lib/pipeline";
+import {
+  appendActivity,
+  canAccessPipelineStep,
+  canGoToNextPipelineStep,
+  PIPELINE_STEP_LABELS,
+} from "@/lib/pipeline";
 import { extrasForLead } from "@/lib/student-detail";
 import { SX } from "@/components/student/student-excel-ui";
 import {
@@ -180,6 +185,11 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   useEffect(() => {
     setActiveStep(1);
   }, [initialLead.id]);
+
+  useEffect(() => {
+    const maxStep = Math.min(PIPELINE_TOTAL, Math.max(1, completed + 1));
+    if (activeStep > maxStep) setActiveStep(maxStep);
+  }, [completed, activeStep]);
   const [notes, setNotes] = useState(initialLead.workspaceNotes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
@@ -829,11 +839,23 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
 
         <div className={SX.mainSplit}>
           <div className={SX.mainPane}>
-            {activeStep === 1 && <DemoStepPanel lead={lead} />}
+            {activeStep === 1 && (
+              <DemoStepPanel
+                lead={lead}
+                onPatchLead={patchLead}
+                refreshLead={refreshLead}
+                labelForTargetExam={targetExamLabelFor}
+                canonicalTargetExams={targetExamActiveValues}
+              />
+            )}
             {activeStep === 2 && <DocumentsStepPanel lead={lead} />}
             {activeStep === 3 && <FeesStepPanel lead={lead} />}
             {activeStep === 4 && <ScheduleStepPanel lead={lead} />}
-            <StepFooter activeStep={activeStep} onStepChange={setActiveStep} />
+            <StepFooter
+              completed={completed}
+              activeStep={activeStep}
+              onStepChange={setActiveStep}
+            />
           </div>
 
           <aside className={SX.asidePane}>
@@ -1125,6 +1147,11 @@ function Stepper({
           {STEPS.map((s) => {
             const isDone = completed >= s.n;
             const isActive = activeStep === s.n;
+            const unlocked = canAccessPipelineStep(completed, s.n);
+            const lockHint =
+              s.n >= 2
+                ? `Complete ${PIPELINE_STEP_LABELS[s.n - 2]} first`
+                : "";
             return (
               <button
                 key={s.id}
@@ -1133,22 +1160,33 @@ function Stepper({
                 role="tab"
                 aria-selected={isActive}
                 aria-current={isActive ? "step" : undefined}
+                disabled={!unlocked}
                 title={
-                  isDone
-                    ? `${s.label} — completed`
-                    : isActive
-                      ? `${s.label} — open (in progress)`
-                      : `${s.label} — not started`
+                  !unlocked
+                    ? lockHint
+                    : isDone
+                      ? `${s.label} — completed`
+                      : isActive
+                        ? `${s.label} — open (in progress)`
+                        : `${s.label} — not started`
                 }
-                onClick={() => onStepSelect(s.n)}
+                onClick={() => {
+                  if (unlocked) onStepSelect(s.n);
+                }}
                 className={cn(
                   "flex min-h-9 min-w-[4.5rem] flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-[12px] font-medium transition-all sm:min-w-0 sm:px-2.5",
+                  !unlocked && "cursor-not-allowed opacity-45",
                   isActive &&
+                    unlocked &&
                     "bg-white font-semibold text-primary shadow-sm ring-1 ring-slate-200/70",
                   !isActive &&
                     isDone &&
+                    unlocked &&
                     "text-emerald-900 hover:bg-white/80",
-                  !isActive && !isDone && "text-slate-700 hover:bg-white/70",
+                  !isActive &&
+                    !isDone &&
+                    unlocked &&
+                    "text-slate-700 hover:bg-white/70",
                 )}
               >
                 <span
@@ -1215,13 +1253,16 @@ function Stepper({
 }
 
 function StepFooter({
+  completed,
   activeStep,
   onStepChange,
 }: {
+  completed: number;
   activeStep: number;
   onStepChange: (n: number) => void;
 }) {
   const label = STEPS.find((s) => s.n === activeStep)?.label ?? "";
+  const canNext = canGoToNextPipelineStep(completed, activeStep);
   return (
     <div className={SX.footerBar}>
       <button
@@ -1235,12 +1276,21 @@ function StepFooter({
       >
         ← Previous
       </button>
-      <span className="max-w-[min(100%,220px)] truncate text-center text-[11px] text-[#78909c]">
+      <span
+        className="max-w-[min(100%,240px)] truncate text-center text-[11px] text-[#78909c]"
+        title={
+          !canNext && activeStep < PIPELINE_TOTAL
+            ? activeStep === 1
+              ? "Mark at least one demo as Completed before Documents."
+              : "Complete this step before continuing."
+            : undefined
+        }
+      >
         Step {activeStep}/{PIPELINE_TOTAL} · {label}
       </span>
       <button
         type="button"
-        disabled={activeStep >= PIPELINE_TOTAL}
+        disabled={activeStep >= PIPELINE_TOTAL || !canNext}
         onClick={() => onStepChange(activeStep + 1)}
         className={cn(
           SX.btnPrimary,
