@@ -53,6 +53,7 @@ export async function POST(req: Request, context: Ctx) {
     let body: {
       additionalNotes?: unknown;
       recommendations?: unknown;
+      meetRowId?: unknown;
     } = {};
     try {
       body = (await req.json()) as typeof body;
@@ -63,6 +64,8 @@ export async function POST(req: Request, context: Ctx) {
       typeof body.additionalNotes === "string" ? body.additionalNotes : "";
     const recommendations =
       typeof body.recommendations === "string" ? body.recommendations : "";
+    const meetRowId =
+      typeof body.meetRowId === "string" ? body.meetRowId.trim() : "";
 
     await connectDB();
     const lead = await LeadModel.findById(id).lean();
@@ -73,11 +76,29 @@ export async function POST(req: Request, context: Ctx) {
     const meta = lead.pipelineMeta as Record<string, unknown> | undefined;
     const demo = meta?.demo as { rows?: unknown[] } | undefined;
     const rows = Array.isArray(demo?.rows) ? demo!.rows! : [];
+    const selectedRows =
+      meetRowId.length > 0
+        ? rows.filter(
+            (r) =>
+              r &&
+              typeof r === "object" &&
+              !Array.isArray(r) &&
+              String((r as { meetRowId?: string }).meetRowId ?? "").trim() ===
+                meetRowId,
+          )
+        : rows;
+    if (meetRowId && selectedRows.length === 0) {
+      return NextResponse.json(
+        { error: "Selected demo row was not found." },
+        { status: 400 },
+      );
+    }
 
     const pdfBytes = await buildStudentReportPdfBytes({
       studentName:
         typeof lead.studentName === "string" ? lead.studentName : "Student",
-      demoRows: rows as Parameters<typeof buildStudentReportPdfBytes>[0]["demoRows"],
+      demoRows:
+        selectedRows as Parameters<typeof buildStudentReportPdfBytes>[0]["demoRows"],
       additionalNotes,
       recommendations,
     });
@@ -112,6 +133,7 @@ export async function POST(req: Request, context: Ctx) {
         generatedAt,
         additionalNotes,
         recommendations,
+        generatedForMeetRowId: meetRowId || null,
         sendConfirmedAt: null,
       },
     });

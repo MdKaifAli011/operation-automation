@@ -83,6 +83,7 @@ const StudentReportBlockSchema = new Schema(
     generatedAt: { type: String, default: null },
     additionalNotes: { type: String, default: "" },
     recommendations: { type: String, default: "" },
+    generatedForMeetRowId: { type: String, default: null },
     sendConfirmedAt: { type: String, default: null },
   },
   { _id: false },

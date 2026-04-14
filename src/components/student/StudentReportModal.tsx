@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { DemoTableRowPersisted } from "@/lib/leadPipelineMetaTypes";
 import type { Lead } from "@/lib/types";
 import { mergePipelineMeta, appendActivity } from "@/lib/pipeline";
@@ -18,6 +18,12 @@ function ratingLabel(v: string | undefined): string {
   return m[v] ?? v;
 }
 
+function rowKey(r: DemoTableRowPersisted, i: number): string {
+  const id = r.meetRowId?.trim();
+  if (id) return id;
+  return `${r.isoDate || "d"}-${r.timeHmIST || "t"}-${i}`;
+}
+
 function hasTeacherFeedback(r: DemoTableRowPersisted): boolean {
   return Boolean(
     r.teacherFeedbackSubmittedAt?.trim() ||
@@ -28,17 +34,13 @@ function hasTeacherFeedback(r: DemoTableRowPersisted): boolean {
   );
 }
 
-function feedbackStatusLabel(r: DemoTableRowPersisted): string {
-  if (hasTeacherFeedback(r)) return "Submitted";
-  return "—";
-}
-
 type Props = {
   open: boolean;
   onClose: () => void;
   lead: Lead;
   onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
   refreshLead: () => Promise<void>;
+  onToast?: (message: string) => void;
 };
 
 export function StudentReportModal({
@@ -47,6 +49,7 @@ export function StudentReportModal({
   lead,
   onPatchLead,
   refreshLead,
+  onToast,
 }: Props) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -57,6 +60,7 @@ export function StudentReportModal({
         pdfUrl?: string | null;
         fileName?: string | null;
         generatedAt?: string | null;
+        generatedForMeetRowId?: string | null;
         sendConfirmedAt?: string | null;
       }
     | undefined;
@@ -65,37 +69,29 @@ export function StudentReportModal({
     (lead.pipelineMeta?.demo as { rows?: DemoTableRowPersisted[] } | undefined)
       ?.rows ?? [];
 
-  const feedbackRows = demoRows;
-
-  const [additionalNotes, setAdditionalNotes] = useState(
-    () => sr?.additionalNotes ?? "",
-  );
-  const [recommendations, setRecommendations] = useState(
-    () => sr?.recommendations ?? "",
-  );
-  const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
-  const [selectedFeedbackKey, setSelectedFeedbackKey] = useState<string>("");
+  const [selectedReportKey, setSelectedReportKey] = useState("");
+  const [generatingKey, setGeneratingKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setAdditionalNotes(sr?.additionalNotes ?? "");
-    setRecommendations(sr?.recommendations ?? "");
     setGenError(null);
     setLocalPreviewUrl(sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
-  }, [open, lead.id, sr?.additionalNotes, sr?.recommendations, sr?.pdfUrl]);
+  }, [open, lead.id, sr?.pdfUrl]);
 
   useEffect(() => {
     if (!open) return;
-    const first = feedbackRows[0];
-    if (!first) {
-      setSelectedFeedbackKey("");
+    const firstIndex = demoRows.findIndex((r) => hasTeacherFeedback(r));
+    const firstKey =
+      firstIndex >= 0 ? rowKey(demoRows[firstIndex]!, firstIndex) : "";
+    if (!firstKey) {
+      setSelectedReportKey("");
       return;
     }
-    setSelectedFeedbackKey(first.meetRowId?.trim() || `${first.isoDate}-${first.timeHmIST}`);
-  }, [open, feedbackRows]);
+    setSelectedReportKey((prev) => prev || firstKey);
+  }, [open, demoRows]);
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -118,18 +114,37 @@ export function StudentReportModal({
     return () => dlg.removeEventListener("mousedown", onBackdrop);
   }, [open, onClose]);
 
-  const previewSrc =
-    localPreviewUrl?.trim() ||
-    (sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
-  const selectedFeedbackRow =
-    feedbackRows.find(
-      (r) =>
-        (r.meetRowId?.trim() || `${r.isoDate}-${r.timeHmIST}`) ===
-        selectedFeedbackKey,
-    ) ?? null;
+  const previewSrc = localPreviewUrl?.trim() || (sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
 
-  const generatePdf = async () => {
-    setGenerating(true);
+  const reportItems = useMemo(
+    () =>
+      demoRows
+        .filter((r) => hasTeacherFeedback(r))
+        .map((r, i) => ({
+        key: rowKey(r, i),
+        label: `Demo report ${i + 1}`,
+        row: r,
+      })),
+    [demoRows],
+  );
+
+  const selectedItem = reportItems.find((x) => x.key === selectedReportKey) ?? null;
+  const generatedForSelected =
+    !!previewSrc &&
+    !!selectedItem &&
+    String(sr?.generatedForMeetRowId ?? "").trim() === selectedItem.key;
+
+  const generateSelectedPdf = async () => {
+    if (!selectedItem) {
+      setGenError("Select a demo report first.");
+      return;
+    }
+    const meetRowId = selectedItem.row.meetRowId?.trim();
+    if (!meetRowId) {
+      setGenError("This demo row is missing an id. Edit and save it once in Step 1, then retry.");
+      return;
+    }
+    setGeneratingKey(selectedItem.key);
     setGenError(null);
     try {
       const res = await fetch(
@@ -137,25 +152,21 @@ export function StudentReportModal({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ additionalNotes, recommendations }),
+          body: JSON.stringify({ additionalNotes: "", recommendations: "", meetRowId }),
         },
       );
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         pdfUrl?: string;
-        lead?: Lead;
       };
-      if (!res.ok) {
-        throw new Error(data.error || "Could not generate PDF");
-      }
-      if (data.pdfUrl) {
-        setLocalPreviewUrl(data.pdfUrl);
-      }
+      if (!res.ok) throw new Error(data.error || "Could not generate PDF");
+      if (data.pdfUrl) setLocalPreviewUrl(data.pdfUrl);
       await refreshLead();
+      onToast?.(`${selectedItem.label} generated successfully.`);
     } catch (e) {
       setGenError(e instanceof Error ? e.message : "Generation failed");
     } finally {
-      setGenerating(false);
+      setGeneratingKey(null);
     }
   };
 
@@ -177,6 +188,7 @@ export function StudentReportModal({
         ),
       });
       await refreshLead();
+      onToast?.("Report confirmed for sending.");
       onClose();
     } catch {
       setGenError("Could not save confirmation.");
@@ -191,7 +203,7 @@ export function StudentReportModal({
     <dialog
       ref={dialogRef}
       className={cn(
-        "fixed left-1/2 top-1/2 z-220 w-[min(100vw-1rem,640px)] max-h-[min(92vh,900px)] -translate-x-1/2 -translate-y-1/2",
+        "fixed left-1/2 top-1/2 z-220 w-[min(100vw-1rem,760px)] max-h-[min(92vh,920px)] -translate-x-1/2 -translate-y-1/2",
         "overflow-hidden rounded-none border border-slate-200 bg-white p-0 shadow-2xl",
         "backdrop:bg-black/45 open:flex open:flex-col",
       )}
@@ -203,152 +215,111 @@ export function StudentReportModal({
           id={`${id}-title`}
           className="text-[15px] font-bold tracking-tight text-slate-900"
         >
-          Generate student report
+          Demo Session Report - Feedback
         </h2>
         <p className="mt-1 text-[12px] text-slate-600">
-          Review demo feedback, add your notes, then generate a PDF. Confirm when
-          it is ready to email or message to the family.
+          Select a demo report, review details, then generate that single PDF.
         </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        <section className="mb-4">
-          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+        <section className="mb-3">
+          <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
             Student
           </h3>
           <p className="text-[14px] font-medium text-slate-900">{name}</p>
         </section>
 
         <section className="mb-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">
-              Demo Session Report - Feedback
-            </h3>
-            <p className="text-[11px] text-slate-500">From Step 1 — full detail on View</p>
-          </div>
-          {feedbackRows.length === 0 ? (
+          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+            Reports list
+          </h3>
+          {reportItems.length === 0 ? (
             <p className="rounded border border-slate-100 bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
-              No demos found yet. Schedule demo rows in Step 1 first.
+              No demo rows found. Add demos in Step 1 first.
             </p>
           ) : (
-            <>
-              <div className="overflow-x-auto border border-slate-200">
-                <table className={cn(SX.dataTable, "w-full min-w-[760px] table-fixed text-[12px]")}>
-                  <colgroup>
-                    <col className="w-[16%]" />
-                    <col className="w-[14%]" />
-                    <col className="w-[17%]" />
-                    <col className="w-[22%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[6%]" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th className={SX.dataTh}>Date</th>
-                      <th className={SX.dataTh}>Time (IST)</th>
-                      <th className={SX.dataTh}>Subject</th>
-                      <th className={SX.dataTh}>Teacher</th>
-                      <th className={SX.dataTh}>Overall</th>
-                      <th className={SX.dataTh}>Feedback</th>
-                      <th className={cn(SX.dataTh, "text-center")}>View</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {feedbackRows.map((r, i) => {
-                      const key = r.meetRowId?.trim() || `${r.isoDate}-${r.timeHmIST}-${i}`;
-                      const selected = key === selectedFeedbackKey;
-                      return (
-                        <tr key={key} className={selected ? "bg-sky-50/70" : undefined}>
-                          <td className={SX.dataTd}>{r.isoDate || "—"}</td>
-                          <td className={SX.dataTd}>{r.timeHmIST || "—"}</td>
-                          <td className={SX.dataTd}>{r.subject || "—"}</td>
-                          <td className={SX.dataTd}>{r.teacher || "—"}</td>
-                          <td className={SX.dataTd}>{ratingLabel(r.teacherFeedbackRating)}</td>
-                          <td className={SX.dataTd}>{feedbackStatusLabel(r)}</td>
-                          <td className={cn(SX.dataTd, "text-center")}>
-                            <button
-                              type="button"
-                              className={cn(SX.btnSecondary, "h-7 px-2 text-[11px]")}
-                              onClick={() => setSelectedFeedbackKey(key)}
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {selectedFeedbackRow ? (
-                <div className="mt-3 border border-slate-200 bg-slate-50/50 px-3 py-2">
-                  <p className="text-[12px] font-semibold text-slate-900">
-                    {selectedFeedbackRow.subject || "—"} · {selectedFeedbackRow.teacher || "—"} ·{" "}
-                    {selectedFeedbackRow.isoDate || "—"} {selectedFeedbackRow.timeHmIST || ""}
-                  </p>
-                  <p className="mt-1 text-[12px] text-slate-700">
-                    Overall: {ratingLabel(selectedFeedbackRow.teacherFeedbackRating)}
-                  </p>
-                  {selectedFeedbackRow.teacherFeedbackStrengths?.trim() ? (
-                    <p className="mt-1 text-[12px] text-slate-700">
-                      <span className="font-medium">Strengths:</span>{" "}
-                      {selectedFeedbackRow.teacherFeedbackStrengths.trim()}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {reportItems.map((item) => {
+                const selected = item.key === selectedReportKey;
+                const hasFb = hasTeacherFeedback(item.row);
+                const isGenerated =
+                  !!previewSrc &&
+                  String(sr?.generatedForMeetRowId ?? "").trim() === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={cn(
+                      "text-left rounded-none border px-3 py-2 transition-colors",
+                      selected
+                        ? "border-primary bg-sky-50 ring-1 ring-primary/20"
+                        : "border-slate-200 bg-white hover:bg-slate-50",
+                    )}
+                    onClick={() => setSelectedReportKey(item.key)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[13px] font-semibold text-slate-900">
+                        {item.label}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-none px-1.5 py-0.5 text-[10px] ring-1",
+                          isGenerated
+                            ? "bg-emerald-50 text-emerald-900 ring-emerald-200"
+                            : hasFb
+                              ? "bg-sky-50 text-sky-900 ring-sky-200"
+                              : "bg-slate-50 text-slate-600 ring-slate-200",
+                        )}
+                      >
+                        {isGenerated ? "Generated" : hasFb ? "Feedback ready" : "No feedback yet"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-600">
+                      {item.row.isoDate || "—"} · {item.row.timeHmIST || "—"} IST ·{" "}
+                      {item.row.subject || "—"}
                     </p>
-                  ) : null}
-                  {selectedFeedbackRow.teacherFeedbackImprovements?.trim() ? (
-                    <p className="mt-1 text-[12px] text-slate-700">
-                      <span className="font-medium">Areas to improve:</span>{" "}
-                      {selectedFeedbackRow.teacherFeedbackImprovements.trim()}
-                    </p>
-                  ) : null}
-                  {selectedFeedbackRow.teacherFeedbackNotes?.trim() ? (
-                    <p className="mt-1 text-[12px] text-slate-700">
-                      {selectedFeedbackRow.teacherFeedbackNotes.trim()}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-[12px] text-slate-500">No detailed feedback for this demo yet.</p>
-                  )}
-                </div>
-              ) : null}
-            </>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </section>
 
-        <section className="mb-4">
-          <label
-            htmlFor={`${id}-notes`}
-            className="mb-1 block text-[12px] font-semibold text-slate-800"
-          >
-            Additional notes (institute)
-          </label>
-          <textarea
-            id={`${id}-notes`}
-            rows={4}
-            className={cn(SX.textarea, "w-full")}
-            value={additionalNotes}
-            onChange={(e) => setAdditionalNotes(e.target.value)}
-            placeholder="Counselor or admin notes to include in the report…"
-          />
-        </section>
-
-        <section className="mb-4">
-          <label
-            htmlFor={`${id}-rec`}
-            className="mb-1 block text-[12px] font-semibold text-slate-800"
-          >
-            Recommendations for parents / student
-          </label>
-          <textarea
-            id={`${id}-rec`}
-            rows={4}
-            className={cn(SX.textarea, "w-full")}
-            value={recommendations}
-            onChange={(e) => setRecommendations(e.target.value)}
-            placeholder="Next steps, course fit, follow-up suggestions…"
-          />
-        </section>
+        {selectedItem ? (
+          <section className="mb-4 border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+              Basic details
+            </h3>
+            <p className="mt-1 text-[13px] font-semibold text-slate-900">
+              {selectedItem.label}
+            </p>
+            <p className="mt-1 text-[12px] text-slate-700">
+              {selectedItem.row.isoDate || "—"} · {selectedItem.row.timeHmIST || "—"} IST ·{" "}
+              {selectedItem.row.subject || "—"} · {selectedItem.row.teacher || "—"}
+            </p>
+            <p className="mt-1 text-[12px] text-slate-700">
+              Overall: {ratingLabel(selectedItem.row.teacherFeedbackRating)}
+            </p>
+            {selectedItem.row.teacherFeedbackStrengths?.trim() ? (
+              <p className="mt-1 text-[12px] text-slate-700">
+                <span className="font-medium">Strengths:</span>{" "}
+                {selectedItem.row.teacherFeedbackStrengths.trim()}
+              </p>
+            ) : null}
+            {selectedItem.row.teacherFeedbackImprovements?.trim() ? (
+              <p className="mt-1 text-[12px] text-slate-700">
+                <span className="font-medium">Areas to improve:</span>{" "}
+                {selectedItem.row.teacherFeedbackImprovements.trim()}
+              </p>
+            ) : null}
+            {selectedItem.row.teacherFeedbackNotes?.trim() ? (
+              <p className="mt-1 text-[12px] text-slate-700">
+                {selectedItem.row.teacherFeedbackNotes.trim()}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         {genError ? (
           <p className="mb-3 text-[12px] text-red-700" role="alert">
@@ -360,29 +331,23 @@ export function StudentReportModal({
           <button
             type="button"
             className={SX.btnPrimary}
-            disabled={generating}
-            onClick={() => void generatePdf()}
+            disabled={!selectedItem || generatingKey !== null}
+            onClick={() => void generateSelectedPdf()}
           >
-            {generating ? "Generating…" : "Generate PDF"}
+            {selectedItem && generatingKey === selectedItem.key
+              ? "Generating..."
+              : "Generate this report"}
           </button>
+          {generatedForSelected && previewSrc ? (
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              onClick={() => window.open(previewSrc, "_blank", "noopener,noreferrer")}
+            >
+              View report
+            </button>
+          ) : null}
         </div>
-
-        {previewSrc ? (
-          <div className="mt-4 border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-            <p className="text-[12px] text-slate-700">
-              PDF is generated and saved on this lead. Use preview button to open it in a new tab.
-            </p>
-            <div className="mt-2">
-              <button
-                type="button"
-                className={SX.btnSecondary}
-                onClick={() => window.open(previewSrc, "_blank", "noopener,noreferrer")}
-              >
-                Open preview in new tab
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50/90 px-4 py-3">
@@ -392,20 +357,11 @@ export function StudentReportModal({
         {previewSrc ? (
           <button
             type="button"
-            className={SX.btnSecondary}
-            onClick={() => window.open(previewSrc, "_blank", "noopener,noreferrer")}
-          >
-            Open preview
-          </button>
-        ) : null}
-        {previewSrc ? (
-          <button
-            type="button"
             className={SX.btnPrimary}
             disabled={confirmBusy}
             onClick={() => void confirmForSending()}
           >
-            {confirmBusy ? "Saving…" : "Confirm for sending"}
+            {confirmBusy ? "Saving..." : "Confirm for sending"}
           </button>
         ) : null}
       </div>

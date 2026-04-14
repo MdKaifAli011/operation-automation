@@ -81,6 +81,22 @@ function accountLabel(a: BankAccountRecord): string {
   return lab || bank || "Bank account";
 }
 
+function hasTeacherFeedback(r: {
+  teacherFeedbackSubmittedAt?: string | null;
+  teacherFeedbackRating?: string;
+  teacherFeedbackStrengths?: string;
+  teacherFeedbackImprovements?: string;
+  teacherFeedbackNotes?: string;
+}): boolean {
+  return Boolean(
+    r.teacherFeedbackSubmittedAt?.trim() ||
+      r.teacherFeedbackRating?.trim() ||
+      r.teacherFeedbackStrengths?.trim() ||
+      r.teacherFeedbackImprovements?.trim() ||
+      r.teacherFeedbackNotes?.trim(),
+  );
+}
+
 export function DocumentsStepPanel({
   lead,
   onPatchLead,
@@ -104,6 +120,7 @@ export function DocumentsStepPanel({
   const [bankLoading, setBankLoading] = useState(false);
   const [bankModalOpen, setBankModalOpen] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const docsMetaItems = useMemo(() => {
     const raw = (lead.pipelineMeta as Record<string, unknown> | undefined)?.documents as
@@ -111,6 +128,13 @@ export function DocumentsStepPanel({
       | undefined;
     return Array.isArray(raw?.items) ? raw.items : [];
   }, [lead.pipelineMeta]);
+
+  const pushToast = (message: string) => {
+    setToastMsg(message);
+    window.setTimeout(() => {
+      setToastMsg((cur) => (cur === message ? null : cur));
+    }, 2200);
+  };
 
   const docsByKey = useMemo(() => {
     const m = new Map<string, DocumentItemPersisted>();
@@ -139,11 +163,24 @@ export function DocumentsStepPanel({
   };
 
   const reportGenerated = !!String(studentReport.pdfUrl ?? "").trim();
+  const reportSent = !!docsByKey.get("report")?.sentAt;
   const brochureSent = !!brochure.sentEmail || !!brochure.sentEmailAt;
   const enrollmentSent = !!fees.enrollmentSent || !!fees.enrollmentSentAt;
   const bankSent = !!fees.feeSentEmail || !!fees.feeSentEmailAt;
   const courierSent = !!docsByKey.get("courier")?.sentAt;
   const rankingSent = !!docsByKey.get("ranking")?.sentAt;
+
+  const demoRows =
+    ((lead.pipelineMeta as Record<string, unknown> | undefined)?.demo as {
+      rows?: Array<{
+        teacherFeedbackSubmittedAt?: string | null;
+        teacherFeedbackRating?: string;
+        teacherFeedbackStrengths?: string;
+        teacherFeedbackImprovements?: string;
+        teacherFeedbackNotes?: string;
+      }>;
+    } | undefined)?.rows ?? [];
+  const feedbackCount = demoRows.filter((r) => hasTeacherFeedback(r)).length;
 
   useEffect(() => {
     setSelectedBankId(fees.feeSelectedBankAccountId ?? null);
@@ -235,10 +272,10 @@ export function DocumentsStepPanel({
     {
       key: "report",
       title: "Demo Session Report - Feedback",
-      countLabel: "1",
+      countLabel: String(feedbackCount),
       statusText: reportGenerated ? "Generated" : "Not Generated",
-      isSent: reportGenerated,
-      actionLabel: reportGenerated ? "Generated" : "Generate now",
+      isSent: reportSent,
+      actionLabel: reportGenerated ? (reportSent ? "Sent" : "Send now") : "Generate now",
     },
     {
       key: "brochure",
@@ -338,6 +375,7 @@ export function DocumentsStepPanel({
               `Document sent: ${row.title}`,
             );
             await refreshLead();
+            pushToast(`${row.title} marked as sent.`);
           } catch (e) {
             setMsgDlg({
               open: true,
@@ -378,6 +416,7 @@ export function DocumentsStepPanel({
               { fees: { enrollmentSent: true, enrollmentSentAt: now } },
             );
             await refreshLead();
+            pushToast("Enrollment form sent.");
           } catch (e) {
             setMsgDlg({
               open: true,
@@ -392,6 +431,47 @@ export function DocumentsStepPanel({
         })();
       },
     });
+  };
+
+  const sendReportPdf = async () => {
+    if (!reportGenerated) {
+      setReportOpen(true);
+      return;
+    }
+    setSavingKey("report");
+    try {
+      const now = new Date().toISOString();
+      await sendLeadPipelineEmail(lead.id, {
+        templateKey: "brochure",
+        brochureEmail: {
+          selectionKeys: [],
+          includeStudentReportPdf: true,
+        },
+      });
+      const row = rows.find((r) => r.key === "report");
+      await patchDocsItem(
+        "report",
+        {
+          key: "report",
+          title: row?.title || "Demo Session Report - Feedback",
+          countLabel: String(feedbackCount),
+          sentAt: now,
+        },
+        "Demo session report PDF sent from Step 2.",
+      );
+      await refreshLead();
+      pushToast("Demo session report sent.");
+    } catch (e) {
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "error",
+        title: "Report send failed",
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    } finally {
+      setSavingKey(null);
+    }
   };
 
   const sendBrochureSelection = async () => {
@@ -429,6 +509,7 @@ export function DocumentsStepPanel({
       );
       setBrochureModalOpen(false);
       await refreshLead();
+      pushToast("Selected brochures sent.");
     } catch (e) {
       setMsgDlg({
         open: true,
@@ -483,6 +564,7 @@ export function DocumentsStepPanel({
       );
       setBankModalOpen(false);
       await refreshLead();
+      pushToast("Selected bank details sent.");
     } catch (e) {
       setMsgDlg({
         open: true,
@@ -574,6 +656,7 @@ export function DocumentsStepPanel({
         activityLog: appendActivity(lead.activityLog, "brochure", `Document added: ${title}`),
       });
       await refreshLead();
+      pushToast(`Document added: ${title}`);
       setNewTitle("");
       setNewCount("1");
       setNewUrl("");
@@ -692,7 +775,15 @@ export function DocumentsStepPanel({
                       )}
                     </td>
                     <td className={SX.dataTd}>
-                      {r.key === "brochure" ? (
+                      {r.key === "report" ? (
+                        <button
+                          type="button"
+                          className="font-semibold text-primary underline"
+                          onClick={() => setReportOpen(true)}
+                        >
+                          {r.countLabel}
+                        </button>
+                      ) : r.key === "brochure" ? (
                         <button
                           type="button"
                           className="font-semibold text-primary underline"
@@ -728,18 +819,21 @@ export function DocumentsStepPanel({
                       {r.key === "report" ? (
                         <button
                           type="button"
-                          className={cn(SX.btnSecondary, "h-8 px-2 text-[12px]")}
+                          className={cn(
+                            r.isSent ? SX.leadBtnGreen : SX.btnPrimary,
+                            "h-8 w-30 justify-center px-2 text-[12px]",
+                          )}
                           disabled={busy}
-                          onClick={() => setReportOpen(true)}
+                          onClick={() => void sendReportPdf()}
                         >
-                          {r.actionLabel}
+                          {busy ? "Sending..." : r.actionLabel}
                         </button>
                       ) : (
                         <button
                           type="button"
                           className={cn(
-                            r.isSent ? SX.btnSecondary : SX.btnPrimary,
-                            "h-8 px-2 text-[12px]",
+                            r.isSent ? SX.leadBtnGreen : SX.btnPrimary,
+                            "h-8 w-30 justify-center px-2 text-[12px]",
                           )}
                           disabled={busy}
                           onClick={() => {
@@ -888,10 +982,17 @@ export function DocumentsStepPanel({
         lead={lead}
         onPatchLead={onPatchLead}
         refreshLead={refreshLead}
+        onToast={pushToast}
       />
 
       {msgDlg.open ? (
         <PipelineMessageDialog {...msgDlg} onClose={() => setMsgDlg({ open: false })} />
+      ) : null}
+
+      {toastMsg ? (
+        <div className="pointer-events-none fixed bottom-5 right-5 z-260 border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-900 shadow-md">
+          {toastMsg}
+        </div>
       ) : null}
     </PipelineStepFrame>
   );

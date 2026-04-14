@@ -117,6 +117,8 @@ export type LeadPipelineStudentReport = {
   recommendations?: string;
   /** ISO — staff confirmed the report is OK to share with the family */
   sendConfirmedAt?: string | null;
+  /** Optional demo row id when a single-report PDF was generated from one demo only. */
+  generatedForMeetRowId?: string | null;
 };
 
 /** Step 2 tracker rows (sheet-like Documents table). */
