@@ -32,9 +32,12 @@ import TargetExamSettingsModel from "../src/models/TargetExamSettings";
 import LeadSourceSettingsModel from "../src/models/LeadSourceSettings";
 import ExamSubjectCatalogModel from "../src/models/ExamSubjectCatalog";
 import ExamFeeStructureModel from "../src/models/ExamFeeStructure";
+import ExamCourseCatalogModel from "../src/models/ExamCourseCatalog";
+import ExamCourseFeeStructureModel from "../src/models/ExamCourseFeeStructure";
 import ExamBrochureTemplateModel from "../src/models/ExamBrochureTemplate";
 import InstituteProfileSettingsModel from "../src/models/InstituteProfileSettings";
 import BankProfileSettingsModel from "../src/models/BankProfileSettings";
+import { ensureExamBrochureTemplateIndexes } from "../src/lib/examBrochureTemplateIndexes";
 import type { RowTone, SheetTabId } from "../src/lib/types";
 
 const SETTINGS_KEY = "default";
@@ -117,7 +120,38 @@ const CATALOG_SUBJECTS = [
     sortOrder: 1,
     isActive: true,
   },
+  {
+    id: "seed-sat-math",
+    examValue: "SAT",
+    name: "SAT Math",
+    sortOrder: 0,
+    isActive: true,
+  },
+  {
+    id: "seed-sat-rw",
+    examValue: "SAT",
+    name: "SAT Reading & Writing",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: "seed-other-counsel",
+    examValue: "Other",
+    name: "Career Counselling",
+    sortOrder: 0,
+    isActive: true,
+  },
 ];
+
+const EXAM_COURSES = [
+  { id: "seed-neet-2yr", examValue: "NEET", name: "2-Year Foundation", sortOrder: 0, isActive: true },
+  { id: "seed-neet-dropper", examValue: "NEET", name: "Dropper Batch", sortOrder: 1, isActive: true },
+  { id: "seed-jee-main-adv", examValue: "JEE", name: "Main + Advanced", sortOrder: 0, isActive: true },
+  { id: "seed-jee-weekend", examValue: "JEE", name: "Weekend Crash Course", sortOrder: 1, isActive: true },
+  { id: "seed-cuet-ug", examValue: "CUET", name: "CUET UG Integrated", sortOrder: 0, isActive: true },
+  { id: "seed-sat-global", examValue: "SAT", name: "SAT Global Prep", sortOrder: 0, isActive: true },
+  { id: "seed-other-mentoring", examValue: "Other", name: "Mentoring Program", sortOrder: 0, isActive: true },
+] as const;
 
 const FACULTY_ROWS = [
   {
@@ -390,7 +424,8 @@ function buildLeads() {
         : null;
     const fn = FIRST[i % FIRST.length];
     const ln = LAST[(i * 3) % LAST.length];
-    const email = `${fn.toLowerCase()}.${ln.toLowerCase()}@student.seed`;
+    const email = `${fn.toLowerCase()}.${ln.toLowerCase()}+seed${i + 1}@example.com`;
+    const examSet = [...EXAM_SETS[i % EXAM_SETS.length]];
     leads.push({
       date,
       followUpDate,
@@ -398,16 +433,136 @@ function buildLeads() {
       parentName: `${ln} Family`,
       dataType: DATA_TYPES[i % DATA_TYPES.length],
       grade: GRADES[i % GRADES.length],
-      targetExams: [...EXAM_SETS[i % EXAM_SETS.length]],
+      targetExams: examSet,
       country: COUNTRIES[i % COUNTRIES.length],
       phone: `98${String(76543210 + i * 10007).padStart(8, "0").slice(-8)}`,
       email,
       pipelineSteps,
       rowTone,
       sheetTab,
+      pipelineMeta: buildSeedPipelineMeta(i, examSet),
     });
   }
   return leads;
+}
+
+function buildSeedPipelineMeta(i: number, exams: readonly string[]) {
+  const primaryExam = String(exams[0] ?? "NEET");
+  const demoRowIdA = `seed-demo-${i + 1}-a`;
+  const demoRowIdB = `seed-demo-${i + 1}-b`;
+  const hasTeacherFeedback = i % 2 === 0;
+  const hasGeneratedReport = i % 4 === 0;
+
+  const baseDemoRows = [
+    {
+      meetRowId: demoRowIdA,
+      examValue: primaryExam,
+      subject: primaryExam === "JEE" ? "Physics" : "Biology",
+      teacher: primaryExam === "JEE" ? "Mr. Ravi Kumar" : "Dr. Meena Singh",
+      studentTimeZone: "Asia/Kolkata",
+      status: "Scheduled",
+      isoDate: `2026-04-${String(7 + (i % 6)).padStart(2, "0")}`,
+      timeHmIST: i % 3 === 0 ? "10:30" : "16:00",
+      inviteSent: i % 3 !== 0,
+      inviteSentAt: i % 3 !== 0 ? "2026-04-08T08:00:00.000Z" : null,
+      teacherFeedbackInviteSentAt: hasTeacherFeedback
+        ? "2026-04-09T12:30:00.000Z"
+        : null,
+      teacherFeedbackSubmittedAt: hasTeacherFeedback
+        ? "2026-04-09T15:10:00.000Z"
+        : null,
+      teacherFeedbackRating: hasTeacherFeedback ? "Good" : "",
+      teacherFeedbackStrengths: hasTeacherFeedback
+        ? "Good concept clarity and attentive participation."
+        : "",
+      teacherFeedbackImprovements: hasTeacherFeedback
+        ? "Needs faster calculations in timed questions."
+        : "",
+      teacherFeedbackNotes: hasTeacherFeedback
+        ? "Parent joined the last 5 minutes."
+        : "",
+    },
+    ...(i % 5 === 0
+      ? [
+          {
+            meetRowId: demoRowIdB,
+            examValue: primaryExam,
+            subject: primaryExam === "JEE" ? "Mathematics" : "Chemistry",
+            teacher: primaryExam === "JEE" ? "Mr. Arjun Das" : "Mr. Ravi Kumar",
+            studentTimeZone: "Asia/Kolkata",
+            status: "Scheduled",
+            isoDate: "2026-04-15",
+            timeHmIST: "18:30",
+            inviteSent: false,
+            inviteSentAt: null,
+            teacherFeedbackInviteSentAt: null,
+            teacherFeedbackSubmittedAt: null,
+            teacherFeedbackRating: "",
+            teacherFeedbackStrengths: "",
+            teacherFeedbackImprovements: "",
+            teacherFeedbackNotes: "",
+          },
+        ]
+      : []),
+  ];
+
+  const documentsItems = [
+    ...(hasGeneratedReport
+      ? [
+          {
+            key: "report",
+            title: "Demo Session Report - Feedback",
+            countLabel: hasTeacherFeedback ? "1" : "0",
+            sentAt: i % 8 === 0 ? "2026-04-10T11:00:00.000Z" : null,
+          },
+        ]
+      : []),
+    ...(i % 3 === 0
+      ? [
+          {
+            key: `custom-${i + 1}`,
+            title: "Academic Planner",
+            countLabel: "1",
+            isCustom: true,
+            documentUrl: "https://www.africau.edu/images/default/sample.pdf",
+            sentAt: "2026-04-10T12:00:00.000Z",
+          },
+        ]
+      : []),
+  ];
+
+  return {
+    demo: {
+      rows: baseDemoRows,
+      lastInviteSharedAt: "2026-04-08T08:00:00.000Z",
+      lastInviteSummary: "Seed invite sharing snapshot",
+    },
+    documents: { items: documentsItems },
+    studentReport: {
+      pdfUrl: hasGeneratedReport
+        ? `/uploads/student-reports/seed/lead-${i + 1}.pdf`
+        : null,
+      fileName: hasGeneratedReport ? `demo-report-${i + 1}.pdf` : null,
+      generatedAt: hasGeneratedReport ? "2026-04-10T10:00:00.000Z" : null,
+      generatedForMeetRowId: hasGeneratedReport ? demoRowIdA : null,
+      recommendations: hasTeacherFeedback
+        ? "Keep weekly practice tests and revise weak chapters."
+        : "",
+      additionalNotes: "",
+      sendConfirmedAt: i % 8 === 0 ? "2026-04-10T11:00:00.000Z" : null,
+    },
+    brochure: {
+      sentEmail: i % 3 === 0,
+      sentEmailAt: i % 3 === 0 ? "2026-04-08T09:30:00.000Z" : null,
+    },
+    fees: {
+      feeSelectedBankAccountId: "seed-bank-fees-main",
+      feeSentEmail: i % 6 === 0,
+      feeSentEmailAt: i % 6 === 0 ? "2026-04-11T08:00:00.000Z" : null,
+      enrollmentSent: i % 7 === 0,
+      enrollmentSentAt: i % 7 === 0 ? "2026-04-11T08:05:00.000Z" : null,
+    },
+  };
 }
 
 async function dropSeedCollections(force: boolean) {
@@ -419,12 +574,14 @@ async function dropSeedCollections(force: boolean) {
   await TargetExamSettingsModel.deleteMany({});
   await LeadSourceSettingsModel.deleteMany({});
   await ExamSubjectCatalogModel.deleteMany({});
+  await ExamCourseCatalogModel.deleteMany({});
   await ExamFeeStructureModel.deleteMany({});
+  await ExamCourseFeeStructureModel.deleteMany({});
   await ExamBrochureTemplateModel.deleteMany({});
   await InstituteProfileSettingsModel.deleteMany({});
   await BankProfileSettingsModel.deleteMany({});
   console.log(
-    "Cleared leads, fees, faculties, meet links, exams, sources, subject catalog, fee structures, brochures, institute, bank (FORCE_SEED=1).",
+    "Cleared leads, fees, faculties, meet links, exams, sources, subject/course catalogs, fee structures, brochures, institute, bank (FORCE_SEED=1).",
   );
 }
 
@@ -449,6 +606,13 @@ async function seedSettingsAndContent() {
     { upsert: true },
   );
   console.log(`Exam–subject catalog: ${CATALOG_SUBJECTS.length} subjects.`);
+
+  await ExamCourseCatalogModel.findOneAndUpdate(
+    { key: SETTINGS_KEY },
+    { $set: { courses: [...EXAM_COURSES] } },
+    { upsert: true },
+  );
+  console.log(`Exam-course catalog: ${EXAM_COURSES.length} rows.`);
 
   await MeetLinkModel.insertMany(MEET_LINKS);
   console.log(`Meet links: ${MEET_LINKS.length} rows.`);
@@ -523,6 +687,15 @@ async function seedSettingsAndContent() {
   await ExamFeeStructureModel.insertMany(feeStructDocs);
   console.log(`Exam fee structures: ${feeStructDocs.length} rows.`);
 
+  const courseFeeRows = EXAM_COURSES.map((c, i) => ({
+    exam: c.examValue,
+    courseId: c.id,
+    baseFee: 115000 + i * 9000,
+    notes: `Seed fee for ${c.examValue} · ${c.name}`,
+  }));
+  await ExamCourseFeeStructureModel.insertMany(courseFeeRows);
+  console.log(`Exam course fee structures: ${courseFeeRows.length} rows.`);
+
   const neetBrochures = [
     brochureItem("NEET — Full course brochure", SAMPLE_PDF_A, 0),
     brochureItem("NEET — Biology module outline", SAMPLE_PDF_B, 1),
@@ -536,13 +709,18 @@ async function seedSettingsAndContent() {
     brochureItem("CUET — General brochure", SAMPLE_PDF_A, 0),
   ];
 
+  await ensureExamBrochureTemplateIndexes(ExamBrochureTemplateModel);
   await ExamBrochureTemplateModel.insertMany([
-    { exam: "NEET", brochures: neetBrochures },
-    { exam: "JEE", brochures: jeeBrochures },
-    { exam: "CUET", brochures: cuetBrochures },
+    { exam: "NEET", courseId: "seed-neet-2yr", brochures: neetBrochures },
+    { exam: "NEET", courseId: "seed-neet-dropper", brochures: neetBrochures },
+    { exam: "JEE", courseId: "seed-jee-main-adv", brochures: jeeBrochures },
+    { exam: "JEE", courseId: "seed-jee-weekend", brochures: jeeBrochures },
+    { exam: "CUET", courseId: "seed-cuet-ug", brochures: cuetBrochures },
+    { exam: "SAT", courseId: "seed-sat-global", brochures: [brochureItem("SAT — Global prep brochure", SAMPLE_PDF_B, 0)] },
+    { exam: "Other", courseId: "seed-other-mentoring", brochures: [brochureItem("Mentoring program overview", SAMPLE_PDF_A, 0)] },
   ]);
   console.log(
-    "Course brochures: NEET (3 links), JEE (2 links), CUET (1 link).",
+    "Course brochures: seeded for all exam-course combinations.",
   );
 
   await FacultyModel.insertMany(
