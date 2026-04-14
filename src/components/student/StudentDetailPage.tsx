@@ -180,6 +180,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
     [targetExamLabelFor],
   );
   const completed = lead.pipelineSteps;
+  const pipelineUnlocked = lead.rowTone === "interested";
   const [activeStep, setActiveStep] = useState(1);
 
   useEffect(() => {
@@ -190,6 +191,11 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
     const maxStep = Math.min(PIPELINE_TOTAL, Math.max(1, completed + 1));
     if (activeStep > maxStep) setActiveStep(maxStep);
   }, [completed, activeStep]);
+  useEffect(() => {
+    if (!pipelineUnlocked && activeStep !== 1) {
+      setActiveStep(1);
+    }
+  }, [pipelineUnlocked, activeStep]);
   const [notes, setNotes] = useState(initialLead.workspaceNotes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
@@ -835,33 +841,47 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
           completed={completed}
           activeStep={activeStep}
           onStepSelect={setActiveStep}
+          unlocked={pipelineUnlocked}
         />
 
         <div className={SX.mainSplit}>
           <div className={SX.mainPane}>
-            {activeStep === 1 && (
-              <DemoStepPanel
-                lead={lead}
-                onPatchLead={patchLead}
-                refreshLead={refreshLead}
-                labelForTargetExam={targetExamLabelFor}
-                canonicalTargetExams={targetExamActiveValues}
-              />
+            {!pipelineUnlocked ? (
+              <section className="border border-amber-200 bg-amber-50 px-4 py-4 text-amber-900">
+                <h3 className="text-[14px] font-semibold">
+                  Pipeline is locked
+                </h3>
+                <p className="mt-1 text-[13px] leading-relaxed">
+                  Set the lead action/status to <strong>Interested</strong> in the lead sheet to unlock Demo, Documents, Fees, and Schedule steps.
+                </p>
+              </section>
+            ) : (
+              <>
+                {activeStep === 1 && (
+                  <DemoStepPanel
+                    lead={lead}
+                    onPatchLead={patchLead}
+                    refreshLead={refreshLead}
+                    labelForTargetExam={targetExamLabelFor}
+                    canonicalTargetExams={targetExamActiveValues}
+                  />
+                )}
+                {activeStep === 2 && (
+                  <DocumentsStepPanel
+                    lead={lead}
+                    onPatchLead={patchLead}
+                    refreshLead={refreshLead}
+                  />
+                )}
+                {activeStep === 3 && <FeesStepPanel lead={lead} />}
+                {activeStep === 4 && <ScheduleStepPanel lead={lead} />}
+                <StepFooter
+                  completed={completed}
+                  activeStep={activeStep}
+                  onStepChange={setActiveStep}
+                />
+              </>
             )}
-            {activeStep === 2 && (
-              <DocumentsStepPanel
-                lead={lead}
-                onPatchLead={patchLead}
-                refreshLead={refreshLead}
-              />
-            )}
-            {activeStep === 3 && <FeesStepPanel lead={lead} />}
-            {activeStep === 4 && <ScheduleStepPanel lead={lead} />}
-            <StepFooter
-              completed={completed}
-              activeStep={activeStep}
-              onStepChange={setActiveStep}
-            />
           </div>
 
           <aside className={SX.asidePane}>
@@ -1134,10 +1154,12 @@ function Stepper({
   completed,
   activeStep,
   onStepSelect,
+  unlocked,
 }: {
   completed: number;
   activeStep: number;
   onStepSelect: (step: number) => void;
+  unlocked: boolean;
 }) {
   const doneCount = Math.min(Math.max(completed, 0), PIPELINE_TOTAL);
   const pct = (doneCount / PIPELINE_TOTAL) * 100;
@@ -1153,9 +1175,11 @@ function Stepper({
           {STEPS.map((s) => {
             const isDone = completed >= s.n;
             const isActive = activeStep === s.n;
-            const unlocked = canAccessPipelineStep(completed, s.n);
+            const stepUnlocked = unlocked && canAccessPipelineStep(completed, s.n);
             const lockHint =
-              s.n >= 2
+              !unlocked
+                ? "Locked until lead action is set to Interested."
+                : s.n >= 2
                 ? `Complete ${PIPELINE_STEP_LABELS[s.n - 2]} first`
                 : "";
             return (
@@ -1166,9 +1190,9 @@ function Stepper({
                 role="tab"
                 aria-selected={isActive}
                 aria-current={isActive ? "step" : undefined}
-                disabled={!unlocked}
+                disabled={!stepUnlocked}
                 title={
-                  !unlocked
+                  !stepUnlocked
                     ? lockHint
                     : isDone
                       ? `${s.label} — completed`
@@ -1177,21 +1201,21 @@ function Stepper({
                         : `${s.label} — not started`
                 }
                 onClick={() => {
-                  if (unlocked) onStepSelect(s.n);
+                  if (stepUnlocked) onStepSelect(s.n);
                 }}
                 className={cn(
                   "flex min-h-9 min-w-[4.5rem] flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-[12px] font-medium transition-all sm:min-w-0 sm:px-2.5",
-                  !unlocked && "cursor-not-allowed opacity-45",
+                  !stepUnlocked && "cursor-not-allowed opacity-45",
                   isActive &&
-                    unlocked &&
+                    stepUnlocked &&
                     "bg-white font-semibold text-primary shadow-sm ring-1 ring-slate-200/70",
                   !isActive &&
                     isDone &&
-                    unlocked &&
+                    stepUnlocked &&
                     "text-emerald-900 hover:bg-white/80",
                   !isActive &&
                     !isDone &&
-                    unlocked &&
+                    stepUnlocked &&
                     "text-slate-700 hover:bg-white/70",
                 )}
               >
