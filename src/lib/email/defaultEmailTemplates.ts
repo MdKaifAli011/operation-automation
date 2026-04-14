@@ -69,6 +69,17 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
 <p>Regards,<br/>Team</p>`,
   },
   {
+    key: "bank_details",
+    name: "Bank details only",
+    description: "Share selected bank details without fee summary.",
+    sortOrder: 28,
+    subject: "Bank account details — {{studentName}}",
+    bodyHtml: `<p>Hello {{parentName}},</p>
+<p>As requested, sharing the payment bank details for <strong>{{studentName}}</strong> below:</p>
+{{feeBankDetailsHtml}}
+<p style="margin-top:20px;">Regards,<br/>Team</p>`,
+  },
+  {
     key: "fees",
     name: "Fee structure",
     description: "Fee, installments, and bank details for payment.",

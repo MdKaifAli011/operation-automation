@@ -106,7 +106,7 @@ export function DocumentsStepPanel({
   const [reportOpen, setReportOpen] = useState(false);
   const [addingOpen, setAddingOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [newCount, setNewCount] = useState("1");
+  const [newSourceMode, setNewSourceMode] = useState<"url" | "file">("url");
   const [newUrl, setNewUrl] = useState("");
   const [newFile, setNewFile] = useState<File | null>(null);
   const [msgDlg, setMsgDlg] = useState<MessageDialogState>({ open: false });
@@ -136,6 +136,15 @@ export function DocumentsStepPanel({
     }, 2200);
   };
 
+  const closeAddDocumentModal = () => {
+    if (savingKey) return;
+    setAddingOpen(false);
+    setNewTitle("");
+    setNewSourceMode("url");
+    setNewUrl("");
+    setNewFile(null);
+  };
+
   const docsByKey = useMemo(() => {
     const m = new Map<string, DocumentItemPersisted>();
     for (const d of docsMetaItems) {
@@ -147,7 +156,10 @@ export function DocumentsStepPanel({
   }, [docsMetaItems]);
 
   const studentReport = ((lead.pipelineMeta as Record<string, unknown> | undefined)
-    ?.studentReport ?? {}) as { pdfUrl?: string | null };
+    ?.studentReport ?? {}) as {
+    pdfUrl?: string | null;
+    generatedForMeetRowId?: string | null;
+  };
   const brochure = ((lead.pipelineMeta as Record<string, unknown> | undefined)?.brochure ??
     {}) as {
     sentEmail?: boolean;
@@ -162,7 +174,12 @@ export function DocumentsStepPanel({
     feeSelectedBankAccountId?: string | null;
   };
 
-  const reportGeneratedRaw = !!String(studentReport.pdfUrl ?? "").trim();
+  const reportGeneratedForMeetRowId = String(
+    studentReport.generatedForMeetRowId ?? "",
+  ).trim();
+  const reportGeneratedRaw =
+    !!String(studentReport.pdfUrl ?? "").trim() &&
+    reportGeneratedForMeetRowId.length > 0;
   const reportSentRaw = !!docsByKey.get("report")?.sentAt;
   const brochureSent = !!brochure.sentEmail || !!brochure.sentEmailAt;
   const enrollmentSent = !!fees.enrollmentSent || !!fees.enrollmentSentAt;
@@ -181,7 +198,13 @@ export function DocumentsStepPanel({
       }>;
     } | undefined)?.rows ?? [];
   const feedbackCount = demoRows.filter((r) => hasTeacherFeedback(r)).length;
-  const reportGenerated = feedbackCount > 0 && reportGeneratedRaw;
+  const generatedRowStillValid = demoRows.some(
+    (r) =>
+      String((r as { meetRowId?: string }).meetRowId ?? "").trim() ===
+        reportGeneratedForMeetRowId && hasTeacherFeedback(r),
+  );
+  const reportGenerated =
+    feedbackCount > 0 && reportGeneratedRaw && generatedRowStillValid;
   const reportSent = reportGenerated && reportSentRaw;
 
   useEffect(() => {
@@ -598,7 +621,7 @@ export function DocumentsStepPanel({
           "Selected bank account from Step 2 for fee email.",
         ),
       });
-      await sendLeadPipelineEmail(lead.id, { templateKey: "fees" });
+      await sendLeadPipelineEmail(lead.id, { templateKey: "bank_details" });
       await patchDocsItem(
         "bank",
         { key: "bank", title: row?.title || "Bank & Account Details", countLabel: bankCountLabel, sentAt: now },
@@ -645,7 +668,6 @@ export function DocumentsStepPanel({
 
   const addCustomDocument = async () => {
     const title = newTitle.trim();
-    const countLabel = newCount.trim() || "1";
     const url = newUrl.trim();
     if (!title) {
       setMsgDlg({
@@ -657,23 +679,34 @@ export function DocumentsStepPanel({
       });
       return;
     }
-    if (!url && !newFile) {
+    if (newSourceMode === "url") {
+      if (!url) {
+        setMsgDlg({
+          open: true,
+          mode: "alert",
+          variant: "error",
+          title: "URL required",
+          description: "Enter a document URL.",
+        });
+        return;
+      }
+      if (!/^https?:\/\/|^\//i.test(url)) {
+        setMsgDlg({
+          open: true,
+          mode: "alert",
+          variant: "error",
+          title: "Invalid URL",
+          description: "Use a full http(s) URL or an app path starting with '/'.",
+        });
+        return;
+      }
+    } else if (!newFile) {
       setMsgDlg({
         open: true,
         mode: "alert",
         variant: "error",
-        title: "Document source required",
-        description: "Add a URL or upload a file for the document.",
-      });
-      return;
-    }
-    if (url && !/^https?:\/\/|^\//i.test(url)) {
-      setMsgDlg({
-        open: true,
-        mode: "alert",
-        variant: "error",
-        title: "Invalid URL",
-        description: "Use a full http(s) URL or an app path starting with '/'.",
+        title: "File required",
+        description: "Upload a document file.",
       });
       return;
     }
@@ -686,10 +719,10 @@ export function DocumentsStepPanel({
         {
           key,
           title,
-          countLabel,
+          countLabel: "1",
           isCustom: true,
           sentAt: null,
-          documentUrl: url || null,
+          documentUrl: newSourceMode === "url" ? url : null,
           storedFileUrl: uploaded?.storedFileUrl ?? null,
           fileName: uploaded?.fileName ?? null,
         },
@@ -701,7 +734,7 @@ export function DocumentsStepPanel({
       await refreshLead();
       pushToast(`Document added: ${title}`);
       setNewTitle("");
-      setNewCount("1");
+      setNewSourceMode("url");
       setNewUrl("");
       setNewFile(null);
       setAddingOpen(false);
@@ -731,7 +764,7 @@ export function DocumentsStepPanel({
           <button
             type="button"
             className={cn(SX.btnGhost, "font-semibold text-primary")}
-            onClick={() => setAddingOpen((v) => !v)}
+            onClick={() => setAddingOpen(true)}
           >
             ADD Document
           </button>
@@ -739,50 +772,6 @@ export function DocumentsStepPanel({
       </div>
 
       <div className="bg-white px-2 py-2 sm:px-3">
-        {addingOpen ? (
-          <div className="mb-2 grid grid-cols-1 gap-2 border border-slate-200 bg-slate-50 p-2 sm:grid-cols-6">
-            <input
-              className={cn(SX.input, "sm:col-span-2")}
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="Document name"
-            />
-            <input
-              className={cn(SX.input, "sm:col-span-1")}
-              value={newCount}
-              onChange={(e) => setNewCount(e.target.value)}
-              placeholder="Count"
-            />
-            <input
-              className={cn(SX.input, "sm:col-span-2")}
-              value={newUrl}
-              onChange={(e) => setNewUrl(e.target.value)}
-              placeholder="Document URL (optional)"
-            />
-            <label className={cn(SX.btnSecondary, "h-9 cursor-pointer px-2 text-[12px]")}>
-              Upload file
-              <input
-                type="file"
-                className="hidden"
-                onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {newFile ? (
-              <p className="sm:col-span-5 text-[11px] text-slate-600">
-                File: <span className="font-medium">{newFile.name}</span>
-              </p>
-            ) : null}
-            <button
-              type="button"
-              className={cn(SX.btnPrimary, "sm:col-span-1")}
-              disabled={savingKey !== null}
-              onClick={() => void addCustomDocument()}
-            >
-              Add
-            </button>
-          </div>
-        ) : null}
-
         <div className="w-full overflow-x-auto">
           <table className={cn(SX.dataTable, "w-full min-w-[760px] table-fixed")}>
             <colgroup>
@@ -872,23 +861,35 @@ export function DocumentsStepPanel({
                           {busy ? "Sending..." : r.actionLabel}
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          className={cn(
-                            r.isSent ? SX.leadBtnGreen : SX.btnPrimary,
-                            "h-8 w-30 justify-center px-2 text-[12px]",
-                          )}
-                          disabled={busy}
-                          onClick={() => {
-                            if (r.key === "brochure") setBrochureModalOpen(true);
-                            else if (r.key === "bank") setBankModalOpen(true);
-                            else if (r.key === "enrollment") sendEnrollment();
-                            else if (r.key === "courier") sendCourierAddressRequest();
-                            else markSentSimple(r);
-                          }}
-                        >
-                          {busy ? "Sending..." : r.actionLabel}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {r.isCustom && customLink ? (
+                            <a
+                              href={customLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={cn(SX.btnSecondary, "h-8 w-16 justify-center px-2 text-[12px]")}
+                            >
+                              View
+                            </a>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={cn(
+                              r.isSent ? SX.leadBtnGreen : SX.btnPrimary,
+                              "h-8 w-30 justify-center px-2 text-[12px]",
+                            )}
+                            disabled={busy}
+                            onClick={() => {
+                              if (r.key === "brochure") setBrochureModalOpen(true);
+                              else if (r.key === "bank") setBankModalOpen(true);
+                              else if (r.key === "enrollment") sendEnrollment();
+                              else if (r.key === "courier") sendCourierAddressRequest();
+                              else markSentSimple(r);
+                            }}
+                          >
+                            {busy ? "Sending..." : r.actionLabel}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -1020,6 +1021,108 @@ export function DocumentsStepPanel({
         </dialog>
       ) : null}
 
+      {addingOpen ? (
+        <dialog
+          open
+          className="fixed left-1/2 top-1/2 z-250 w-[min(100vw-1rem,620px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-slate-200 bg-white p-0 shadow-2xl backdrop:bg-slate-900/40"
+        >
+          <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+            <h3 className="text-[15px] font-semibold text-slate-900">Add document</h3>
+            <p className="mt-1 text-[12px] text-slate-600">
+              Enter document name and provide URL or upload file (any one).
+            </p>
+          </div>
+          <div className="space-y-3 px-4 py-3">
+            <label className="block text-[12px] font-medium text-slate-700">
+              Document name
+              <input
+                className={cn(SX.input, "mt-1")}
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g. Admission checklist"
+              />
+            </label>
+
+            <div>
+              <p className="mb-1 text-[12px] font-medium text-slate-700">Document source</p>
+              <div className="inline-flex border border-slate-200 bg-white">
+                <button
+                  type="button"
+                  className={cn(
+                    "h-9 px-3 text-[12px] font-medium",
+                    newSourceMode === "url"
+                      ? "bg-primary text-white"
+                      : "bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                  onClick={() => setNewSourceMode("url")}
+                >
+                  URL
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "h-9 border-l border-slate-200 px-3 text-[12px] font-medium",
+                    newSourceMode === "file"
+                      ? "bg-primary text-white"
+                      : "bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                  onClick={() => setNewSourceMode("file")}
+                >
+                  Upload file
+                </button>
+              </div>
+            </div>
+            {newSourceMode === "url" ? (
+              <label className="block text-[12px] font-medium text-slate-700">
+                Document URL
+                <input
+                  className={cn(SX.input, "mt-1")}
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="https://..."
+                />
+              </label>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <label className={cn(SX.btnSecondary, "h-9 cursor-pointer px-3 text-[12px]")}>
+                  Choose file
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {newFile ? (
+                  <p className="text-[12px] text-slate-600">
+                    File: <span className="font-medium">{newFile.name}</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-500">No file selected</p>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              disabled={savingKey !== null}
+              onClick={closeAddDocumentModal}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={SX.btnPrimary}
+              disabled={savingKey !== null}
+              onClick={() => void addCustomDocument()}
+            >
+              {savingKey?.startsWith("custom-") ? "Adding..." : "Add document"}
+            </button>
+          </div>
+        </dialog>
+      ) : null}
+
       <StudentReportModal
         open={reportOpen}
         onClose={() => setReportOpen(false)}
@@ -1034,7 +1137,7 @@ export function DocumentsStepPanel({
       ) : null}
 
       {toastMsg ? (
-        <div className="pointer-events-none fixed bottom-5 right-5 z-260 border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-900 shadow-md">
+        <div className="pointer-events-none fixed right-4 top-4 z-260 w-[min(92vw,420px)] rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[14px] font-semibold leading-relaxed text-emerald-900 shadow-lg sm:right-6 sm:top-6">
           {toastMsg}
         </div>
       ) : null}

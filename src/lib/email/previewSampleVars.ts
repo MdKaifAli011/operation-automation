@@ -31,6 +31,10 @@ export function getPreviewSampleVars(key: EmailTemplateKey): Record<string, stri
       };
     case "courier_address":
       return base;
+    case "bank_details": {
+      const feeBankDetailsHtml = `<div style="border:1px solid #c8e6c9;border-radius:8px;overflow:hidden;max-width:560px;"><div style="background:#e8f5e9;padding:12px 16px;font-weight:700;font-size:14px;color:#1b5e20;">Sample · Main fee account</div><table style="width:100%;border-collapse:collapse;background:#fafafa;"><tr><td style="padding:8px 14px;font-size:12px;color:#616161;">IFSC</td><td style="padding:8px 14px;font-size:14px;">HDFC0001234</td></tr></table></div>`;
+      return { ...base, feeBankDetailsHtml };
+    }
     case "fees": {
       const feeSummary = [
         "Final fee: (amount)",

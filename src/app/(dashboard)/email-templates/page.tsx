@@ -37,6 +37,7 @@ const PIPELINE_ORDER: EmailTemplateKey[] = [
   "demo_invite",
   "brochure",
   "courier_address",
+  "bank_details",
   "fees",
   "enrollment",
   "schedule",

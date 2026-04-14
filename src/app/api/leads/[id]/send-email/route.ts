@@ -361,7 +361,7 @@ export async function POST(
       vars = buildLeadEmailVars(lead, templateKey, { demoRowIndex });
     }
 
-    if (templateKey === "fees") {
+    if (templateKey === "fees" || templateKey === "bank_details") {
       vars = await mergeFeeEmailVarsWithBankDetails(lead, vars);
     }
 
@@ -377,7 +377,7 @@ export async function POST(
       const bccList = getEnrollmentTeamBccEmails();
       const { to: toNorm, bcc } = normalizeMailRecipients(to, undefined, bccList);
       await sendMail({ to: toNorm, subject, html, bcc });
-    } else if (templateKey === "fees") {
+    } else if (templateKey === "fees" || templateKey === "bank_details") {
       html = ensureFeeBankDetailsInRenderedHtml(
         String(tmpl.bodyHtml),
         html,

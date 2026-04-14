@@ -27,10 +27,10 @@ function rowKey(r: DemoTableRowPersisted, i: number): string {
 function hasTeacherFeedback(r: DemoTableRowPersisted): boolean {
   return Boolean(
     r.teacherFeedbackSubmittedAt?.trim() ||
-      r.teacherFeedbackRating?.trim() ||
-      r.teacherFeedbackStrengths?.trim() ||
-      r.teacherFeedbackImprovements?.trim() ||
-      r.teacherFeedbackNotes?.trim(),
+    r.teacherFeedbackRating?.trim() ||
+    r.teacherFeedbackStrengths?.trim() ||
+    r.teacherFeedbackImprovements?.trim() ||
+    r.teacherFeedbackNotes?.trim(),
   );
 }
 
@@ -114,21 +114,23 @@ export function StudentReportModal({
     return () => dlg.removeEventListener("mousedown", onBackdrop);
   }, [open, onClose]);
 
-  const previewSrc = localPreviewUrl?.trim() || (sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
+  const previewSrc =
+    localPreviewUrl?.trim() || (sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
 
   const reportItems = useMemo(
     () =>
       demoRows
         .filter((r) => hasTeacherFeedback(r))
         .map((r, i) => ({
-        key: rowKey(r, i),
-        label: `Demo report ${i + 1}`,
-        row: r,
-      })),
+          key: rowKey(r, i),
+          label: `Demo report ${i + 1}`,
+          row: r,
+        })),
     [demoRows],
   );
 
-  const selectedItem = reportItems.find((x) => x.key === selectedReportKey) ?? null;
+  const selectedItem =
+    reportItems.find((x) => x.key === selectedReportKey) ?? null;
   const generatedForSelected =
     !!previewSrc &&
     !!selectedItem &&
@@ -141,7 +143,9 @@ export function StudentReportModal({
     }
     const meetRowId = selectedItem.row.meetRowId?.trim();
     if (!meetRowId) {
-      setGenError("This demo row is missing an id. Edit and save it once in Step 1, then retry.");
+      setGenError(
+        "This demo row is missing an id. Edit and save it once in Step 1, then retry.",
+      );
       return;
     }
     setGeneratingKey(selectedItem.key);
@@ -152,7 +156,11 @@ export function StudentReportModal({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ additionalNotes: "", recommendations: "", meetRowId }),
+          body: JSON.stringify({
+            additionalNotes: "",
+            recommendations: "",
+            meetRowId,
+          }),
         },
       );
       const data = (await res.json().catch(() => ({}))) as {
@@ -272,12 +280,16 @@ export function StudentReportModal({
                               : "bg-slate-50 text-slate-600 ring-slate-200",
                         )}
                       >
-                        {isGenerated ? "Generated" : hasFb ? "Feedback ready" : "No feedback yet"}
+                        {isGenerated
+                          ? "Generated"
+                          : hasFb
+                            ? "Feedback ready"
+                            : "No feedback yet"}
                       </span>
                     </div>
                     <p className="mt-1 text-[11px] text-slate-600">
-                      {item.row.isoDate || "—"} · {item.row.timeHmIST || "—"} IST ·{" "}
-                      {item.row.subject || "—"}
+                      {item.row.isoDate || "—"} · {item.row.timeHmIST || "—"}{" "}
+                      IST · {item.row.subject || "—"}
                     </p>
                   </button>
                 );
@@ -295,8 +307,10 @@ export function StudentReportModal({
               {selectedItem.label}
             </p>
             <p className="mt-1 text-[12px] text-slate-700">
-              {selectedItem.row.isoDate || "—"} · {selectedItem.row.timeHmIST || "—"} IST ·{" "}
-              {selectedItem.row.subject || "—"} · {selectedItem.row.teacher || "—"}
+              {selectedItem.row.isoDate || "—"} ·{" "}
+              {selectedItem.row.timeHmIST || "—"} IST ·{" "}
+              {selectedItem.row.subject || "—"} ·{" "}
+              {selectedItem.row.teacher || "—"}
             </p>
             <p className="mt-1 text-[12px] text-slate-700">
               Overall: {ratingLabel(selectedItem.row.teacherFeedbackRating)}
@@ -342,7 +356,9 @@ export function StudentReportModal({
             <button
               type="button"
               className={SX.btnSecondary}
-              onClick={() => window.open(previewSrc, "_blank", "noopener,noreferrer")}
+              onClick={() =>
+                window.open(previewSrc, "_blank", "noopener,noreferrer")
+              }
             >
               View report
             </button>

@@ -76,8 +76,15 @@ export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
       )}
       onClose={onClose}
     >
-      <div className={cn("flex items-start justify-between gap-3 px-4 py-3", headerClass)}>
-        <h2 className="text-[15px] font-bold leading-snug tracking-tight">{title}</h2>
+      <div
+        className={cn(
+          "flex items-start justify-between gap-3 px-4 py-3",
+          headerClass,
+        )}
+      >
+        <h2 className="text-[15px] font-bold leading-snug tracking-tight">
+          {title}
+        </h2>
         <button
           type="button"
           className={cn(

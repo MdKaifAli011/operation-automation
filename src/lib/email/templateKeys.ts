@@ -5,6 +5,8 @@ export const EMAIL_TEMPLATE_KEYS = [
   "brochure",
   /** Step 2: request full postal address and contact details for document dispatch. */
   "courier_address",
+  /** Step 2: share selected institute bank account details only (no fee summary). */
+  "bank_details",
   "fees",
   "enrollment",
   /** Composite (not a DB row): fee + enrollment in one email, BCC enrollment team. */
@@ -112,6 +114,26 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
       "{{country}}",
       "{{grade}}",
       "{{targetExams}}",
+    ],
+  },
+  bank_details: {
+    name: "Bank details only",
+    description:
+      "Step 2 · Documents: sends only the selected bank account details for payment/transfer queries.",
+    editorTips: [
+      "Use {{feeBankDetailsHtml}} for the bank account block.",
+      "No fee summary is included in this template — that remains in the Fee structure template.",
+      "If {{feeBankDetailsHtml}} is missing, the app appends bank details automatically.",
+    ],
+    placeholders: [
+      "{{studentName}}",
+      "{{parentName}}",
+      "{{email}}",
+      "{{phone}}",
+      "{{country}}",
+      "{{grade}}",
+      "{{targetExams}}",
+      "{{feeBankDetailsHtml}}",
     ],
   },
   fees: {
