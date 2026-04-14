@@ -162,8 +162,8 @@ export function DocumentsStepPanel({
     feeSelectedBankAccountId?: string | null;
   };
 
-  const reportGenerated = !!String(studentReport.pdfUrl ?? "").trim();
-  const reportSent = !!docsByKey.get("report")?.sentAt;
+  const reportGeneratedRaw = !!String(studentReport.pdfUrl ?? "").trim();
+  const reportSentRaw = !!docsByKey.get("report")?.sentAt;
   const brochureSent = !!brochure.sentEmail || !!brochure.sentEmailAt;
   const enrollmentSent = !!fees.enrollmentSent || !!fees.enrollmentSentAt;
   const bankSent = !!fees.feeSentEmail || !!fees.feeSentEmailAt;
@@ -181,6 +181,8 @@ export function DocumentsStepPanel({
       }>;
     } | undefined)?.rows ?? [];
   const feedbackCount = demoRows.filter((r) => hasTeacherFeedback(r)).length;
+  const reportGenerated = feedbackCount > 0 && reportGeneratedRaw;
+  const reportSent = reportGenerated && reportSentRaw;
 
   useEffect(() => {
     setSelectedBankId(fees.feeSelectedBankAccountId ?? null);
@@ -417,6 +419,47 @@ export function DocumentsStepPanel({
             );
             await refreshLead();
             pushToast("Enrollment form sent.");
+          } catch (e) {
+            setMsgDlg({
+              open: true,
+              mode: "alert",
+              variant: "error",
+              title: "Send failed",
+              description: e instanceof Error ? e.message : "Please try again.",
+            });
+          } finally {
+            setSavingKey(null);
+          }
+        })();
+      },
+    });
+  };
+
+  const sendCourierAddressRequest = () => {
+    const row = rows.find((r) => r.key === "courier");
+    if (!row) return;
+    setMsgDlg({
+      open: true,
+      mode: "confirm",
+      variant: "default",
+      title: row.isSent ? "Send again?" : "Send now?",
+      description:
+        "Email the family to collect complete courier address details for document dispatch.",
+      confirmLabel: row.isSent ? "Send again" : "Send now",
+      cancelLabel: "Cancel",
+      onConfirm: () => {
+        void (async () => {
+          setSavingKey(row.key);
+          try {
+            const now = new Date().toISOString();
+            await sendLeadPipelineEmail(lead.id, { templateKey: "courier_address" });
+            await patchDocsItem(
+              "courier",
+              { key: "courier", title: row.title, countLabel: row.countLabel, sentAt: now },
+              "Courier address request emailed from Step 2.",
+            );
+            await refreshLead();
+            pushToast("Courier address request sent.");
           } catch (e) {
             setMsgDlg({
               open: true,
@@ -840,6 +883,7 @@ export function DocumentsStepPanel({
                             if (r.key === "brochure") setBrochureModalOpen(true);
                             else if (r.key === "bank") setBankModalOpen(true);
                             else if (r.key === "enrollment") sendEnrollment();
+                            else if (r.key === "courier") sendCourierAddressRequest();
                             else markSentSimple(r);
                           }}
                         >

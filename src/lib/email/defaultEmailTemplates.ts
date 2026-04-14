@@ -50,6 +50,25 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
 <p>Regards,<br/>Team</p>`,
   },
   {
+    key: "courier_address",
+    name: "Courier address request",
+    description:
+      "Request shipping details so documents can be delivered to the student.",
+    sortOrder: 25,
+    subject: "Address required for document delivery — {{studentName}}",
+    bodyHtml: `<p>Hello {{parentName}},</p>
+<p>We are ready to dispatch documents for <strong>{{studentName}}</strong>. Please reply with the details below so we can courier safely:</p>
+<ul>
+  <li>Student/receiver full name</li>
+  <li>Complete delivery address (House/Flat, Street, Area, Landmark)</li>
+  <li>City, State, Pincode</li>
+  <li>Alternate mobile number (if any)</li>
+  <li>Preferred delivery time window</li>
+</ul>
+<p>Once we receive these details, we will dispatch and share tracking information.</p>
+<p>Regards,<br/>Team</p>`,
+  },
+  {
     key: "fees",
     name: "Fee structure",
     description: "Fee, installments, and bank details for payment.",

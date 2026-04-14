@@ -36,6 +36,7 @@ type TemplateRow = {
 const PIPELINE_ORDER: EmailTemplateKey[] = [
   "demo_invite",
   "brochure",
+  "courier_address",
   "fees",
   "enrollment",
   "schedule",
@@ -438,8 +439,8 @@ export default function EmailTemplatesPage() {
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-[#757575]">
             Pipeline mail: demo invite, Step 2 documents (brochures + optional
-            report), Step 3 fees (summary + bank details), enrollment link, class
-            schedule. Each expandable card explains placeholders, live preview, and
+            report + courier address request), Step 3 fees (summary + bank
+            details), enrollment link, class schedule. Each expandable card explains placeholders, live preview, and
             sending rules (e.g. BCC via{" "}
             <code className="border border-[#e0e0e0] bg-[#fafafa] px-1 py-0.5 font-mono text-[12px]">
               ENROLLMENT_TEAM_BCC

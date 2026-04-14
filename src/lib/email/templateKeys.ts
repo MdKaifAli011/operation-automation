@@ -3,6 +3,8 @@ export const EMAIL_TEMPLATE_KEYS = [
   /** Fired when a demo row status becomes Scheduled, Completed, or Cancelled (student + teacher CC + enrollment BCC). */
   "demo_status_update",
   "brochure",
+  /** Step 2: request full postal address and contact details for document dispatch. */
+  "courier_address",
   "fees",
   "enrollment",
   /** Composite (not a DB row): fee + enrollment in one email, BCC enrollment team. */
@@ -92,6 +94,24 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
       "{{brochureLabel}}",
       "{{brochureLink}}",
       "{{brochureBundleHtml}}",
+    ],
+  },
+  courier_address: {
+    name: "Courier address request",
+    description:
+      "Step 2 · Documents: asks the family to share complete delivery details so hard-copy documents can be dispatched.",
+    editorTips: [
+      "Use this when your team needs the student's shipping address before sending physical documents.",
+      "Recommended fields: recipient name, full address, landmark, city, state, pincode, phone, and preferred delivery time.",
+    ],
+    placeholders: [
+      "{{studentName}}",
+      "{{parentName}}",
+      "{{email}}",
+      "{{phone}}",
+      "{{country}}",
+      "{{grade}}",
+      "{{targetExams}}",
     ],
   },
   fees: {

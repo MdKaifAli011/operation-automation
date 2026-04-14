@@ -29,6 +29,8 @@ export function getPreviewSampleVars(key: EmailTemplateKey): Record<string, stri
 <table style="width:100%;border-collapse:collapse;background:#fafafa;"><tr><td style="padding:10px 12px;vertical-align:top;border-bottom:1px solid #eee;width:36px;">1.</td><td style="padding:10px 12px;vertical-align:top;border-bottom:1px solid #eee;"><div style="font-weight:600;color:#1565c0;font-size:15px;margin-bottom:8px;">JEE · Physics overview</div><a href="#" style="display:inline-block;padding:8px 14px;background:#1565c0;color:#fff;text-decoration:none;border-radius:4px;font-size:13px;font-weight:600;">Open document</a></td></tr>
 <tr><td style="padding:10px 12px;vertical-align:top;width:36px;">2.</td><td style="padding:10px 12px;vertical-align:top;"><div style="font-weight:600;color:#1565c0;font-size:15px;margin-bottom:8px;">NEET · Biology brochure</div><a href="#" style="display:inline-block;padding:8px 14px;background:#1565c0;color:#fff;text-decoration:none;border-radius:4px;font-size:13px;font-weight:600;">Open document</a></td></tr></table></div>`,
       };
+    case "courier_address":
+      return base;
     case "fees": {
       const feeSummary = [
         "Final fee: (amount)",
