@@ -18,6 +18,21 @@ function ratingLabel(v: string | undefined): string {
   return m[v] ?? v;
 }
 
+function hasTeacherFeedback(r: DemoTableRowPersisted): boolean {
+  return Boolean(
+    r.teacherFeedbackSubmittedAt?.trim() ||
+      r.teacherFeedbackRating?.trim() ||
+      r.teacherFeedbackStrengths?.trim() ||
+      r.teacherFeedbackImprovements?.trim() ||
+      r.teacherFeedbackNotes?.trim(),
+  );
+}
+
+function feedbackStatusLabel(r: DemoTableRowPersisted): string {
+  if (hasTeacherFeedback(r)) return "Submitted";
+  return "—";
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -50,9 +65,7 @@ export function StudentReportModal({
     (lead.pipelineMeta?.demo as { rows?: DemoTableRowPersisted[] } | undefined)
       ?.rows ?? [];
 
-  const feedbackRows = demoRows.filter((r) =>
-    Boolean(r.teacherFeedbackSubmittedAt?.trim()),
-  );
+  const feedbackRows = demoRows;
 
   const [additionalNotes, setAdditionalNotes] = useState(
     () => sr?.additionalNotes ?? "",
@@ -64,6 +77,7 @@ export function StudentReportModal({
   const [genError, setGenError] = useState<string | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [selectedFeedbackKey, setSelectedFeedbackKey] = useState<string>("");
 
   useEffect(() => {
     if (!open) return;
@@ -72,6 +86,16 @@ export function StudentReportModal({
     setGenError(null);
     setLocalPreviewUrl(sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
   }, [open, lead.id, sr?.additionalNotes, sr?.recommendations, sr?.pdfUrl]);
+
+  useEffect(() => {
+    if (!open) return;
+    const first = feedbackRows[0];
+    if (!first) {
+      setSelectedFeedbackKey("");
+      return;
+    }
+    setSelectedFeedbackKey(first.meetRowId?.trim() || `${first.isoDate}-${first.timeHmIST}`);
+  }, [open, feedbackRows]);
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -97,6 +121,12 @@ export function StudentReportModal({
   const previewSrc =
     localPreviewUrl?.trim() ||
     (sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
+  const selectedFeedbackRow =
+    feedbackRows.find(
+      (r) =>
+        (r.meetRowId?.trim() || `${r.isoDate}-${r.timeHmIST}`) ===
+        selectedFeedbackKey,
+    ) ?? null;
 
   const generatePdf = async () => {
     setGenerating(true);
@@ -161,7 +191,7 @@ export function StudentReportModal({
     <dialog
       ref={dialogRef}
       className={cn(
-        "fixed left-1/2 top-1/2 z-[220] w-[min(100vw-1rem,640px)] max-h-[min(92vh,900px)] -translate-x-1/2 -translate-y-1/2",
+        "fixed left-1/2 top-1/2 z-220 w-[min(100vw-1rem,640px)] max-h-[min(92vh,900px)] -translate-x-1/2 -translate-y-1/2",
         "overflow-hidden rounded-none border border-slate-200 bg-white p-0 shadow-2xl",
         "backdrop:bg-black/45 open:flex open:flex-col",
       )}
@@ -190,51 +220,99 @@ export function StudentReportModal({
         </section>
 
         <section className="mb-4">
-          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
-            Demo teacher feedback (read-only)
-          </h3>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+              Demo Session Report - Feedback
+            </h3>
+            <p className="text-[11px] text-slate-500">From Step 1 — full detail on View</p>
+          </div>
           {feedbackRows.length === 0 ? (
             <p className="rounded border border-slate-100 bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
-              No submitted feedback yet. After teachers submit demo forms, their
-              responses will appear here and in the PDF.
+              No demos found yet. Schedule demo rows in Step 1 first.
             </p>
           ) : (
-            <ul className="space-y-3">
-              {feedbackRows.map((r, i) => (
-                <li
-                  key={r.meetRowId || `${r.isoDate}-${i}`}
-                  className="rounded border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-800"
-                >
-                  <p className="font-semibold text-slate-900">
-                    {r.subject || "—"} · {r.teacher || "—"} · {r.isoDate || "—"}
+            <>
+              <div className="overflow-x-auto border border-slate-200">
+                <table className={cn(SX.dataTable, "w-full min-w-[760px] table-fixed text-[12px]")}>
+                  <colgroup>
+                    <col className="w-[16%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[6%]" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className={SX.dataTh}>Date</th>
+                      <th className={SX.dataTh}>Time (IST)</th>
+                      <th className={SX.dataTh}>Subject</th>
+                      <th className={SX.dataTh}>Teacher</th>
+                      <th className={SX.dataTh}>Overall</th>
+                      <th className={SX.dataTh}>Feedback</th>
+                      <th className={cn(SX.dataTh, "text-center")}>View</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feedbackRows.map((r, i) => {
+                      const key = r.meetRowId?.trim() || `${r.isoDate}-${r.timeHmIST}-${i}`;
+                      const selected = key === selectedFeedbackKey;
+                      return (
+                        <tr key={key} className={selected ? "bg-sky-50/70" : undefined}>
+                          <td className={SX.dataTd}>{r.isoDate || "—"}</td>
+                          <td className={SX.dataTd}>{r.timeHmIST || "—"}</td>
+                          <td className={SX.dataTd}>{r.subject || "—"}</td>
+                          <td className={SX.dataTd}>{r.teacher || "—"}</td>
+                          <td className={SX.dataTd}>{ratingLabel(r.teacherFeedbackRating)}</td>
+                          <td className={SX.dataTd}>{feedbackStatusLabel(r)}</td>
+                          <td className={cn(SX.dataTd, "text-center")}>
+                            <button
+                              type="button"
+                              className={cn(SX.btnSecondary, "h-7 px-2 text-[11px]")}
+                              onClick={() => setSelectedFeedbackKey(key)}
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {selectedFeedbackRow ? (
+                <div className="mt-3 border border-slate-200 bg-slate-50/50 px-3 py-2">
+                  <p className="text-[12px] font-semibold text-slate-900">
+                    {selectedFeedbackRow.subject || "—"} · {selectedFeedbackRow.teacher || "—"} ·{" "}
+                    {selectedFeedbackRow.isoDate || "—"} {selectedFeedbackRow.timeHmIST || ""}
                   </p>
-                  <p className="mt-1 text-[12px] text-slate-600">
-                    Overall: {ratingLabel(r.teacherFeedbackRating)}
+                  <p className="mt-1 text-[12px] text-slate-700">
+                    Overall: {ratingLabel(selectedFeedbackRow.teacherFeedbackRating)}
                   </p>
-                  {r.teacherFeedbackStrengths?.trim() ? (
-                    <p className="mt-1 text-[12px]">
-                      <span className="font-medium text-slate-700">
-                        Strengths:{" "}
-                      </span>
-                      {r.teacherFeedbackStrengths.trim()}
-                    </p>
-                  ) : null}
-                  {r.teacherFeedbackImprovements?.trim() ? (
-                    <p className="mt-1 text-[12px]">
-                      <span className="font-medium text-slate-700">
-                        Areas to improve:{" "}
-                      </span>
-                      {r.teacherFeedbackImprovements.trim()}
-                    </p>
-                  ) : null}
-                  {r.teacherFeedbackNotes?.trim() ? (
+                  {selectedFeedbackRow.teacherFeedbackStrengths?.trim() ? (
                     <p className="mt-1 text-[12px] text-slate-700">
-                      {r.teacherFeedbackNotes.trim()}
+                      <span className="font-medium">Strengths:</span>{" "}
+                      {selectedFeedbackRow.teacherFeedbackStrengths.trim()}
                     </p>
                   ) : null}
-                </li>
-              ))}
-            </ul>
+                  {selectedFeedbackRow.teacherFeedbackImprovements?.trim() ? (
+                    <p className="mt-1 text-[12px] text-slate-700">
+                      <span className="font-medium">Areas to improve:</span>{" "}
+                      {selectedFeedbackRow.teacherFeedbackImprovements.trim()}
+                    </p>
+                  ) : null}
+                  {selectedFeedbackRow.teacherFeedbackNotes?.trim() ? (
+                    <p className="mt-1 text-[12px] text-slate-700">
+                      {selectedFeedbackRow.teacherFeedbackNotes.trim()}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[12px] text-slate-500">No detailed feedback for this demo yet.</p>
+                  )}
+                </div>
+              ) : null}
+            </>
           )}
         </section>
 
@@ -290,21 +368,19 @@ export function StudentReportModal({
         </div>
 
         {previewSrc ? (
-          <div className="mt-4 border border-slate-200 bg-slate-50/80">
-            <p className="border-b border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-              Preview
+          <div className="mt-4 border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+            <p className="text-[12px] text-slate-700">
+              PDF is generated and saved on this lead. Use preview button to open it in a new tab.
             </p>
-            <iframe
-              title="Generated report PDF"
-              className="h-[min(50vh,420px)] w-full bg-white"
-              src={previewSrc}
-            />
-            <p className="px-3 py-2 text-[11px] text-slate-500">
-              Saved on this lead. Use{" "}
-              <span className="font-medium">Confirm for sending</span> when you are
-              ready to share it with the family; send by email from Step 2 ·
-              Documents.
-            </p>
+            <div className="mt-2">
+              <button
+                type="button"
+                className={SX.btnSecondary}
+                onClick={() => window.open(previewSrc, "_blank", "noopener,noreferrer")}
+              >
+                Open preview in new tab
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -313,6 +389,15 @@ export function StudentReportModal({
         <button type="button" className={SX.btnSecondary} onClick={onClose}>
           Close
         </button>
+        {previewSrc ? (
+          <button
+            type="button"
+            className={SX.btnSecondary}
+            onClick={() => window.open(previewSrc, "_blank", "noopener,noreferrer")}
+          >
+            Open preview
+          </button>
+        ) : null}
         {previewSrc ? (
           <button
             type="button"
