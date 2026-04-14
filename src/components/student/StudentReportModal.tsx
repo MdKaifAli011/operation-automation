@@ -183,20 +183,51 @@ export function StudentReportModal({
     setGenError(null);
     try {
       const now = new Date().toISOString();
+      const docsItems = Array.isArray(
+        (lead.pipelineMeta as { documents?: { items?: Array<Record<string, unknown>> } } | undefined)
+          ?.documents?.items,
+      )
+        ? [
+            ...(
+              (lead.pipelineMeta as {
+                documents?: { items?: Array<Record<string, unknown>> };
+              } | undefined)?.documents?.items ?? []
+            ),
+          ]
+        : [];
+      const reportIdx = docsItems.findIndex(
+        (x) => String(x?.key ?? "").trim() === "report",
+      );
+      if (reportIdx >= 0) {
+        docsItems[reportIdx] = {
+          ...docsItems[reportIdx],
+          sentAt: now,
+        };
+      } else {
+        docsItems.push({
+          key: "report",
+          title: "Demo Session Report - Feedback",
+          countLabel: "1",
+          sentAt: now,
+        });
+      }
       await onPatchLead({
         pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
           studentReport: {
             sendConfirmedAt: now,
           },
+          documents: {
+            items: docsItems,
+          },
         }),
         activityLog: appendActivity(
           lead.activityLog,
           "brochure",
-          "Student progress report confirmed — ready to share with family.",
+          "Student progress report confirmed and marked sent from report modal.",
         ),
       });
       await refreshLead();
-      onToast?.("Report confirmed for sending.");
+      onToast?.("Report confirmed and marked as sent.");
       onClose();
     } catch {
       setGenError("Could not save confirmation.");
