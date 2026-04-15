@@ -10,14 +10,12 @@ import { demoInviteSummaryLine } from "@/lib/email/demoInviteSummary";
 import { mergePipelineMeta, appendActivity } from "@/lib/pipeline";
 import type { PipelineActivity } from "@/lib/types";
 import type { DemoTableRowPersisted } from "@/lib/leadPipelineMetaTypes";
-import { getEnrollmentTeamBccEmails } from "@/lib/email/enrollmentRecipients";
-import { normalizeMailRecipients } from "@/lib/email/mailRecipients";
-import { resolveTeacherEmailFromFacultyName } from "@/lib/faculty/resolveTeacherEmail";
 import { logDemoInviteEmail } from "@/lib/email/demoInviteLog";
 
 /**
- * Sends the demo_invite template to the lead email, CC to the teacher (faculty email when found),
- * BCC to ENROLLMENT_TEAM_BCC. Optionally persists invite flags on the lead (used after Meet assign).
+ * Sends the demo_invite template only to parent/student email.
+ * Faculty invite must be sent as a separate email flow.
+ * Optionally persists invite flags on the lead (used after Meet assign).
  */
 export async function sendDemoInviteMail(opts: {
   leadId: string;
@@ -172,12 +170,8 @@ export async function sendDemoInviteMail(opts: {
   const subject = renderTemplate(String(tmpl.subject), vars);
   const html = renderTemplate(String(tmpl.bodyHtml), vars);
 
-  const teacherName = String(row.teacher ?? "").trim();
-  const teacherEmail = teacherName ? await resolveTeacherEmailFromFacultyName(teacherName) : undefined;
-  const bccList = getEnrollmentTeamBccEmails();
-  const { to: toNorm, cc, bcc } = normalizeMailRecipients(to, teacherEmail, bccList);
-
-  await sendMail({ to: toNorm, subject, html, cc, bcc });
+  const toNorm = to.trim();
+  await sendMail({ to: toNorm, subject, html });
 
   logDemoInviteEmail({
     leadId,
@@ -186,8 +180,8 @@ export async function sendDemoInviteMail(opts: {
     detail: "smtp_accepted",
     extra: {
       to: toNorm,
-      cc: cc ?? null,
-      bcc: bcc ?? null,
+      cc: null,
+      bcc: null,
       source: persistInviteOnLead ? "auto_assign" : "manual_send",
     },
   });
@@ -211,7 +205,7 @@ export async function sendDemoInviteMail(opts: {
       doc.activityLog = appendActivity(
         doc.activityLog as PipelineActivity[] | undefined,
         "demo",
-        `Demo invite emailed to student${teacherEmail ? ", teacher (CC)" : ""}${bccList.length ? ", enrollment (BCC)" : ""}: ${summary}`,
+        `Demo invite emailed to parent/student: ${summary}`,
       ) as unknown as typeof doc.activityLog;
       doc.markModified("activityLog");
       await doc.save();

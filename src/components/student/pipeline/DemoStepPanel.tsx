@@ -27,7 +27,6 @@ import { PipelineMessageDialog } from "./PipelineMessageDialog";
 import type { DemoStepPanelProps } from "./pipelineStepTypes";
 import {
   IconCheck,
-  IconClipboard,
   IconCalendarLarge,
   IconPencil,
 } from "@/components/icons/CrmIcons";
@@ -188,6 +187,12 @@ function studentWhenLines(
   };
 }
 
+function isDemoTimeReached(isoDate: string, timeHmIST: string): boolean {
+  const slot = parseIstSlot(isoDate, timeHmIST);
+  if (!slot) return false;
+  return slot.getTime() <= Date.now();
+}
+
 function demoInviteHighlight(row: DemoTableRowPersisted): string {
   if (!row.isoDate || !row.timeHmIST) {
     return `${row.subject || "Demo"} · ${row.teacher || "—"}`;
@@ -200,7 +205,7 @@ function demoInviteHighlight(row: DemoTableRowPersisted): string {
 function leadContactMeta(lead: Lead): string {
   const name = lead.studentName?.trim() || "Student";
   const phone = lead.phone?.trim() || "—";
-  const email = (lead.email?.trim() || "—").toUpperCase();
+  const email = (lead.parentEmail?.trim() || lead.email?.trim() || "—").toUpperCase();
   return `${name} · ${phone}\nEmail: ${email}`;
 }
 
@@ -285,6 +290,17 @@ export function DemoStepPanel({
       };
   const [msgDlg, setMsgDlg] = useState<DemoMessageDialogState>({ open: false });
   const closeMsgDlg = () => setMsgDlg({ open: false });
+  const [cancelDemoDialog, setCancelDemoDialog] = useState<{
+    open: boolean;
+    row: DemoTableRowPersisted | null;
+    notifyParent: boolean;
+    notifyFaculty: boolean;
+  }>({
+    open: false,
+    row: null,
+    notifyParent: true,
+    notifyFaculty: true,
+  });
 
   const [examDraft, setExamDraft] = useState("");
   const [subjectDraft, setSubjectDraft] = useState("");
@@ -382,9 +398,31 @@ export function DemoStepPanel({
     });
   };
 
-  const updateRowStatus = async (meetRowId: string, status: string) => {
+  const updateRowStatus = async (
+    meetRowId: string,
+    status: string,
+    notify: { notifyParent?: boolean; notifyFaculty?: boolean } = {},
+  ) => {
     setStatusSavingMeetId(meetRowId);
     try {
+      const current = rows.find((r) => String(r.meetRowId) === meetRowId);
+      if (
+        status === "Completed" &&
+        (!current ||
+          !current.isoDate ||
+          !current.timeHmIST ||
+          !isDemoTimeReached(current.isoDate, current.timeHmIST))
+      ) {
+        setMsgDlg({
+          open: true,
+          mode: "alert",
+          variant: "error",
+          title: "Cannot mark as conducted yet",
+          description:
+            "You can mark a demo as conducted only at or after its scheduled date and time.",
+        });
+        return;
+      }
       const next = rows.map((r) =>
         String(r.meetRowId) === meetRowId ? { ...r, status } : r,
       );
@@ -397,15 +435,21 @@ export function DemoStepPanel({
       if (idx < 0) return;
       const st = status as "Scheduled" | "Completed" | "Cancelled";
       if (st !== "Scheduled" && st !== "Completed" && st !== "Cancelled") return;
-      const to = typeof lead.email === "string" ? lead.email.trim() : "";
-      if (!to) return;
+      const notifyParent = notify.notifyParent !== false;
+      const notifyFaculty = notify.notifyFaculty === true;
+      if (!notifyParent && !notifyFaculty) return;
       const rowSnap = next[idx] as unknown as Record<string, unknown>;
       try {
         await sendLeadPipelineEmail(lead.id, {
           templateKey: "demo_status_update",
           demoRowIndex: idx,
           meetRowId,
-          demoStatusEmail: { status: st, row: rowSnap },
+          demoStatusEmail: {
+            status: st,
+            row: rowSnap,
+            notifyParent,
+            notifyFaculty,
+          },
         });
       } catch (e) {
         setMsgDlg({
@@ -415,27 +459,13 @@ export function DemoStepPanel({
           title: "Status email not sent",
           description:
             e instanceof Error
-              ? `${e.message}\n\nStatus was saved. Fix the lead email, SMTP, or the demo status template, then try changing status again if you need the email.`
+              ? `${e.message}\n\nStatus was saved. Fix recipient emails, SMTP, or the demo status template, then try again if needed.`
               : "Status email could not be sent. Status was still saved.",
         });
       }
     } finally {
       setStatusSavingMeetId(null);
     }
-  };
-
-  const persistTeacherFeedbackAutoEmail = async (
-    meetRowId: string,
-    auto: boolean,
-  ) => {
-    const next = rows.map((r) =>
-      String(r.meetRowId) === meetRowId
-        ? { ...r, teacherFeedbackAutoEmail: auto }
-        : r,
-    );
-    await persistDemoRows(next);
-    if (!auto) autoFeedbackEmailSentRef.current.delete(meetRowId);
-    await refreshLead();
   };
 
   const submitModal = async (confirmShared?: boolean) => {
@@ -615,13 +645,15 @@ export function DemoStepPanel({
       open: true,
       mode: "confirm",
       variant: "default",
-      title: isResend ? "Resend demo link" : "Send demo link",
+      title: isResend ? "Confirm demo & resend link" : "Confirm demo & send link",
       description: isResend
-        ? "Send the join link to the parent again. Previous sends stay in the activity log. The teacher is copied (CC) when on file; enrollment may be BCC per your settings."
-        : "Share the join link with the parent for this trial class. The teacher is copied (CC) when on file; enrollment may be BCC per your settings.",
+        ? "Send the demo join link to parent/student again. Faculty will be notified through a separate flow."
+        : "Send the demo join link to parent/student. Faculty will be notified through a separate flow.",
       highlight: demoInviteHighlight(row),
       meta: leadContactMeta(lead),
-      confirmLabel: isResend ? "Send again" : "Send link",
+      confirmLabel: isResend
+        ? "Confirm Demo & Send Link"
+        : "Confirm Demo & Send Link",
       cancelLabel: "Cancel",
       onConfirm: () => {
         void (async () => {
@@ -714,10 +746,94 @@ export function DemoStepPanel({
     });
   };
 
+  const requestStatusChangeWithConfirm = (
+    row: DemoTableRowPersisted,
+    nextStatusRaw: string,
+    canConductNow: boolean,
+  ) => {
+    const nextStatus = nextStatusRaw as "Scheduled" | "Completed" | "Cancelled";
+    const currentStatus = String(row.status ?? "Scheduled").trim();
+    if (
+      nextStatus !== "Scheduled" &&
+      nextStatus !== "Completed" &&
+      nextStatus !== "Cancelled"
+    ) {
+      return;
+    }
+    if (nextStatus === currentStatus) return;
+    const meetRowId = String(row.meetRowId ?? "").trim();
+    if (!meetRowId) return;
+
+    if (nextStatus === "Cancelled") {
+      setCancelDemoDialog({
+        open: true,
+        row,
+        notifyParent: true,
+        notifyFaculty: true,
+      });
+      return;
+    }
+
+    if (nextStatus === "Completed" && !canConductNow) {
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "error",
+        title: "Cannot mark as conducted yet",
+        description:
+          "You can mark this demo as conducted only at or after its scheduled date and time.",
+      });
+      return;
+    }
+
+    setMsgDlg({
+      open: true,
+      mode: "confirm",
+      variant: "default",
+      title: "Confirm status change",
+      description:
+        nextStatus === "Completed"
+          ? "Mark this demo as Conducted? Activity log and parent notification are created only after confirmation."
+          : "Mark this demo as Scheduled? Activity log and parent notification are created only after confirmation.",
+      highlight: demoInviteHighlight(row),
+      confirmLabel:
+        nextStatus === "Completed" ? "Confirm Conducted" : "Confirm Scheduled",
+      cancelLabel: "Cancel",
+      onConfirm: () => {
+        void updateRowStatus(meetRowId, nextStatus, {
+          notifyParent: true,
+          notifyFaculty: false,
+        });
+      },
+    });
+  };
+
+  const closeCancelDemoDialog = () =>
+    setCancelDemoDialog({
+      open: false,
+      row: null,
+      notifyParent: true,
+      notifyFaculty: true,
+    });
+
+  const confirmCancelDemo = () => {
+    const row = cancelDemoDialog.row;
+    if (!row) {
+      closeCancelDemoDialog();
+      return;
+    }
+    const meetRowId = String(row.meetRowId ?? "").trim();
+    closeCancelDemoDialog();
+    if (!meetRowId) return;
+    void updateRowStatus(meetRowId, "Cancelled", {
+      notifyParent: cancelDemoDialog.notifyParent,
+      notifyFaculty: cancelDemoDialog.notifyFaculty,
+    });
+  };
+
   useEffect(() => {
     if (!lead.id || rows.length === 0) return;
     for (const r of rows) {
-      if (!r.teacherFeedbackAutoEmail) continue;
       if (String(r.status ?? "") === "Cancelled") continue;
       if (r.teacherFeedbackSubmittedAt) continue;
       const rid = String(r.meetRowId ?? "");
@@ -969,7 +1085,7 @@ export function DemoStepPanel({
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <input
                           type="date"
-                          className={cn(SX.input, "w-full max-w-[11rem]")}
+                          className={cn(SX.input, "w-full max-w-44")}
                           value={isoDate}
                           min={!editingMeetRowId ? minDemoIsoDate || undefined : undefined}
                           onChange={(e) => {
@@ -984,7 +1100,7 @@ export function DemoStepPanel({
                         <span className="text-[11px] text-slate-500">at</span>
                         <input
                           type="time"
-                          className={cn(SX.input, "w-[6.5rem]")}
+                          className={cn(SX.input, "w-26")}
                           value={timeHmIST}
                           onChange={(e) => setTimeHmIST(e.target.value)}
                         />
@@ -1129,6 +1245,8 @@ export function DemoStepPanel({
                     const fbDone = !!r.teacherFeedbackSubmittedAt;
                     const rowMeetId = String(r.meetRowId ?? "");
                     const rowBusy = saving || statusSavingMeetId === rowMeetId;
+                    const canConductNow =
+                      !!r.isoDate && !!r.timeHmIST && isDemoTimeReached(r.isoDate, r.timeHmIST);
                     const tone = demoStatusRowClasses(r.status);
                     const inviteSent = !!r.inviteSent;
                     return (
@@ -1145,10 +1263,10 @@ export function DemoStepPanel({
                           {i + 1}
                         </td>
                         <td className={cn(DEMO_TABLE_TD, "min-w-0 font-semibold")}>
-                          <span className="line-clamp-2 break-words">{r.subject || "—"}</span>
+                          <span className="line-clamp-2 wrap-break-word">{r.subject || "—"}</span>
                         </td>
                         <td className={cn(DEMO_TABLE_TD, "min-w-0")}>
-                          <span className="line-clamp-2 break-words">{r.teacher || "—"}</span>
+                          <span className="line-clamp-2 wrap-break-word">{r.teacher || "—"}</span>
                         </td>
                         <td className={cn(DEMO_TABLE_TD, "min-w-0")}>
                           {ist ? (
@@ -1202,8 +1320,13 @@ export function DemoStepPanel({
                         </td>
                         <td className={cn(DEMO_TABLE_TD, "min-w-0")}>
                           {(() => {
-                            const canFbCopy =
+                            const canFbActions =
                               String(r.status ?? "").trim() !== "Cancelled" && !fbDone;
+                            const feedbackLabel = fbDone
+                              ? "Received Response"
+                              : String(r.status ?? "").trim() === "Completed"
+                                ? "Awaiting Response"
+                                : "Not Yet Received";
                             return (
                               <div className="flex flex-col gap-1">
                                 <span
@@ -1211,40 +1334,15 @@ export function DemoStepPanel({
                                     "inline-flex w-max max-w-full rounded-none px-1.5 py-0.5 text-[10px] font-medium ring-1",
                                     fbDone
                                       ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
-                                      : fbSent
-                                        ? "bg-sky-50 text-sky-900 ring-sky-200"
-                                        : eligible
-                                          ? "bg-slate-100 text-slate-700 ring-slate-200"
-                                          : "bg-slate-50 text-slate-500 ring-slate-200",
+                                      : String(r.status ?? "").trim() === "Completed"
+                                        ? "bg-amber-50 text-amber-900 ring-amber-200"
+                                        : "bg-slate-50 text-slate-600 ring-slate-200",
                                   )}
                                 >
-                                  {fbDone
-                                    ? "Feedback done"
-                                    : fbSent
-                                      ? "Invite sent"
-                                      : eligible
-                                        ? "Ready to send"
-                                        : "Not yet"}
+                                  {feedbackLabel}
                                 </span>
-                                {canFbCopy ? (
-                                  <label className="flex cursor-pointer items-center gap-1.5 text-[10px] leading-tight">
-                                    <input
-                                      type="checkbox"
-                                      className="h-3.5 w-3.5 shrink-0 rounded border-slate-300"
-                                      checked={!!r.teacherFeedbackAutoEmail}
-                                      disabled={rowBusy}
-                                      onChange={(e) =>
-                                        void persistTeacherFeedbackAutoEmail(
-                                          rowMeetId,
-                                          e.target.checked,
-                                        )
-                                      }
-                                    />
-                                    <span>Auto-email teacher when the window opens</span>
-                                  </label>
-                                ) : null}
                                 <div className="flex flex-wrap items-center gap-1">
-                                  {eligible && canFbCopy ? (
+                                  {(eligible || fbSent) && canFbActions ? (
                                     <button
                                       type="button"
                                       className={cn(
@@ -1256,13 +1354,16 @@ export function DemoStepPanel({
                                         void sendTeacherFeedback(rowMeetId, fbSent)
                                       }
                                     >
-                                      {fbSent ? "Resend email" : "Email teacher"}
+                                      {fbSent ? "Resend feedback" : "Send feedback"}
                                     </button>
                                   ) : null}
-                                  {canFbCopy ? (
+                                  {canFbActions ? (
                                     <button
                                       type="button"
-                                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                                      className={cn(
+                                        SX.btnSecondary,
+                                        "inline-flex items-center px-2 py-1 text-[10px] sm:text-[11px]",
+                                      )}
                                       title={
                                         eligible
                                           ? "Copy feedback link"
@@ -1273,7 +1374,7 @@ export function DemoStepPanel({
                                         void copyTeacherFeedbackLink(rowMeetId)
                                       }
                                     >
-                                      <IconClipboard className="h-4 w-4" />
+                                      Feedback link
                                     </button>
                                   ) : null}
                                 </div>
@@ -1290,7 +1391,7 @@ export function DemoStepPanel({
                               id={`st-${r.meetRowId}`}
                               className={cn(
                                 SX.select,
-                                "min-h-8 w-full min-w-0 max-w-full text-left text-[10px] sm:max-w-[11rem] sm:text-[11px]",
+                                "min-h-8 w-full min-w-0 max-w-full text-left text-[10px] sm:max-w-44 sm:text-[11px]",
                               )}
                               disabled={statusSavingMeetId === rowMeetId}
                               value={
@@ -1301,11 +1402,20 @@ export function DemoStepPanel({
                                   : "Scheduled"
                               }
                               onChange={(e) =>
-                                void updateRowStatus(rowMeetId, e.target.value)
+                                requestStatusChangeWithConfirm(
+                                  r,
+                                  e.target.value,
+                                  canConductNow,
+                                )
                               }
                             >
                               <option value="Scheduled">Mark as scheduled</option>
-                              <option value="Completed">Mark as conducted</option>
+                              <option
+                                value="Completed"
+                                disabled={String(r.status ?? "") !== "Completed" && !canConductNow}
+                              >
+                                Mark as conducted
+                              </option>
                               <option value="Cancelled">Mark as cancelled</option>
                             </select>
                             <div className="flex flex-wrap justify-end gap-1">
@@ -1325,7 +1435,7 @@ export function DemoStepPanel({
                                 <button
                                   type="button"
                                   className={cn(
-                                    SX.leadBtnGreen,
+                                    inviteSent ? SX.leadBtnGreen : SX.btnPrimary,
                                     "inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-[11px]",
                                   )}
                                   disabled={rowBusy}
@@ -1335,14 +1445,10 @@ export function DemoStepPanel({
                                     sendDemoInviteEmail(r, inviteSent);
                                   }}
                                 >
-                                  {inviteSent ? (
-                                    <>
-                                      <IconCheck className="h-3.5 w-3.5" />
-                                      Resend
-                                    </>
-                                  ) : (
-                                    "Send"
-                                  )}
+                                  <>
+                                    {inviteSent ? <IconCheck className="h-3.5 w-3.5" /> : null}
+                                    Confirm Demo &amp; Send Link
+                                  </>
                                 </button>
                               ) : (
                                 <span className="px-1 py-1 text-[10px] opacity-70 sm:text-[11px]">
@@ -1398,6 +1504,67 @@ export function DemoStepPanel({
           </p>
         </div>
       </div>
+
+      {cancelDemoDialog.open ? (
+        <div className="fixed inset-0 z-255 flex items-center justify-center bg-slate-900/50 p-3 backdrop-blur-[2px]">
+          <div className="w-[min(100vw-1.5rem,28rem)] overflow-hidden rounded-none border border-slate-200 bg-white shadow-2xl shadow-slate-900/20">
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <h3 className="text-[15px] font-bold tracking-tight text-slate-900">
+                Cancel demo session?
+              </h3>
+              <p className="mt-1 text-[12px] text-slate-600">
+                Are you sure you want to cancel this session?
+              </p>
+            </div>
+            <div className="space-y-2 px-4 py-4">
+              <label className="flex items-center gap-2 text-[13px] text-slate-800">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={cancelDemoDialog.notifyParent}
+                  onChange={(e) =>
+                    setCancelDemoDialog((prev) => ({
+                      ...prev,
+                      notifyParent: e.target.checked,
+                    }))
+                  }
+                />
+                Notify Parent
+              </label>
+              <label className="flex items-center gap-2 text-[13px] text-slate-800">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={cancelDemoDialog.notifyFaculty}
+                  onChange={(e) =>
+                    setCancelDemoDialog((prev) => ({
+                      ...prev,
+                      notifyFaculty: e.target.checked,
+                    }))
+                  }
+                />
+                Notify Faculty
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/90 px-4 py-3">
+              <button
+                type="button"
+                className={SX.btnSecondary}
+                onClick={closeCancelDemoDialog}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className={cn(SX.leadBtnGreen, "bg-rose-700 hover:bg-rose-800")}
+                onClick={confirmCancelDemo}
+              >
+                Cancel Demo
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {msgDlg.open && msgDlg.mode === "alert" ? (
         <PipelineMessageDialog

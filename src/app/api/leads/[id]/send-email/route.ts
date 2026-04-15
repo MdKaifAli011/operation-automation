@@ -35,6 +35,8 @@ type PostBody = {
   demoStatusEmail?: {
     status: "Scheduled" | "Completed" | "Cancelled";
     row?: Record<string, unknown>;
+    notifyParent?: boolean;
+    notifyFaculty?: boolean;
   };
   /** Step 2: which catalog brochures + optional PDF to include in one email. */
   brochureEmail?: {
@@ -154,15 +156,10 @@ export async function POST(
       if (st !== "Scheduled" && st !== "Completed" && st !== "Cancelled") {
         return NextResponse.json({ error: "Invalid demo status." }, { status: 400 });
       }
-      const toAddr = typeof lead.email === "string" ? lead.email.trim() : "";
-      if (!toAddr) {
-        return NextResponse.json(
-          {
-            error:
-              "This lead has no email address. Add one on the lead first.",
-          },
-          { status: 400 },
-        );
+      const notifyParent = dse.notifyParent !== false;
+      const notifyFaculty = dse.notifyFaculty === true;
+      if (!notifyParent && !notifyFaculty) {
+        return NextResponse.json({ ok: true, skipped: "No recipients selected." });
       }
       const tmpl = await EmailTemplateModel.findOne({
         key: "demo_status_update",
@@ -243,28 +240,43 @@ export async function POST(
       const teacherEmail = teacherName
         ? await resolveTeacherEmailFromFacultyName(teacherName)
         : undefined;
-      const bccList = getEnrollmentTeamBccEmails();
-      const { to: toNorm, cc, bcc } = normalizeMailRecipients(
-        toAddr,
-        teacherEmail,
-        bccList,
-      );
-      await sendMail({ to: toNorm, subject, html, cc, bcc });
-
-      await LeadModel.findByIdAndUpdate(id, {
-        $push: {
-          activityLog: {
-            $each: [
-              {
-                at: new Date().toISOString(),
-                kind: "demo",
-                message: `Demo status email sent (${vars.demoStatusLabel}): ${vars.demoSummary}`,
-              },
-            ],
-            $position: 0,
-          },
-        },
-      });
+      const parentTo = (
+        (lead as { parentEmail?: string }).parentEmail ||
+        (lead as { email?: string }).email ||
+        ""
+      )
+        .toString()
+        .trim();
+      let sent = 0;
+      if (notifyParent) {
+        if (!parentTo) {
+          return NextResponse.json(
+            {
+              error:
+                "Parent/student email is missing for this lead. Add parent email id first.",
+            },
+            { status: 400 },
+          );
+        }
+        await sendMail({ to: parentTo, subject, html });
+        sent += 1;
+      }
+      if (notifyFaculty) {
+        if (!teacherEmail) {
+          return NextResponse.json(
+            {
+              error:
+                "Faculty email is missing on the selected teacher record.",
+            },
+            { status: 400 },
+          );
+        }
+        await sendMail({ to: teacherEmail, subject, html });
+        sent += 1;
+      }
+      if (sent === 0) {
+        return NextResponse.json({ ok: true, skipped: "No recipients sent." });
+      }
 
       return NextResponse.json({ ok: true });
     }

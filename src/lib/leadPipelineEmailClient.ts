@@ -7,6 +7,8 @@ export async function sendLeadPipelineEmail(
     demoStatusEmail?: {
       status: "Scheduled" | "Completed" | "Cancelled";
       row?: Record<string, unknown>;
+      notifyParent?: boolean;
+      notifyFaculty?: boolean;
     };
     brochureEmail?: {
       selectionKeys: string[];
