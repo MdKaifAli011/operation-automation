@@ -79,6 +79,7 @@ export function serializeLead(
     targetExams: string[];
     country: string;
     phone: string;
+    parentEmail?: string;
     email?: string;
     pipelineSteps: number;
     rowTone: string;
@@ -90,6 +91,7 @@ export function serializeLead(
     notInterestedRemark?: string | null;
   },
 ): Lead {
+  const parentEmail = doc.parentEmail?.trim();
   const email = doc.email?.trim();
   const metaPlain = serializePipelineMetaPlain(doc.pipelineMeta);
   const meta = metaPlain;
@@ -115,7 +117,8 @@ export function serializeLead(
     targetExams: [...(doc.targetExams ?? [])],
     country: doc.country,
     phone: doc.phone,
-    email: email || null,
+    parentEmail: parentEmail || email || null,
+    email: email || parentEmail || null,
     pipelineSteps,
     rowTone: doc.rowTone as Lead["rowTone"],
     sheetTab: doc.sheetTab as Lead["sheetTab"],

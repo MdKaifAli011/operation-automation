@@ -174,6 +174,7 @@ export function AddStudentLeadDialog({
           targetExams: [...targetExams],
           country: country.trim() || DEFAULT_COUNTRY,
           phone: national,
+          parentEmail: emailTrimmed,
           email: emailTrimmed,
           pipelineSteps: 0,
           rowTone: "new",
@@ -222,7 +223,7 @@ export function AddStudentLeadDialog({
     <dialog
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-[200] w-[min(100vw-1.5rem,24rem)] max-h-[min(90vh,640px)] -translate-x-1/2 -translate-y-1/2",
+        "fixed left-1/2 top-1/2 z-200 w-[min(100vw-1.5rem,24rem)] max-h-[min(90vh,640px)] -translate-x-1/2 -translate-y-1/2",
         "overflow-hidden rounded-none border border-slate-200 bg-white p-0 shadow-2xl shadow-slate-900/15",
         "backdrop:bg-slate-900/45 backdrop:backdrop-blur-[2px]",
         "open:flex open:flex-col",
@@ -262,7 +263,7 @@ export function AddStudentLeadDialog({
           </label>
 
           <label className="block min-w-0 text-[12px] font-medium text-slate-700">
-            Student email
+            Parent email id
             <input
               type="email"
               className={cn(
@@ -274,7 +275,7 @@ export function AddStudentLeadDialog({
                 setEmail(e.target.value);
                 setError(null);
               }}
-              placeholder="name@example.com (optional)"
+              placeholder="Parent email id (optional)"
               autoComplete="email"
               inputMode="email"
               aria-invalid={Boolean(emailError)}
@@ -326,7 +327,7 @@ export function AddStudentLeadDialog({
                 className={cn(
                   inputBase,
                   phoneInputRing,
-                  "mt-0 w-[4.25rem] shrink-0 tabular-nums sm:w-20",
+                  "mt-0 w-17 shrink-0 tabular-nums sm:w-20",
                 )}
                 value={dialCode}
                 onChange={(e) => {

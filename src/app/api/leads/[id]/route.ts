@@ -16,6 +16,7 @@ const PATCH_KEYS = new Set([
   "targetExams",
   "country",
   "phone",
+  "parentEmail",
   "email",
   "pipelineSteps",
   "pipelineMeta",
@@ -80,6 +81,7 @@ function buildPatch(body: unknown): Record<string, unknown> | null {
       key === "grade" ||
       key === "country" ||
       key === "phone" ||
+      key === "parentEmail" ||
       key === "email" ||
       key === "date" ||
       key === "rowTone" ||
@@ -89,6 +91,11 @@ function buildPatch(body: unknown): Record<string, unknown> | null {
         out[key] = key === "phone" ? v.replace(/\s+/g, "") : v.trim();
       }
     }
+  }
+  if (typeof out.parentEmail === "string" && !("email" in out)) {
+    out.email = out.parentEmail;
+  } else if (typeof out.email === "string" && !("parentEmail" in out)) {
+    out.parentEmail = out.email;
   }
   return Object.keys(out).length ? out : null;
 }

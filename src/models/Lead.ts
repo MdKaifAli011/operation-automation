@@ -39,6 +39,7 @@ const LeadSchema = new Schema(
     targetExams: { type: [String], default: [] },
     country: { type: String, default: "India", trim: true },
     phone: { type: String, trim: true, default: "" },
+    parentEmail: { type: String, default: "", trim: true },
     email: { type: String, default: "", trim: true },
     pipelineSteps: { type: Number, default: 0, min: 0, max: 4 },
     /**

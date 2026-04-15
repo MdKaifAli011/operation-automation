@@ -53,6 +53,8 @@ export type Lead = {
   targetExams: string[];
   country: string;
   phone: string;
+  /** Optional parent contact email. */
+  parentEmail?: string | null;
   /** Optional contact email (stored in DB). */
   email?: string | null;
   /** 0–4: how many of Demo → Brochure → Fees → Schedule are done (dots on lead grid). */

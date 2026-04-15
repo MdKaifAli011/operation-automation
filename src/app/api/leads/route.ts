@@ -12,6 +12,12 @@ function parseCreateBody(body: unknown): Partial<Lead> | null {
   const studentName =
     typeof b.studentName === "string" ? b.studentName.trim() : "";
   const phone = typeof b.phone === "string" ? b.phone.replace(/\s+/g, "") : "";
+  const parentEmail =
+    typeof b.parentEmail === "string" && b.parentEmail.trim()
+      ? b.parentEmail.trim()
+      : typeof b.email === "string" && b.email.trim()
+        ? b.email.trim()
+        : "";
   const targetExams = Array.isArray(b.targetExams)
     ? b.targetExams.filter((x): x is string => typeof x === "string")
     : [];
@@ -41,8 +47,8 @@ function parseCreateBody(body: unknown): Partial<Lead> | null {
         ? b.country.trim()
         : "India",
     phone,
-    email:
-      typeof b.email === "string" && b.email.trim() ? b.email.trim() : "",
+    parentEmail,
+    email: parentEmail,
     pipelineSteps:
       typeof b.pipelineSteps === "number" &&
       b.pipelineSteps >= 0 &&
