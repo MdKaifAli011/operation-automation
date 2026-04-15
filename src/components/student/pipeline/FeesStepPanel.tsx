@@ -92,11 +92,6 @@ export function FeesStepPanel({
     [institute],
   );
 
-  const selectedCourseName = useMemo(() => {
-    const list = coursesByExam.get(targetExamValue) ?? [];
-    return list.find((c) => c.id === catalogCourseId)?.name?.trim() ?? "";
-  }, [coursesByExam, targetExamValue, catalogCourseId]);
-
   const loadInstitute = useCallback(async () => {
     setInstLoading(true);
     try {
@@ -208,6 +203,41 @@ export function FeesStepPanel({
     );
   }, [coursesByExam, targetExamValue]);
 
+  /** First catalog course selected by default when exam has courses (and when saved id is missing/invalid). */
+  useEffect(() => {
+    if (!targetExamValue || coursesLoading) return;
+    const list = coursesForExam;
+    if (list.length === 0) return;
+    const valid = list.some((c) => c.id === catalogCourseId);
+    if (!catalogCourseId || !valid) {
+      setCatalogCourseId(list[0]!.id);
+    }
+  }, [
+    targetExamValue,
+    coursesLoading,
+    coursesForExam,
+    catalogCourseId,
+  ]);
+
+  /** Resolved course id for UI, fee lookup, and save (first course when none/invalid). */
+  const effectiveCatalogCourseId = useMemo(() => {
+    if (!targetExamValue) return "";
+    if (coursesLoading) return "";
+    if (!coursesForExam.length) return "";
+    if (coursesForExam.some((c) => c.id === catalogCourseId)) {
+      return catalogCourseId;
+    }
+    return coursesForExam[0]!.id;
+  }, [targetExamValue, coursesLoading, coursesForExam, catalogCourseId]);
+
+  const selectedCourseName = useMemo(() => {
+    const list = coursesByExam.get(targetExamValue) ?? [];
+    if (!effectiveCatalogCourseId) return "";
+    return (
+      list.find((c) => c.id === effectiveCatalogCourseId)?.name?.trim() ?? ""
+    );
+  }, [coursesByExam, targetExamValue, effectiveCatalogCourseId]);
+
   const finalFromBase = useMemo(() => {
     const b = Math.max(0, Math.round(baseTotal));
     const s = Math.min(100, Math.max(0, scholarshipPct));
@@ -273,7 +303,7 @@ export function FeesStepPanel({
   };
 
   const loadDefaultFeeFromCatalog = useCallback(async () => {
-    if (!targetExamValue || !catalogCourseId) return;
+    if (!targetExamValue || !effectiveCatalogCourseId) return;
     try {
       const res = await fetch("/api/exam-fee-structures", { cache: "no-store" });
       if (!res.ok) return;
@@ -285,7 +315,7 @@ export function FeesStepPanel({
       const hit = rows.find(
         (r) =>
           String(r.exam ?? "").trim() === targetExamValue &&
-          String(r.courseId ?? "").trim() === catalogCourseId,
+          String(r.courseId ?? "").trim() === effectiveCatalogCourseId,
       );
       if (hit && typeof hit.baseFee === "number" && hit.baseFee > 0) {
         setBaseTotal(Math.round(hit.baseFee));
@@ -293,7 +323,7 @@ export function FeesStepPanel({
     } catch {
       /* ignore */
     }
-  }, [targetExamValue, catalogCourseId]);
+  }, [targetExamValue, effectiveCatalogCourseId]);
 
   useEffect(() => {
     void loadDefaultFeeFromCatalog();
@@ -404,7 +434,7 @@ export function FeesStepPanel({
       const feesPatch = {
         ...((lead.pipelineMeta?.fees ?? {}) as object),
         targetExamValue,
-        catalogCourseId,
+        catalogCourseId: effectiveCatalogCourseId,
         courseDuration: "",
         customCourseName: "",
         currency,
@@ -537,39 +567,43 @@ export function FeesStepPanel({
 
   return (
     <PipelineStepFrame stepNumber={3} leadId={lead.id}>
-      <div className="space-y-3 px-2 py-3 sm:px-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">
-              Fees
-            </h3>
-            <p className="mt-0.5 text-[12px] leading-snug text-slate-600">
-              GST/FX:{" "}
-              <Link
-                href="/fee-management"
-                className="font-medium text-primary underline underline-offset-2"
-              >
-                Fee management
-              </Link>
-              .
-            </p>
+      <div className="flex min-h-0 flex-1 flex-col bg-white">
+        <div className="border-b border-slate-100 bg-white px-3 py-3 sm:px-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className={SX.sectionTitle}>Step 3 - Fees</h2>
+              <p className="mt-1 max-w-3xl text-[13px] leading-snug text-slate-600">
+                Set catalog course, fee amount, scholarships, installments, and
+                bank details. GST and FX for previews come from{" "}
+                <Link
+                  href="/fee-management"
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  Fee management
+                </Link>
+                .
+              </p>
+            </div>
+            {instLoading ? (
+              <span className="shrink-0 text-[11px] text-slate-500">
+                Loading rates…
+              </span>
+            ) : (
+              <span className="inline-flex max-w-full shrink-0 items-center rounded-none border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] tabular-nums leading-snug text-slate-800">
+                GST {fx.feeGstPercent}% · USD ₹{fx.inrPerUsd.toFixed(2)} · AED ₹
+                {fx.inrPerAed.toFixed(2)}
+              </span>
+            )}
           </div>
-          {instLoading ? (
-            <span className="text-[11px] text-slate-500">Loading…</span>
-          ) : (
-            <span className="inline-flex items-center rounded-none border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] tabular-nums text-slate-800">
-              GST {fx.feeGstPercent}% · USD ₹{fx.inrPerUsd.toFixed(2)} · AED ₹
-              {fx.inrPerAed.toFixed(2)}
-            </span>
-          )}
         </div>
 
-        <div
-          className={cn(
-            SX.section,
-            "grid grid-cols-1 gap-x-4 gap-y-3 p-3 sm:grid-cols-2 lg:grid-cols-3",
-          )}
-        >
+        <div className="flex-1 space-y-4 px-2 py-3 sm:px-3">
+          <div
+            className={cn(
+              SX.section,
+              "grid grid-cols-1 gap-x-4 gap-y-3.5 p-3 sm:grid-cols-2 lg:grid-cols-3",
+            )}
+          >
           <label className="block text-[12px] font-medium text-slate-700">
             Target exam
             <select
@@ -592,24 +626,32 @@ export function FeesStepPanel({
             Course (catalog)
             <select
               className={cn(SX.select, "mt-1 w-full")}
-              value={catalogCourseId}
+              value={effectiveCatalogCourseId}
               onChange={(e) => setCatalogCourseId(e.target.value)}
               disabled={!targetExamValue || coursesLoading}
             >
-              <option value="">
-                {coursesLoading ? "Loading…" : "Select course…"}
-              </option>
-              {coursesForExam.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {!targetExamValue ? (
+                <option value="">Select an exam first</option>
+              ) : coursesLoading ? (
+                <option value="">Loading courses…</option>
+              ) : coursesForExam.length === 0 ? (
+                <option value="">No courses for this exam</option>
+              ) : (
+                coursesForExam.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <div className="block text-[12px] font-medium text-slate-700">
             <span>Display currency (student)</span>
+            <p className="mb-1 mt-0.5 text-[10px] font-normal leading-snug text-slate-500">
+              Used for student-facing fee labels (profile / comms).
+            </p>
             <select
-              className={cn(SX.select, "w-full")}
+              className={cn(SX.select, "mt-1 w-full")}
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
             >
@@ -835,11 +877,11 @@ export function FeesStepPanel({
           }}
         />
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
           <button
             type="button"
             className={SX.btnPrimary}
-            disabled={saving}
+            disabled={saving || coursesLoading || !targetExamValue}
             onClick={() => void saveFeePlan()}
           >
             {saving ? "Saving…" : "Save fee plan"}
@@ -851,6 +893,7 @@ export function FeesStepPanel({
             {toast}
           </div>
         ) : null}
+        </div>
       </div>
     </PipelineStepFrame>
   );

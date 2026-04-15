@@ -225,7 +225,7 @@ export function InstituteBankDetailsPanel({ leadId, value, onChange }: Props) {
     !activeSorted.some((a) => normId(a.id) === valueNorm);
 
   return (
-    <div className="mt-3 mb-0 overflow-hidden rounded-none border border-slate-200 bg-white shadow-sm shadow-slate-900/[0.02]">
+    <div className="mt-3 mb-0 overflow-hidden rounded-none border border-slate-200 bg-white shadow-none">
       <div className="border-b border-slate-200 bg-slate-50/90 px-3 py-1.5">
         <h3 className="text-[12px] font-semibold text-slate-900">
           Bank for fee payment
