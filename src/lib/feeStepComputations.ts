@@ -21,11 +21,42 @@ const DEFAULT_LINE_TAIL =
 
 export function defaultFeeLineDescription(
   index: number,
-  customCourseName: string,
+  courseLabel: string,
 ): string {
-  const name = customCourseName.trim();
-  const prefix = name ? `${index} ${name} — ` : `${index} `;
+  const name = courseLabel.trim();
+  const prefix = name ? `${index}. ${name} — ` : `${index}. `;
   return `${prefix}${DEFAULT_LINE_TAIL}`;
+}
+
+/** Equal split of `net` into `n` whole rupees (remainder on earliest rows). */
+export function equalSplitInr(net: number, n: number): number[] {
+  const total = Math.max(0, Math.round(net));
+  if (n <= 0) return [];
+  if (n === 1) return [total];
+  const base = Math.floor(total / n);
+  const remainder = total - base * n;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push(base + (i < remainder ? 1 : 0));
+  }
+  return out;
+}
+
+/** Keep first n−1 amounts; last row absorbs remainder so sum === net. */
+export function balanceInstallmentAmounts(
+  rows: LeadPipelineFeeInstallmentRow[],
+  net: number,
+): LeadPipelineFeeInstallmentRow[] {
+  if (rows.length < 2) return rows;
+  const n = rows.length;
+  const target = Math.max(0, Math.round(net));
+  let sumHead = 0;
+  const copy = rows.map((r) => ({ ...r }));
+  for (let i = 0; i < n - 1; i++) {
+    sumHead += Math.max(0, Math.round(Number(copy[i].amountInr) || 0));
+  }
+  copy[n - 1]!.amountInr = Math.max(0, target - sumHead);
+  return copy;
 }
 
 /** Build preview lines from installments or a single total line. */
@@ -33,7 +64,7 @@ export function buildFeePreviewLines(opts: {
   installmentRows: LeadPipelineFeeInstallmentRow[];
   finalFeeInr: number;
   feeMasterDueDate: string;
-  customCourseName: string;
+  courseLabel: string;
 }): FeePreviewLine[] {
   const rows = opts.installmentRows.filter(
     (r) => r && String(r.dueDate ?? "").trim() && Number(r.amountInr) > 0,
@@ -43,7 +74,7 @@ export function buildFeePreviewLines(opts: {
       no: i + 1,
       description:
         r.description.trim() ||
-        defaultFeeLineDescription(i + 1, opts.customCourseName),
+        defaultFeeLineDescription(i + 1, opts.courseLabel),
       gstApplicable: false,
       gstAmountInr: 0,
       baseAmountInr: Math.round(Number(r.amountInr) || 0),
@@ -56,7 +87,7 @@ export function buildFeePreviewLines(opts: {
   return [
     {
       no: 1,
-      description: defaultFeeLineDescription(1, opts.customCourseName),
+      description: defaultFeeLineDescription(1, opts.courseLabel),
       gstApplicable: false,
       gstAmountInr: 0,
       baseAmountInr: total,

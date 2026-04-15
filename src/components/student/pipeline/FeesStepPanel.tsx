@@ -1,6 +1,6 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { InstituteBankDetailsPanel } from "@/components/student/fee/InstituteBankDetailsPanel";
@@ -10,8 +10,10 @@ import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import {
   applyGstToLine,
+  balanceInstallmentAmounts,
   buildFeePreviewLines,
   defaultFeeLineDescription,
+  equalSplitInr,
   formatInr,
   formatStudentCountryFromInr,
   formatUsd,
@@ -24,8 +26,19 @@ import { appendActivity, mergePipelineMeta } from "@/lib/pipeline";
 import { useExamCourseCatalog } from "@/hooks/useExamCourseCatalog";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 
-const DURATIONS = ["6 Months", "1 Year", "2 Year", "Dropper"] as const;
 const CURRENCIES = ["INR", "USD", "AED", "EUR"] as const;
+
+function todayIsoLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function defaultSecondDueIso(): string {
+  return format(addDays(new Date(), 30), "yyyy-MM-dd");
+}
 
 function newInstallmentRow(): LeadPipelineFeeInstallmentRow {
   return {
@@ -35,7 +48,7 @@ function newInstallmentRow(): LeadPipelineFeeInstallmentRow {
         : `inst-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     description: "",
     amountInr: 0,
-    dueDate: "",
+    dueDate: todayIsoLocal(),
   };
 }
 
@@ -56,8 +69,6 @@ export function FeesStepPanel({
   const feesKey = JSON.stringify(lead.pipelineMeta?.fees ?? {});
   const [targetExamValue, setTargetExamValue] = useState("");
   const [catalogCourseId, setCatalogCourseId] = useState("");
-  const [courseDuration, setCourseDuration] = useState("1 Year");
-  const [customCourseName, setCustomCourseName] = useState("");
   const [currency, setCurrency] = useState("INR");
   const [scholarshipPct, setScholarshipPct] = useState(0);
   const [baseTotal, setBaseTotal] = useState(0);
@@ -68,6 +79,8 @@ export function FeesStepPanel({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  const minDue = todayIsoLocal();
+
   const fx: InstituteFeeFx = useMemo(
     () => ({
       feeGstPercent: institute.feeGstPercent,
@@ -76,6 +89,11 @@ export function FeesStepPanel({
     }),
     [institute],
   );
+
+  const selectedCourseName = useMemo(() => {
+    const list = coursesByExam.get(targetExamValue) ?? [];
+    return list.find((c) => c.id === catalogCourseId)?.name?.trim() ?? "";
+  }, [coursesByExam, targetExamValue, catalogCourseId]);
 
   const loadInstitute = useCallback(async () => {
     setInstLoading(true);
@@ -109,14 +127,6 @@ export function FeesStepPanel({
       typeof f.catalogCourseId === "string" ? f.catalogCourseId.trim() : "";
     setTargetExamValue(te);
     setCatalogCourseId(cc);
-    setCourseDuration(
-      typeof f.courseDuration === "string" && f.courseDuration
-        ? f.courseDuration
-        : "1 Year",
-    );
-    setCustomCourseName(
-      typeof f.customCourseName === "string" ? f.customCourseName : "",
-    );
     setCurrency(
       typeof f.currency === "string" && f.currency ? f.currency : "INR",
     );
@@ -135,12 +145,14 @@ export function FeesStepPanel({
     const legacyDates = Array.isArray(f.installmentDates)
       ? (f.installmentDates as string[])
       : [];
-    setFeeMasterDueDate(
+    const rawMaster =
       typeof f.feeMasterDueDate === "string"
         ? f.feeMasterDueDate
         : typeof legacyDates[0] === "string"
           ? legacyDates[0]
-          : "",
+          : minDue;
+    setFeeMasterDueDate(
+      rawMaster && rawMaster < minDue ? minDue : rawMaster || minDue,
     );
     const ir = f.installmentRows;
     if (Array.isArray(ir) && ir.length > 0) {
@@ -154,14 +166,17 @@ export function FeesStepPanel({
               typeof r.amountInr === "number" && Number.isFinite(r.amountInr)
                 ? Math.round(r.amountInr)
                 : 0,
-            dueDate: String(r.dueDate ?? ""),
+            dueDate: (() => {
+              const d = String(r.dueDate ?? "").trim() || minDue;
+              return d < minDue ? minDue : d;
+            })(),
           };
         }),
       );
     } else {
       setInstallmentRows([]);
     }
-  }, [lead.id, feesKey]);
+  }, [lead.id, feesKey, minDue]);
 
   useEffect(() => {
     if (!targetExamValue && lead.targetExams?.length) {
@@ -193,6 +208,14 @@ export function FeesStepPanel({
     return Math.round(b * (1 - s / 100));
   }, [baseTotal, scholarshipPct]);
 
+  /** When net total changes, rebalance last installment so sum stays = net. */
+  useEffect(() => {
+    if (installmentRows.length < 2) return;
+    setInstallmentRows((prev) =>
+      balanceInstallmentAmounts(prev, finalFromBase),
+    );
+  }, [finalFromBase, installmentRows.length]);
+
   const installmentSum = useMemo(
     () =>
       installmentRows.reduce(
@@ -203,12 +226,14 @@ export function FeesStepPanel({
   );
 
   const effectiveFinalFee =
-    installmentRows.length > 0 ? installmentSum : finalFromBase;
+    installmentRows.length >= 2 ? installmentSum : finalFromBase;
 
-  const sumMismatch =
-    installmentRows.length > 0 &&
-    installmentSum > 0 &&
-    installmentSum !== finalFromBase;
+  const headSumExceedsNet =
+    installmentRows.length >= 2 &&
+    installmentRows
+      .slice(0, -1)
+      .reduce((a, r) => a + Math.max(0, Math.round(r.amountInr || 0)), 0) >
+      finalFromBase;
 
   const previewLines = useMemo(
     () =>
@@ -216,13 +241,11 @@ export function FeesStepPanel({
         installmentRows,
         finalFeeInr: finalFromBase,
         feeMasterDueDate,
-        customCourseName,
+        courseLabel: selectedCourseName,
       }),
-    [installmentRows, finalFromBase, feeMasterDueDate, customCourseName],
+    [installmentRows, finalFromBase, feeMasterDueDate, selectedCourseName],
   );
 
-  const option1Lines = previewLines.map((L) => ({ ...L }));
-  const option2Lines = previewLines.map((L) => ({ ...L }));
   const option3Lines = previewLines.map((L) =>
     applyGstToLine({ ...L }, fx.feeGstPercent),
   );
@@ -259,6 +282,93 @@ export function FeesStepPanel({
     void loadDefaultFeeFromCatalog();
   }, [loadDefaultFeeFromCatalog]);
 
+  const startTwoInstallments = () => {
+    const net = Math.max(0, finalFromBase);
+    const parts = equalSplitInr(net, 2);
+    const label = selectedCourseName;
+    setInstallmentRows([
+      {
+        ...newInstallmentRow(),
+        amountInr: parts[0] ?? 0,
+        dueDate: minDue,
+        description: defaultFeeLineDescription(1, label),
+      },
+      {
+        ...newInstallmentRow(),
+        amountInr: parts[1] ?? 0,
+        dueDate: defaultSecondDueIso(),
+        description: defaultFeeLineDescription(2, label),
+      },
+    ]);
+  };
+
+  const addInstallment = () => {
+    setInstallmentRows((prev) => {
+      if (prev.length < 2) {
+        const net = Math.max(0, finalFromBase);
+        const parts = equalSplitInr(net, 2);
+        const label = selectedCourseName;
+        return [
+          {
+            ...newInstallmentRow(),
+            amountInr: parts[0] ?? 0,
+            dueDate: minDue,
+            description: defaultFeeLineDescription(1, label),
+          },
+          {
+            ...newInstallmentRow(),
+            amountInr: parts[1] ?? 0,
+            dueDate: defaultSecondDueIso(),
+            description: defaultFeeLineDescription(2, label),
+          },
+        ];
+      }
+      const net = Math.max(0, finalFromBase);
+      const next = [
+        ...prev,
+        {
+          ...newInstallmentRow(),
+          dueDate: minDue,
+          description: defaultFeeLineDescription(prev.length + 1, selectedCourseName),
+        },
+      ];
+      const parts = equalSplitInr(net, next.length);
+      return next.map((r, i) => ({ ...r, amountInr: parts[i] ?? 0 }));
+    });
+  };
+
+  const removeInstallment = (id: string) => {
+    setInstallmentRows((prev) => {
+      if (prev.length <= 2) {
+        return [];
+      }
+      const next = prev.filter((r) => r.id !== id);
+      const net = Math.max(0, finalFromBase);
+      const parts = equalSplitInr(net, next.length);
+      return next.map((r, i) => ({ ...r, amountInr: parts[i] ?? 0 }));
+    });
+  };
+
+  const updateRow = (
+    id: string,
+    patch: Partial<LeadPipelineFeeInstallmentRow>,
+  ) => {
+    setInstallmentRows((prev) => {
+      const idx = prev.findIndex((r) => r.id === id);
+      if (idx < 0) return prev;
+      if (patch.amountInr !== undefined && idx === prev.length - 1) {
+        return prev;
+      }
+      const next = prev.map((r) => (r.id === id ? { ...r, ...patch } : r));
+      if (patch.amountInr !== undefined && idx < prev.length - 1) {
+        return balanceInstallmentAmounts(next, finalFromBase);
+      }
+      return next;
+    });
+  };
+
+  const backToSinglePayment = () => setInstallmentRows([]);
+
   const saveFeePlan = async () => {
     setSaving(true);
     try {
@@ -266,26 +376,41 @@ export function FeesStepPanel({
         ...((lead.pipelineMeta?.fees ?? {}) as object),
         targetExamValue,
         catalogCourseId,
-        courseDuration,
-        customCourseName: customCourseName.trim(),
+        courseDuration: "",
+        customCourseName: "",
         currency,
         scholarshipPct,
         baseTotal: Math.max(0, Math.round(baseTotal)),
         finalFee: effectiveFinalFee,
-        feeMasterDueDate: feeMasterDueDate.trim() || null,
+        feeMasterDueDate:
+          installmentRows.length >= 2
+            ? null
+            : feeMasterDueDate.trim() || null,
         installmentRows:
-          installmentRows.length > 0
-            ? installmentRows.map((r) => ({
+          installmentRows.length >= 2
+            ? balanceInstallmentAmounts(
+                installmentRows.map((r) => ({ ...r })),
+                finalFromBase,
+              ).map((r) => ({
                 ...r,
                 amountInr: Math.max(0, Math.round(Number(r.amountInr) || 0)),
               }))
             : [],
-        installmentEnabled: installmentRows.length > 1,
+        installmentEnabled: installmentRows.length >= 2,
         installmentCount: Math.max(installmentRows.length, 1),
-        installmentAmounts: installmentRows.map((r) =>
-          Math.max(0, Math.round(Number(r.amountInr) || 0)),
-        ),
-        installmentDates: installmentRows.map((r) => r.dueDate),
+        installmentAmounts:
+          installmentRows.length >= 2
+            ? balanceInstallmentAmounts(
+                installmentRows,
+                finalFromBase,
+              ).map((r) => Math.max(0, Math.round(r.amountInr)))
+            : [],
+        installmentDates:
+          installmentRows.length >= 2
+            ? balanceInstallmentAmounts(installmentRows, finalFromBase).map(
+                (r) => r.dueDate,
+              )
+            : [],
       };
       await onPatchLead({
         pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
@@ -306,23 +431,6 @@ export function FeesStepPanel({
     }
   };
 
-  const addInstallment = () => {
-    setInstallmentRows((prev) => [...prev, newInstallmentRow()]);
-  };
-
-  const removeInstallment = (id: string) => {
-    setInstallmentRows((prev) => prev.filter((r) => r.id !== id));
-  };
-
-  const updateRow = (
-    id: string,
-    patch: Partial<LeadPipelineFeeInstallmentRow>,
-  ) => {
-    setInstallmentRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-    );
-  };
-
   const fmtDue = (iso: string) => {
     const t = iso.trim();
     if (!t) return "—";
@@ -338,9 +446,9 @@ export function FeesStepPanel({
     lines: ReturnType<typeof buildFeePreviewLines>,
     showGstColumn: boolean,
   ) => (
-    <div className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div className="mb-3 overflow-hidden rounded-lg border border-slate-200 bg-white last:mb-0">
       <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
-        <h4 className="text-[13px] font-semibold text-slate-900">{title}</h4>
+        <h4 className="text-[12px] font-semibold text-slate-900">{title}</h4>
       </div>
       <div className="overflow-x-auto">
         <table className={cn(SX.dataTable, "w-full min-w-[640px]")}>
@@ -383,7 +491,7 @@ export function FeesStepPanel({
         </table>
       </div>
       <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-600">
-        <span className="font-medium text-slate-700">INR reference: </span>
+        <span className="font-medium text-slate-700">INR: </span>
         {lines.map((row) => (
           <span key={row.no} className="mr-3 inline-block">
             #{row.no} {formatInr(row.totalInr)}
@@ -401,38 +509,31 @@ export function FeesStepPanel({
     </div>
   );
 
+  const isInstallments = installmentRows.length >= 2;
+
   return (
     <PipelineStepFrame stepNumber={3} leadId={lead.id}>
-      <div className="space-y-4 px-2 py-3 sm:px-3">
+      <div className="space-y-3 px-2 py-3 sm:px-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-[15px] font-semibold text-slate-900">
-              Fee structure &amp; installments
-            </h3>
+            <h3 className="text-[15px] font-semibold text-slate-900">Fees</h3>
             <p className="mt-0.5 text-[12px] text-slate-600">
-              Configure course fee in INR. Previews use GST % and FX from{" "}
+              GST/FX:{" "}
               <Link
                 href="/fee-management"
                 className="font-medium text-primary underline"
               >
                 Fee management
-              </Link>{" "}
-              /{" "}
-              <Link
-                href="/bank-details"
-                className="font-medium text-primary underline"
-              >
-                Bank &amp; institute
               </Link>
               .
             </p>
           </div>
           {instLoading ? (
-            <span className="text-[11px] text-slate-500">Loading settings…</span>
+            <span className="text-[11px] text-slate-500">Loading…</span>
           ) : (
             <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-700">
-              GST {fx.feeGstPercent}% · 1 USD = ₹{fx.inrPerUsd.toFixed(2)} · 1
-              AED = ₹{fx.inrPerAed.toFixed(2)}
+              GST {fx.feeGstPercent}% · USD ₹{fx.inrPerUsd.toFixed(2)} · AED ₹
+              {fx.inrPerAed.toFixed(2)}
             </span>
           )}
         </div>
@@ -474,24 +575,13 @@ export function FeesStepPanel({
               ))}
             </select>
           </label>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Course duration
+          <div className="block text-[12px] font-medium text-slate-700">
+            <span>Display currency (student)</span>
+            <p className="mb-1 mt-0.5 text-[10px] font-normal text-slate-500">
+              Used for student-facing fee labels (profile / comms).
+            </p>
             <select
-              className={cn(SX.select, "mt-1 w-full")}
-              value={courseDuration}
-              onChange={(e) => setCourseDuration(e.target.value)}
-            >
-              {DURATIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Course currency (label)
-            <select
-              className={cn(SX.select, "mt-1 w-full")}
+              className={cn(SX.select, "w-full")}
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
             >
@@ -501,7 +591,7 @@ export function FeesStepPanel({
                 </option>
               ))}
             </select>
-          </label>
+          </div>
           <label className="block text-[12px] font-medium text-slate-700">
             Scholarship %
             <input
@@ -518,7 +608,7 @@ export function FeesStepPanel({
             />
           </label>
           <label className="block text-[12px] font-medium text-slate-700">
-            Total course fee (INR) — before scholarship
+            Total fee (INR)
             <input
               type="number"
               min={0}
@@ -529,85 +619,76 @@ export function FeesStepPanel({
               }
             />
           </label>
-          <label className="block text-[12px] font-medium text-slate-700">
-            Fee due date (single payment)
-            <input
-              type="date"
-              className={cn(SX.input, "mt-1 tabular-nums")}
-              value={feeMasterDueDate}
-              onChange={(e) => setFeeMasterDueDate(e.target.value)}
-            />
-          </label>
-          <div className="sm:col-span-2 lg:col-span-3">
+          {!isInstallments ? (
             <label className="block text-[12px] font-medium text-slate-700">
-              Custom course name (optional)
+              Due date
               <input
-                className={cn(SX.input, "mt-1")}
-                value={customCourseName}
-                onChange={(e) => setCustomCourseName(e.target.value)}
-                placeholder="e.g. NEET Weekend Batch"
+                type="date"
+                min={minDue}
+                className={cn(SX.input, "mt-1 tabular-nums")}
+                value={feeMasterDueDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v && v < minDue) {
+                    setFeeMasterDueDate(minDue);
+                    return;
+                  }
+                  setFeeMasterDueDate(v);
+                }}
               />
             </label>
-          </div>
+          ) : (
+            <div className="text-[12px] text-slate-600">
+              <span className="font-medium text-slate-700">Due dates: </span>
+              per installment below (today or future).
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-[13px]">
-            <span className="text-slate-600">Net after scholarship: </span>
-            <span className="font-semibold text-slate-900">
+          <p className="text-[13px] text-slate-700">
+            <span className="text-slate-600">Net: </span>
+            <span className="font-semibold tabular-nums text-slate-900">
               {formatInr(finalFromBase)}
             </span>
-            {installmentRows.length > 0 ? (
-              <>
-                <span className="mx-2 text-slate-300">|</span>
-                <span className="text-slate-600">Installments sum: </span>
-                <span
-                  className={cn(
-                    "font-semibold",
-                    sumMismatch ? "text-amber-800" : "text-slate-900",
-                  )}
-                >
-                  {formatInr(installmentSum)}
-                </span>
-                {sumMismatch ? (
-                  <span className="ml-2 text-[11px] text-amber-800">
-                    Should match net fee ({formatInr(finalFromBase)})
-                  </span>
-                ) : null}
-              </>
+            {headSumExceedsNet ? (
+              <span className="ml-2 text-[11px] font-medium text-rose-700">
+                Earlier installments exceed net — reduce amounts.
+              </span>
             ) : null}
-          </div>
+          </p>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={SX.btnSecondary}
-              onClick={addInstallment}
-            >
-              + Add installment
-            </button>
-            <button
-              type="button"
-              className={SX.btnSecondary}
-              onClick={() => {
-                setInstallmentRows([
-                  {
-                    ...newInstallmentRow(),
-                    description: defaultFeeLineDescription(
-                      1,
-                      customCourseName,
-                    ),
-                    amountInr: finalFromBase,
-                    dueDate: feeMasterDueDate,
-                  },
-                ]);
-              }}
-            >
-              Use net fee as 1 installment
-            </button>
+            {!isInstallments ? (
+              <button
+                type="button"
+                className={SX.btnSecondary}
+                disabled={finalFromBase <= 0}
+                onClick={startTwoInstallments}
+              >
+                Split into 2 installments
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={SX.btnSecondary}
+                  onClick={addInstallment}
+                >
+                  + Add installment
+                </button>
+                <button
+                  type="button"
+                  className={SX.btnGhost}
+                  onClick={backToSinglePayment}
+                >
+                  Single payment
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {installmentRows.length > 0 ? (
+        {isInstallments ? (
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <table className={cn(SX.dataTable, "min-w-[720px]")}>
               <thead>
@@ -620,91 +701,120 @@ export function FeesStepPanel({
                 </tr>
               </thead>
               <tbody>
-                {installmentRows.map((r, i) => (
-                  <tr key={r.id}>
-                    <td className={SX.dataTd}>{i + 1}</td>
-                    <td className={SX.dataTd}>
-                      <input
-                        className={cn(SX.input, "min-w-[200px]")}
-                        value={r.description}
-                        onChange={(e) =>
-                          updateRow(r.id, { description: e.target.value })
-                        }
-                        placeholder={defaultFeeLineDescription(
-                          i + 1,
-                          customCourseName,
+                {installmentRows.map((r, i) => {
+                  const isLast = i === installmentRows.length - 1;
+                  return (
+                    <tr key={r.id}>
+                      <td className={SX.dataTd}>{i + 1}</td>
+                      <td className={SX.dataTd}>
+                        <input
+                          className={cn(SX.input, "min-w-[200px]")}
+                          value={r.description}
+                          onChange={(e) =>
+                            updateRow(r.id, { description: e.target.value })
+                          }
+                          placeholder={defaultFeeLineDescription(
+                            i + 1,
+                            selectedCourseName,
+                          )}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        {isLast ? (
+                          <span className="tabular-nums font-medium text-slate-800">
+                            {formatInr(r.amountInr)}
+                          </span>
+                        ) : (
+                          <input
+                            type="number"
+                            min={0}
+                            className={cn(SX.input, "w-28 tabular-nums")}
+                            value={r.amountInr || ""}
+                            onChange={(e) =>
+                              updateRow(r.id, {
+                                amountInr: Math.max(
+                                  0,
+                                  Math.round(Number(e.target.value) || 0),
+                                ),
+                              })
+                            }
+                          />
                         )}
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <input
-                        type="number"
-                        min={0}
-                        className={cn(SX.input, "w-28 tabular-nums")}
-                        value={r.amountInr || ""}
-                        onChange={(e) =>
-                          updateRow(r.id, {
-                            amountInr: Math.max(
-                              0,
-                              Math.round(Number(e.target.value) || 0),
-                            ),
-                          })
-                        }
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <input
-                        type="date"
-                        className={cn(SX.input, "tabular-nums")}
-                        value={r.dueDate}
-                        onChange={(e) =>
-                          updateRow(r.id, { dueDate: e.target.value })
-                        }
-                      />
-                    </td>
-                    <td className={SX.dataTd}>
-                      <button
-                        type="button"
-                        className={cn(SX.btnGhost, "text-rose-700")}
-                        onClick={() => removeInstallment(r.id)}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className={SX.dataTd}>
+                        <input
+                          type="date"
+                          min={minDue}
+                          className={cn(SX.input, "tabular-nums")}
+                          value={r.dueDate >= minDue ? r.dueDate : minDue}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            updateRow(r.id, {
+                              dueDate: !v || v < minDue ? minDue : v,
+                            });
+                          }}
+                        />
+                      </td>
+                      <td className={SX.dataTd}>
+                        <button
+                          type="button"
+                          className={cn(SX.btnGhost, "text-rose-700")}
+                          onClick={() => removeInstallment(r.id)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+            <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+              Last row auto-balances to net ({formatInr(finalFromBase)}). Edit
+              amounts above it; total stays matched.
+            </p>
           </div>
         ) : null}
 
-        <section className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-          <h4 className="text-[13px] font-semibold text-slate-900">
-            Preview (for parents)
-          </h4>
-          <p className="mt-1 text-[11px] text-slate-600">
-            Option 1 &amp; 2: no GST. Option 3: GST @ {fx.feeGstPercent}% on each
-            line (NRO). USD/AED use institute FX; student row shows approximate
-            amount in their country currency.
-          </p>
-          <div className="mt-3 space-y-4">
+        <details className="group rounded-lg border border-slate-200 bg-white">
+          <summary
+            className={cn(
+              "cursor-pointer list-none px-3 py-2.5 text-[13px] font-semibold text-slate-900",
+              "[&::-webkit-details-marker]:hidden",
+            )}
+          >
+            <span className="flex items-center justify-between gap-2">
+              <span>Preview for parents (optional)</span>
+              <span
+                className="inline-block text-slate-400 transition-transform group-open:rotate-90"
+                aria-hidden
+              >
+                ▸
+              </span>
+            </span>
+          </summary>
+          <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-3">
+            <p className="mb-2 text-[11px] text-slate-600">
+              Options 1–2: no GST. Option 3: NRO with GST @ {fx.feeGstPercent}
+              %.
+            </p>
             {renderPreviewTable(
               "Option 1 — Pay in USD (no GST)",
-              option1Lines,
+              previewLines,
               false,
             )}
             {renderPreviewTable(
-              "Option 2 — Indian NRE account (no GST)",
-              option2Lines,
+              "Option 2 — Indian NRE (no GST)",
+              previewLines,
               false,
             )}
             {renderPreviewTable(
-              "Option 3 — Indian NRO account (GST applicable)",
+              "Option 3 — Indian NRO (GST)",
               option3Lines,
               true,
             )}
           </div>
-        </section>
+        </details>
 
         <InstituteBankDetailsPanel
           leadId={lead.id}
@@ -729,7 +839,7 @@ export function FeesStepPanel({
           <button
             type="button"
             className={SX.btnPrimary}
-            disabled={saving}
+            disabled={saving || headSumExceedsNet}
             onClick={() => void saveFeePlan()}
           >
             {saving ? "Saving…" : "Save fee plan"}
