@@ -4,7 +4,7 @@ import type { EmailTemplateKey } from "@/lib/email/templateKeys";
 export function getPreviewSampleVars(key: EmailTemplateKey): Record<string, string> {
   const base: Record<string, string> = {
     studentName: "Student name",
-    parentName: "Parent / guardian name",
+    parentName: "Parent name",
     email: "email@address",
     phone: "Phone number",
     country: "Country",

@@ -471,7 +471,7 @@ export function DemoTeacherFeedbackForm({ token }: { token: string }) {
                 }
                 empty="Not added yet"
               />
-              <DetailLine label="Parent / guardian name" value={load.parentName} />
+              <DetailLine label="Parent name" value={load.parentName} />
               <DetailLine label="Mobile number" value={load.phone} link="tel" />
               <DetailLine label="Email" value={load.email} link="mailto" />
               <DetailLine

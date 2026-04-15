@@ -605,7 +605,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-8">
                   <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                    Parent / guardian
+                    Parent name
                     <input
                       className={cn(HERO_EDIT_INPUT, "mt-1")}
                       value={heroDraft.parentName}
@@ -793,7 +793,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                 {!heroEditing ? (
                   <>
                     <span>
-                      <span className={SX.studentHeroSubLabel}>Parent</span>{" "}
+                      <span className={SX.studentHeroSubLabel}>Parent name</span>{" "}
                       <span className={SX.studentHeroSubVal}>
                         {lead.parentName || "—"}
                       </span>

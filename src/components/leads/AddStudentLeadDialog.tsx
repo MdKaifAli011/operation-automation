@@ -387,7 +387,7 @@ export function AddStudentLeadDialog({
           </div>
 
           <label className="block min-w-0 text-[12px] font-medium text-slate-700">
-            Parent / guardian
+            Parent name
             <input
               className={fieldFull}
               value={parentName}
