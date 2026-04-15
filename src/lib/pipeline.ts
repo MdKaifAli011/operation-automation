@@ -36,29 +36,53 @@ export function computePipelineStepsFromMeta(
   });
   if (!hasConductedDemo) return 0;
 
-  const sr = m.studentReport as { pdfUrl?: string | null } | undefined;
-  const studentReportDone = !!sr?.pdfUrl && String(sr.pdfUrl).trim().length > 0;
-
-  const br = m.brochure as {
-    generated?: boolean;
-    sentEmail?: boolean;
-    fileName?: string | null;
-    storedFileUrl?: string | null;
-    documentUrl?: string | null;
-  } | undefined;
-  const brochureDone =
-    studentReportDone ||
-    !!br?.generated ||
-    !!br?.sentEmail ||
-    (!!br?.fileName && String(br.fileName).trim().length > 0) ||
-    (!!br?.storedFileUrl && String(br.storedFileUrl).trim().length > 0) ||
-    (!!br?.documentUrl && String(br.documentUrl).trim().length > 0);
-  if (!brochureDone) return 1;
-
+  const docs = m.documents as
+    | {
+        items?: Array<{ key?: string; sentAt?: string | null; isCustom?: boolean }>;
+      }
+    | undefined;
+  const docItems = Array.isArray(docs?.items) ? docs!.items! : [];
+  const sentKeys = new Set(
+    docItems
+      .filter((x) => String(x?.sentAt ?? "").trim().length > 0)
+      .map((x) => String(x?.key ?? "").trim())
+      .filter(Boolean),
+  );
+  const hasUnsentCustomDoc = docItems.some(
+    (x) => !!x?.isCustom && String(x?.sentAt ?? "").trim().length === 0,
+  );
+  const br = m.brochure as { sentEmail?: boolean; sentEmailAt?: string | null } | undefined;
   const fees = m.fees as {
     feeSentEmail?: boolean;
+    feeSentEmailAt?: string | null;
     enrollmentSent?: boolean;
+    enrollmentSentAt?: string | null;
   } | undefined;
+  const reportSent = sentKeys.has("report");
+  const brochureSent =
+    sentKeys.has("brochure") ||
+    !!br?.sentEmail ||
+    !!String(br?.sentEmailAt ?? "").trim();
+  const enrollmentSent =
+    sentKeys.has("enrollment") ||
+    !!fees?.enrollmentSent ||
+    !!String(fees?.enrollmentSentAt ?? "").trim();
+  const courierSent = sentKeys.has("courier");
+  const rankingSent = sentKeys.has("ranking");
+  const bankSent =
+    sentKeys.has("bank") ||
+    !!fees?.feeSentEmail ||
+    !!String(fees?.feeSentEmailAt ?? "").trim();
+  const documentsDone =
+    reportSent &&
+    brochureSent &&
+    enrollmentSent &&
+    courierSent &&
+    rankingSent &&
+    bankSent &&
+    !hasUnsentCustomDoc;
+  if (!documentsDone) return 1;
+
   const feesDone =
     !!fees?.feeSentEmail ||
     !!fees?.enrollmentSent;

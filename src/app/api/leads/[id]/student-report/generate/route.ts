@@ -54,6 +54,9 @@ export async function POST(req: Request, context: Ctx) {
       additionalNotes?: unknown;
       recommendations?: unknown;
       meetRowId?: unknown;
+      manualQuestionsAttempted?: unknown;
+      manualCorrectAnswers?: unknown;
+      manualStudentLevel?: unknown;
     } = {};
     try {
       body = (await req.json()) as typeof body;
@@ -66,6 +69,45 @@ export async function POST(req: Request, context: Ctx) {
       typeof body.recommendations === "string" ? body.recommendations : "";
     const meetRowId =
       typeof body.meetRowId === "string" ? body.meetRowId.trim() : "";
+    const manualQuestionsAttempted =
+      typeof body.manualQuestionsAttempted === "string"
+        ? body.manualQuestionsAttempted.trim()
+        : "";
+    const manualCorrectAnswers =
+      typeof body.manualCorrectAnswers === "string"
+        ? body.manualCorrectAnswers.trim()
+        : "";
+    const manualStudentLevel =
+      typeof body.manualStudentLevel === "string"
+        ? body.manualStudentLevel.trim()
+        : "";
+    const usingManualFallback =
+      !!manualQuestionsAttempted || !!manualCorrectAnswers || !!manualStudentLevel;
+    if (usingManualFallback) {
+      const attemptedN = Number.parseInt(manualQuestionsAttempted, 10);
+      const correctN = Number.parseInt(manualCorrectAnswers, 10);
+      if (!Number.isFinite(attemptedN) || attemptedN <= 0) {
+        return NextResponse.json(
+          { error: "Manual fallback requires a valid questions attempted value." },
+          { status: 400 },
+        );
+      }
+      if (!Number.isFinite(correctN) || correctN < 0 || correctN > attemptedN) {
+        return NextResponse.json(
+          {
+            error:
+              "Manual fallback requires valid correct answers (0 to attempted).",
+          },
+          { status: 400 },
+        );
+      }
+      if (!manualStudentLevel) {
+        return NextResponse.json(
+          { error: "Manual fallback requires student level." },
+          { status: 400 },
+        );
+      }
+    }
 
     await connectDB();
     const lead = await LeadModel.findById(id).lean();
@@ -93,6 +135,15 @@ export async function POST(req: Request, context: Ctx) {
         { status: 400 },
       );
     }
+    if (!meetRowId && selectedRows.length === 0 && !usingManualFallback) {
+      return NextResponse.json(
+        {
+          error:
+            "No teacher feedback found. Use manual fallback inputs to generate this report.",
+        },
+        { status: 400 },
+      );
+    }
 
     const generatedAt = new Date().toISOString();
     const logoPath = path.join(process.cwd(), "public", "logo.png");
@@ -105,6 +156,10 @@ export async function POST(req: Request, context: Ctx) {
         selectedRows as Parameters<typeof buildStudentReportPdfBytes>[0]["demoRows"],
       additionalNotes,
       recommendations,
+      manualQuestionsAttempted,
+      manualCorrectAnswers,
+      manualStudentLevel,
+      reportSource: usingManualFallback ? "manual_sales" : "teacher_feedback",
       logoPngBytes: logoPngBytes ? new Uint8Array(logoPngBytes) : null,
       generatedAtIso: generatedAt,
     });
@@ -135,9 +190,14 @@ export async function POST(req: Request, context: Ctx) {
         pdfUrl,
         fileName,
         generatedAt,
+        source: usingManualFallback ? "manual_sales" : "teacher_feedback",
         additionalNotes,
         recommendations,
-        generatedForMeetRowId: meetRowId || null,
+        manualQuestionsAttempted: usingManualFallback ? manualQuestionsAttempted : "",
+        manualCorrectAnswers: usingManualFallback ? manualCorrectAnswers : "",
+        manualStudentLevel: usingManualFallback ? manualStudentLevel : "",
+        generatedForMeetRowId:
+          usingManualFallback || !meetRowId ? null : meetRowId,
         sendConfirmedAt: null,
       },
     });

@@ -97,6 +97,21 @@ function hasTeacherFeedback(r: {
   );
 }
 
+function sentAtLabel(iso: string | null | undefined): string {
+  const t = String(iso ?? "").trim();
+  if (!t) return "";
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export function DocumentsStepPanel({
   lead,
   onPatchLead,
@@ -159,6 +174,7 @@ export function DocumentsStepPanel({
     ?.studentReport ?? {}) as {
     pdfUrl?: string | null;
     generatedForMeetRowId?: string | null;
+    source?: "teacher_feedback" | "manual_sales" | "uploaded_custom";
   };
   const brochure = ((lead.pipelineMeta as Record<string, unknown> | undefined)?.brochure ??
     {}) as {
@@ -177,9 +193,8 @@ export function DocumentsStepPanel({
   const reportGeneratedForMeetRowId = String(
     studentReport.generatedForMeetRowId ?? "",
   ).trim();
-  const reportGeneratedRaw =
-    !!String(studentReport.pdfUrl ?? "").trim() &&
-    reportGeneratedForMeetRowId.length > 0;
+  const reportSource = String(studentReport.source ?? "").trim();
+  const reportGeneratedRaw = !!String(studentReport.pdfUrl ?? "").trim();
   const reportSentRaw = !!docsByKey.get("report")?.sentAt;
   const brochureSent = !!brochure.sentEmail || !!brochure.sentEmailAt;
   const enrollmentSent = !!fees.enrollmentSent || !!fees.enrollmentSentAt;
@@ -204,8 +219,14 @@ export function DocumentsStepPanel({
         reportGeneratedForMeetRowId && hasTeacherFeedback(r),
   );
   const reportGenerated =
-    feedbackCount > 0 && reportGeneratedRaw && generatedRowStillValid;
+    reportGeneratedRaw &&
+    (reportSource === "manual_sales" ||
+      reportSource === "uploaded_custom" ||
+      (reportGeneratedForMeetRowId.length > 0
+        ? generatedRowStillValid
+        : feedbackCount === 0 || generatedRowStillValid));
   const reportSent = reportGenerated && reportSentRaw;
+  const reportCountLabel = reportGenerated ? "1" : String(feedbackCount || 0);
 
   useEffect(() => {
     setSelectedBankId(fees.feeSelectedBankAccountId ?? null);
@@ -297,10 +318,14 @@ export function DocumentsStepPanel({
     {
       key: "report",
       title: "Demo Session Report - Feedback",
-      countLabel: String(feedbackCount),
-      statusText: reportGenerated ? "Generated" : "Not Generated",
+      countLabel: reportCountLabel,
+      statusText: reportSent
+        ? "Sent"
+        : reportGenerated
+          ? "Ready to send"
+          : "Not Generated",
       isSent: reportSent,
-      actionLabel: reportGenerated ? (reportSent ? "Sent" : "Send now") : "Generate now",
+      actionLabel: reportSent ? "Sent" : "Generate",
     },
     {
       key: "brochure",
@@ -497,47 +522,6 @@ export function DocumentsStepPanel({
         })();
       },
     });
-  };
-
-  const sendReportPdf = async () => {
-    if (!reportGenerated) {
-      setReportOpen(true);
-      return;
-    }
-    setSavingKey("report");
-    try {
-      const now = new Date().toISOString();
-      await sendLeadPipelineEmail(lead.id, {
-        templateKey: "brochure",
-        brochureEmail: {
-          selectionKeys: [],
-          includeStudentReportPdf: true,
-        },
-      });
-      const row = rows.find((r) => r.key === "report");
-      await patchDocsItem(
-        "report",
-        {
-          key: "report",
-          title: row?.title || "Demo Session Report - Feedback",
-          countLabel: String(feedbackCount),
-          sentAt: now,
-        },
-        "Demo session report PDF sent from Step 2.",
-      );
-      await refreshLead();
-      pushToast("Demo session report sent.");
-    } catch (e) {
-      setMsgDlg({
-        open: true,
-        mode: "alert",
-        variant: "error",
-        title: "Report send failed",
-        description: e instanceof Error ? e.message : "Please try again.",
-      });
-    } finally {
-      setSavingKey(null);
-    }
   };
 
   const sendBrochureSelection = async () => {
@@ -794,17 +778,33 @@ export function DocumentsStepPanel({
               {rows.map((r, idx) => {
                 const busy = savingKey === r.key;
                 const customLink = r.isCustom ? customDocLink(r.key) : "";
+                const docsSentAt = String(docsByKey.get(r.key)?.sentAt ?? "").trim();
+                const rowSentAt =
+                  docsSentAt ||
+                  (r.key === "brochure"
+                    ? String(brochure.sentEmailAt ?? "").trim()
+                    : r.key === "enrollment"
+                      ? String(fees.enrollmentSentAt ?? "").trim()
+                      : r.key === "bank"
+                        ? String(fees.feeSentEmailAt ?? "").trim()
+                        : "");
+                const sentMetaLabel = sentAtLabel(rowSentAt);
                 return (
                   <tr key={r.key} className={idx % 2 === 0 ? "bg-sky-50/40" : "bg-white"}>
                     <td className={SX.dataTd}>{idx + 1}</td>
                     <td className={cn(SX.dataTd, "font-medium text-slate-900")}>
-                      {customLink ? (
+                      {customLink && r.isSent ? (
                         <a href={customLink} target="_blank" rel="noreferrer" className="underline text-primary">
                           {r.title}
                         </a>
                       ) : (
                         r.title
                       )}
+                      {sentMetaLabel ? (
+                        <p className="mt-1 text-[11px] font-normal text-slate-500">
+                          Sent: {sentMetaLabel}
+                        </p>
+                      ) : null}
                     </td>
                     <td className={SX.dataTd}>
                       {r.key === "report" ? (
@@ -856,13 +856,13 @@ export function DocumentsStepPanel({
                             "h-8 w-30 justify-center px-2 text-[12px]",
                           )}
                           disabled={busy}
-                          onClick={() => void sendReportPdf()}
+                          onClick={() => setReportOpen(true)}
                         >
-                          {busy ? "Sending..." : r.actionLabel}
+                          {r.actionLabel}
                         </button>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          {r.isCustom && customLink ? (
+                          {r.isCustom && customLink && r.isSent ? (
                             <a
                               href={customLink}
                               target="_blank"

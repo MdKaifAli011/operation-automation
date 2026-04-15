@@ -83,6 +83,10 @@ export async function buildStudentReportPdfBytes(opts: {
   demoRows: DemoTableRowPersisted[];
   additionalNotes: string;
   recommendations: string;
+  manualQuestionsAttempted?: string;
+  manualCorrectAnswers?: string;
+  manualStudentLevel?: string;
+  reportSource?: "teacher_feedback" | "manual_sales" | "uploaded_custom";
   logoPngBytes?: Uint8Array | null;
   generatedAtIso?: string;
 }): Promise<Uint8Array> {
@@ -191,6 +195,14 @@ export async function buildStudentReportPdfBytes(opts: {
   const feedbackRows = opts.demoRows.filter((r) =>
     Boolean(r.teacherFeedbackSubmittedAt?.trim()),
   );
+  const manualQuestions = safeText(opts.manualQuestionsAttempted);
+  const manualCorrect = safeText(opts.manualCorrectAnswers);
+  const manualLevel = safeText(opts.manualStudentLevel);
+  const hasManualSnapshot =
+    opts.reportSource === "manual_sales" ||
+    !!manualQuestions ||
+    !!manualCorrect ||
+    !!manualLevel;
 
   drawSectionTitle("Report summary");
   page.drawRectangle({
@@ -231,6 +243,60 @@ export async function buildStudentReportPdfBytes(opts: {
     color: rgb(0.12, 0.14, 0.18),
   });
   y -= 48;
+
+  if (hasManualSnapshot) {
+    ensureSpace(48);
+    page.drawRectangle({
+      x: MARGIN_X,
+      y: y - 36,
+      width: BODY_W,
+      height: 36,
+      color: rgb(1, 1, 1),
+      borderWidth: 0.7,
+      borderColor: rgb(0.84, 0.87, 0.92),
+    });
+    page.drawText("Input mode", {
+      x: MARGIN_X + 8,
+      y: y - 12,
+      size: 9,
+      font: fontBold,
+      color: rgb(0.36, 0.4, 0.48),
+    });
+    page.drawText("Sales fallback (manual)", {
+      x: MARGIN_X + 220,
+      y: y - 12,
+      size: 10,
+      font,
+      color: rgb(0.12, 0.14, 0.18),
+    });
+    const accuracy =
+      Number.parseInt(manualQuestions, 10) > 0 &&
+      Number.isFinite(Number.parseInt(manualCorrect, 10))
+        ? `${Math.max(
+            0,
+            Math.round(
+              (Number.parseInt(manualCorrect, 10) /
+                Number.parseInt(manualQuestions, 10)) *
+                100,
+            ),
+          )}%`
+        : "Not available";
+    page.drawText("Estimated accuracy", {
+      x: MARGIN_X + 8,
+      y: y - 27,
+      size: 9,
+      font: fontBold,
+      color: rgb(0.36, 0.4, 0.48),
+    });
+    page.drawText(accuracy, {
+      x: MARGIN_X + 220,
+      y: y - 27,
+      size: 10,
+      font,
+      color: rgb(0.12, 0.14, 0.18),
+    });
+    y -= 48;
+  }
 
   drawSectionTitle("Teacher feedback details");
 
@@ -332,6 +398,44 @@ export async function buildStudentReportPdfBytes(opts: {
       });
       y -= 8;
     }
+  }
+
+  if (hasManualSnapshot) {
+    drawSectionTitle("Sales team feedback snapshot");
+    ensureSpace(62);
+    page.drawRectangle({
+      x: MARGIN_X,
+      y: y - 48,
+      width: BODY_W,
+      height: 48,
+      color: rgb(1, 1, 1),
+      borderWidth: 0.7,
+      borderColor: rgb(0.84, 0.87, 0.92),
+    });
+    const fields: Array<[string, string]> = [
+      ["No. of questions attempted", manualQuestions || "Not provided"],
+      ["Correct answers", manualCorrect || "Not provided"],
+      ["Student level", manualLevel || "Not provided"],
+    ];
+    let yRow = y - 12;
+    for (const [label, value] of fields) {
+      page.drawText(`${label}:`, {
+        x: MARGIN_X + 8,
+        y: yRow,
+        size: 9,
+        font: fontBold,
+        color: rgb(0.35, 0.4, 0.48),
+      });
+      page.drawText(value, {
+        x: MARGIN_X + 190,
+        y: yRow,
+        size: 9,
+        font,
+        color: rgb(0.12, 0.14, 0.18),
+      });
+      yRow -= 12;
+    }
+    y -= 60;
   }
 
   drawSectionTitle("Additional notes (institute)");

@@ -136,9 +136,15 @@ export type LeadPipelineStudentReport = {
   fileName?: string | null;
   /** ISO — last successful PDF generation */
   generatedAt?: string | null;
+  /** How current report was prepared. */
+  source?: "teacher_feedback" | "manual_sales" | "uploaded_custom";
   /** Staff text included in PDF and editable before each generate */
   additionalNotes?: string;
   recommendations?: string;
+  /** Sales fallback inputs when teacher feedback is unavailable. */
+  manualQuestionsAttempted?: string;
+  manualCorrectAnswers?: string;
+  manualStudentLevel?: string;
   /** ISO — staff confirmed the report is OK to share with the family */
   sendConfirmedAt?: string | null;
   /** Optional demo row id when a single-report PDF was generated from one demo only. */

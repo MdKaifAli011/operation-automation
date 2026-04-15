@@ -6,6 +6,7 @@ import type { Lead } from "@/lib/types";
 import { mergePipelineMeta, appendActivity } from "@/lib/pipeline";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
+import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
 
 function ratingLabel(v: string | undefined): string {
   if (!v?.trim()) return "—";
@@ -43,6 +44,23 @@ type Props = {
   onToast?: (message: string) => void;
 };
 
+const ATTEMPTED_OPTIONS = [
+  "10",
+  "15",
+  "20",
+  "25",
+  "30",
+  "40",
+  "50",
+] as const;
+const STUDENT_LEVEL_OPTIONS = [
+  "Beginner",
+  "Average",
+  "Good",
+  "Very Good",
+  "Excellent",
+] as const;
+
 export function StudentReportModal({
   open,
   onClose,
@@ -53,6 +71,7 @@ export function StudentReportModal({
 }: Props) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const sr = lead.pipelineMeta?.studentReport as
     | {
         additionalNotes?: string;
@@ -62,6 +81,10 @@ export function StudentReportModal({
         generatedAt?: string | null;
         generatedForMeetRowId?: string | null;
         sendConfirmedAt?: string | null;
+      source?: "teacher_feedback" | "manual_sales" | "uploaded_custom";
+      manualQuestionsAttempted?: string;
+      manualCorrectAnswers?: string;
+      manualStudentLevel?: string;
       }
     | undefined;
 
@@ -71,15 +94,39 @@ export function StudentReportModal({
 
   const [genError, setGenError] = useState<string | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
-  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [sendingBusy, setSendingBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [selectedReportKey, setSelectedReportKey] = useState("");
   const [generatingKey, setGeneratingKey] = useState<string | null>(null);
+  const [manualAttempted, setManualAttempted] = useState<string>(
+    ATTEMPTED_OPTIONS[2] ?? "20",
+  );
+  const [manualCorrect, setManualCorrect] = useState<string>("10");
+  const [manualLevel, setManualLevel] = useState<string>(
+    STUDENT_LEVEL_OPTIONS[1] ?? "Average",
+  );
 
   useEffect(() => {
     if (!open) return;
     setGenError(null);
     setLocalPreviewUrl(sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
-  }, [open, lead.id, sr?.pdfUrl]);
+    setManualAttempted(
+      sr?.manualQuestionsAttempted?.trim() ||
+        ATTEMPTED_OPTIONS[2] ||
+        "20",
+    );
+    setManualCorrect(sr?.manualCorrectAnswers?.trim() || "10");
+    setManualLevel(
+      sr?.manualStudentLevel?.trim() || STUDENT_LEVEL_OPTIONS[1] || "Average",
+    );
+  }, [
+    open,
+    lead.id,
+    sr?.pdfUrl,
+    sr?.manualQuestionsAttempted,
+    sr?.manualCorrectAnswers,
+    sr?.manualStudentLevel,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,24 +178,36 @@ export function StudentReportModal({
 
   const selectedItem =
     reportItems.find((x) => x.key === selectedReportKey) ?? null;
-  const generatedForSelected =
-    !!previewSrc &&
-    !!selectedItem &&
-    String(sr?.generatedForMeetRowId ?? "").trim() === selectedItem.key;
+  const fallbackMode = reportItems.length === 0;
+
+  const maxCorrect = Math.max(0, Number.parseInt(manualAttempted || "0", 10) || 0);
+  const correctOptions = useMemo(() => {
+    const out: string[] = [];
+    for (let i = 0; i <= maxCorrect; i += 1) out.push(String(i));
+    return out.length ? out : ["0"];
+  }, [maxCorrect]);
+
+  useEffect(() => {
+    if (!correctOptions.includes(manualCorrect)) {
+      setManualCorrect(correctOptions[correctOptions.length - 1] ?? "0");
+    }
+  }, [correctOptions, manualCorrect]);
 
   const generateSelectedPdf = async () => {
-    if (!selectedItem) {
+    if (!selectedItem && !fallbackMode) {
       setGenError("Select a demo report first.");
       return;
     }
-    const meetRowId = selectedItem.row.meetRowId?.trim();
-    if (!meetRowId) {
-      setGenError(
-        "This demo row is missing an id. Edit and save it once in Step 1, then retry.",
-      );
+    const meetRowId = selectedItem?.row.meetRowId?.trim();
+    if (!fallbackMode && !meetRowId) {
+      setGenError("Selected demo row is missing id. Save row in Step 1 and retry.");
       return;
     }
-    setGeneratingKey(selectedItem.key);
+    if (fallbackMode && (!manualAttempted || !manualLevel)) {
+      setGenError("Please complete all fallback inputs first.");
+      return;
+    }
+    setGeneratingKey(selectedItem?.key ?? "manual");
     setGenError(null);
     try {
       const res = await fetch(
@@ -160,6 +219,9 @@ export function StudentReportModal({
             additionalNotes: "",
             recommendations: "",
             meetRowId,
+            manualQuestionsAttempted: fallbackMode ? manualAttempted : "",
+            manualCorrectAnswers: fallbackMode ? manualCorrect : "",
+            manualStudentLevel: fallbackMode ? manualLevel : "",
           }),
         },
       );
@@ -170,7 +232,11 @@ export function StudentReportModal({
       if (!res.ok) throw new Error(data.error || "Could not generate PDF");
       if (data.pdfUrl) setLocalPreviewUrl(data.pdfUrl);
       await refreshLead();
-      onToast?.(`${selectedItem.label} generated successfully.`);
+      onToast?.(
+        fallbackMode
+          ? "Manual report generated successfully."
+          : `${selectedItem?.label ?? "Report"} generated successfully.`,
+      );
     } catch (e) {
       setGenError(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -178,11 +244,75 @@ export function StudentReportModal({
     }
   };
 
-  const confirmForSending = async () => {
-    setConfirmBusy(true);
+  const uploadCustomReport = async (file: File) => {
+    setUploading(true);
+    setGenError(null);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      const res = await fetch(
+        `/api/leads/${encodeURIComponent(lead.id)}/documents-upload`,
+        {
+          method: "POST",
+          body: fd,
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        storedFileUrl?: string;
+        fileName?: string;
+      };
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      const pdfUrl = String(data.storedFileUrl ?? "").trim();
+      if (!pdfUrl) throw new Error("Upload failed");
+      const fileName = String(data.fileName ?? "").trim() || file.name;
+      const now = new Date().toISOString();
+      await onPatchLead({
+        pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+          studentReport: {
+            pdfUrl,
+            fileName,
+            generatedAt: now,
+            source: "uploaded_custom",
+            generatedForMeetRowId: null,
+            manualQuestionsAttempted: "",
+            manualCorrectAnswers: "",
+            manualStudentLevel: "",
+            sendConfirmedAt: null,
+          },
+        }),
+        activityLog: appendActivity(
+          lead.activityLog,
+          "brochure",
+          "Custom student report uploaded from report modal.",
+        ),
+      });
+      setLocalPreviewUrl(pdfUrl);
+      await refreshLead();
+      onToast?.("Custom report uploaded successfully.");
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const sendReport = async () => {
+    if (!previewSrc) {
+      setGenError("Generate or upload the report before sending.");
+      return;
+    }
+    setSendingBusy(true);
     setGenError(null);
     try {
       const now = new Date().toISOString();
+      await sendLeadPipelineEmail(lead.id, {
+        templateKey: "brochure",
+        brochureEmail: {
+          selectionKeys: [],
+          includeStudentReportPdf: true,
+        },
+      });
       const docsItems = Array.isArray(
         (lead.pipelineMeta as { documents?: { items?: Array<Record<string, unknown>> } } | undefined)
           ?.documents?.items,
@@ -223,16 +353,16 @@ export function StudentReportModal({
         activityLog: appendActivity(
           lead.activityLog,
           "brochure",
-          "Student progress report confirmed and marked sent from report modal.",
+          "Student progress report sent from report modal.",
         ),
       });
       await refreshLead();
-      onToast?.("Report confirmed and marked as sent.");
+      onToast?.("Report sent successfully.");
       onClose();
-    } catch {
-      setGenError("Could not save confirmation.");
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : "Could not send report.");
     } finally {
-      setConfirmBusy(false);
+      setSendingBusy(false);
     }
   };
 
@@ -257,7 +387,7 @@ export function StudentReportModal({
           Demo Session Report - Feedback
         </h2>
         <p className="mt-1 text-[12px] text-slate-600">
-          Select a demo report, review details, then generate that single PDF.
+          Generate from faculty feedback or use fallback/manual inputs.
         </p>
       </div>
 
@@ -273,9 +403,9 @@ export function StudentReportModal({
           <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
             Reports list
           </h3>
-          {reportItems.length === 0 ? (
+          {fallbackMode ? (
             <p className="rounded border border-slate-100 bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
-              No demo rows found. Add demos in Step 1 first.
+              Faculty feedback is unavailable. Use manual fallback inputs below.
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -329,7 +459,7 @@ export function StudentReportModal({
           )}
         </section>
 
-        {selectedItem ? (
+        {selectedItem && !fallbackMode ? (
           <section className="mb-4 border border-slate-200 bg-slate-50/60 px-3 py-2.5">
             <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">
               Basic details
@@ -366,6 +496,62 @@ export function StudentReportModal({
           </section>
         ) : null}
 
+        {fallbackMode ? (
+          <section className="mb-4 border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+              Manual fallback inputs
+            </h3>
+            <p className="mt-1 text-[12px] text-slate-700">
+              Use these inputs when faculty response is not received and sales team
+              needs to send the report.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <label className="text-[12px] font-medium text-slate-700">
+                No. of Questions Attempted
+                <select
+                  className={cn(SX.select, "mt-1 w-full")}
+                  value={manualAttempted}
+                  onChange={(e) => setManualAttempted(e.target.value)}
+                >
+                  {ATTEMPTED_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[12px] font-medium text-slate-700">
+                Correct Answers
+                <select
+                  className={cn(SX.select, "mt-1 w-full")}
+                  value={manualCorrect}
+                  onChange={(e) => setManualCorrect(e.target.value)}
+                >
+                  {correctOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[12px] font-medium text-slate-700">
+                Student Level
+                <select
+                  className={cn(SX.select, "mt-1 w-full")}
+                  value={manualLevel}
+                  onChange={(e) => setManualLevel(e.target.value)}
+                >
+                  {STUDENT_LEVEL_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
+        ) : null}
+
         {genError ? (
           <p className="mb-3 text-[12px] text-red-700" role="alert">
             {genError}
@@ -376,14 +562,20 @@ export function StudentReportModal({
           <button
             type="button"
             className={SX.btnPrimary}
-            disabled={!selectedItem || generatingKey !== null}
+            disabled={(!selectedItem && !fallbackMode) || generatingKey !== null}
             onClick={() => void generateSelectedPdf()}
           >
-            {selectedItem && generatingKey === selectedItem.key
-              ? "Generating..."
-              : "Generate this report"}
+            {generatingKey ? "Generating..." : "Generate Report"}
           </button>
-          {generatedForSelected && previewSrc ? (
+          <button
+            type="button"
+            className={SX.btnSecondary}
+            disabled={uploading}
+            onClick={() => uploadInputRef.current?.click()}
+          >
+            {uploading ? "Uploading..." : "Upload Report"}
+          </button>
+          {previewSrc ? (
             <button
               type="button"
               className={SX.btnSecondary}
@@ -394,6 +586,18 @@ export function StudentReportModal({
               View report
             </button>
           ) : null}
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              e.currentTarget.value = "";
+              if (!file) return;
+              void uploadCustomReport(file);
+            }}
+          />
         </div>
       </div>
 
@@ -405,10 +609,10 @@ export function StudentReportModal({
           <button
             type="button"
             className={SX.btnPrimary}
-            disabled={confirmBusy}
-            onClick={() => void confirmForSending()}
+            disabled={sendingBusy}
+            onClick={() => void sendReport()}
           >
-            {confirmBusy ? "Saving..." : "Confirm for sending"}
+            {sendingBusy ? "Sending..." : "Send Report"}
           </button>
         ) : null}
       </div>
