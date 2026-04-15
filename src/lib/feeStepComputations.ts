@@ -59,6 +59,39 @@ export function balanceInstallmentAmounts(
   return copy;
 }
 
+/**
+ * User edits one installment amount; that row is set (clamped to net);
+ * the remaining total is split equally across all other rows. Sum always equals `net`.
+ */
+export function redistributeAfterOneAmountEdit(
+  currentAmounts: number[],
+  net: number,
+  editedIndex: number,
+  rawValue: number,
+): number[] {
+  const n = currentAmounts.length;
+  if (n < 2 || editedIndex < 0 || editedIndex >= n) return currentAmounts;
+  const target = Math.max(0, Math.round(net));
+  let v = Math.max(0, Math.round(Number(rawValue) || 0));
+  v = Math.min(v, target);
+  const remaining = target - v;
+  const parts = equalSplitInr(remaining, n - 1);
+  const out: number[] = new Array(n).fill(0);
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    if (i === editedIndex) {
+      out[i] = v;
+    } else {
+      out[i] = parts[j++] ?? 0;
+    }
+  }
+  const sum = out.reduce((a, b) => a + b, 0);
+  if (sum !== target) {
+    out[editedIndex] += target - sum;
+  }
+  return out;
+}
+
 /** Build preview lines from installments or a single total line. */
 export function buildFeePreviewLines(opts: {
   installmentRows: LeadPipelineFeeInstallmentRow[];

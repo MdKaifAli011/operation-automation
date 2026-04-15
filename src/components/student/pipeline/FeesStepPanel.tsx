@@ -2,7 +2,7 @@
 
 import { addDays, format, parseISO } from "date-fns";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InstituteBankDetailsPanel } from "@/components/student/fee/InstituteBankDetailsPanel";
 import { PipelineStepFrame } from "./PipelineStepFrame";
 import type { FeesStepPanelProps } from "./pipelineStepTypes";
@@ -10,14 +10,13 @@ import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import {
   applyGstToLine,
-  balanceInstallmentAmounts,
   buildFeePreviewLines,
-  defaultFeeLineDescription,
   equalSplitInr,
   formatInr,
   formatStudentCountryFromInr,
   formatUsd,
   inrToUsd,
+  redistributeAfterOneAmountEdit,
   type InstituteFeeFx,
 } from "@/lib/feeStepComputations";
 import type { LeadPipelineFeeInstallmentRow } from "@/lib/leadPipelineMetaTypes";
@@ -79,6 +78,9 @@ export function FeesStepPanel({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  /** Tracks net we last synced so installment re-split runs on net change, not on hydrate. */
+  const lastSyncedNetForInstallmentsRef = useRef<number | undefined>(undefined);
+
   const minDue = todayIsoLocal();
 
   const fx: InstituteFeeFx = useMemo(
@@ -118,6 +120,10 @@ export function FeesStepPanel({
   useEffect(() => {
     void loadInstitute();
   }, [loadInstitute]);
+
+  useEffect(() => {
+    lastSyncedNetForInstallmentsRef.current = undefined;
+  }, [lead.id]);
 
   useEffect(() => {
     const f = (lead.pipelineMeta?.fees ?? {}) as Record<string, unknown>;
@@ -208,12 +214,30 @@ export function FeesStepPanel({
     return Math.round(b * (1 - s / 100));
   }, [baseTotal, scholarshipPct]);
 
-  /** When net total changes, rebalance last installment so sum stays = net. */
+  /** When net total changes (not on first load of rows), re-split equally. */
   useEffect(() => {
-    if (installmentRows.length < 2) return;
-    setInstallmentRows((prev) =>
-      balanceInstallmentAmounts(prev, finalFromBase),
-    );
+    if (installmentRows.length < 2) {
+      lastSyncedNetForInstallmentsRef.current = undefined;
+      return;
+    }
+    const prevNet = lastSyncedNetForInstallmentsRef.current;
+    if (prevNet === undefined) {
+      lastSyncedNetForInstallmentsRef.current = finalFromBase;
+      return;
+    }
+    if (prevNet === finalFromBase) {
+      lastSyncedNetForInstallmentsRef.current = finalFromBase;
+      return;
+    }
+    setInstallmentRows((prev) => {
+      const parts = equalSplitInr(finalFromBase, prev.length);
+      return prev.map((r, i) => ({
+        ...r,
+        amountInr: parts[i] ?? 0,
+        description: "",
+      }));
+    });
+    lastSyncedNetForInstallmentsRef.current = finalFromBase;
   }, [finalFromBase, installmentRows.length]);
 
   const installmentSum = useMemo(
@@ -227,13 +251,6 @@ export function FeesStepPanel({
 
   const effectiveFinalFee =
     installmentRows.length >= 2 ? installmentSum : finalFromBase;
-
-  const headSumExceedsNet =
-    installmentRows.length >= 2 &&
-    installmentRows
-      .slice(0, -1)
-      .reduce((a, r) => a + Math.max(0, Math.round(r.amountInr || 0)), 0) >
-      finalFromBase;
 
   const previewLines = useMemo(
     () =>
@@ -282,22 +299,21 @@ export function FeesStepPanel({
     void loadDefaultFeeFromCatalog();
   }, [loadDefaultFeeFromCatalog]);
 
-  const startTwoInstallments = () => {
+  const startInstallmentsTable = () => {
     const net = Math.max(0, finalFromBase);
     const parts = equalSplitInr(net, 2);
-    const label = selectedCourseName;
     setInstallmentRows([
       {
         ...newInstallmentRow(),
         amountInr: parts[0] ?? 0,
         dueDate: minDue,
-        description: defaultFeeLineDescription(1, label),
+        description: "",
       },
       {
         ...newInstallmentRow(),
         amountInr: parts[1] ?? 0,
         dueDate: defaultSecondDueIso(),
-        description: defaultFeeLineDescription(2, label),
+        description: "",
       },
     ]);
   };
@@ -307,29 +323,28 @@ export function FeesStepPanel({
       if (prev.length < 2) {
         const net = Math.max(0, finalFromBase);
         const parts = equalSplitInr(net, 2);
-        const label = selectedCourseName;
         return [
           {
             ...newInstallmentRow(),
             amountInr: parts[0] ?? 0,
             dueDate: minDue,
-            description: defaultFeeLineDescription(1, label),
+            description: "",
           },
           {
             ...newInstallmentRow(),
             amountInr: parts[1] ?? 0,
             dueDate: defaultSecondDueIso(),
-            description: defaultFeeLineDescription(2, label),
+            description: "",
           },
         ];
       }
       const net = Math.max(0, finalFromBase);
       const next = [
-        ...prev,
+        ...prev.map((r) => ({ ...r, description: "" })),
         {
           ...newInstallmentRow(),
           dueDate: minDue,
-          description: defaultFeeLineDescription(prev.length + 1, selectedCourseName),
+          description: "",
         },
       ];
       const parts = equalSplitInr(net, next.length);
@@ -345,26 +360,40 @@ export function FeesStepPanel({
       const next = prev.filter((r) => r.id !== id);
       const net = Math.max(0, finalFromBase);
       const parts = equalSplitInr(net, next.length);
-      return next.map((r, i) => ({ ...r, amountInr: parts[i] ?? 0 }));
+      return next.map((r, i) => ({
+        ...r,
+        amountInr: parts[i] ?? 0,
+        description: "",
+      }));
     });
   };
 
-  const updateRow = (
-    id: string,
-    patch: Partial<LeadPipelineFeeInstallmentRow>,
-  ) => {
+  const updateAmountAtIndex = (index: number, rawValue: number) => {
     setInstallmentRows((prev) => {
-      const idx = prev.findIndex((r) => r.id === id);
-      if (idx < 0) return prev;
-      if (patch.amountInr !== undefined && idx === prev.length - 1) {
-        return prev;
-      }
-      const next = prev.map((r) => (r.id === id ? { ...r, ...patch } : r));
-      if (patch.amountInr !== undefined && idx < prev.length - 1) {
-        return balanceInstallmentAmounts(next, finalFromBase);
-      }
-      return next;
+      if (prev.length < 2 || index < 0 || index >= prev.length) return prev;
+      const amounts = prev.map((r) =>
+        Math.max(0, Math.round(Number(r.amountInr) || 0)),
+      );
+      const nextAmounts = redistributeAfterOneAmountEdit(
+        amounts,
+        finalFromBase,
+        index,
+        rawValue,
+      );
+      return prev.map((r, i) => ({
+        ...r,
+        amountInr: nextAmounts[i] ?? 0,
+        description: "",
+      }));
     });
+  };
+
+  const updateDueDate = (id: string, dueDate: string) => {
+    setInstallmentRows((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, dueDate: !dueDate || dueDate < minDue ? minDue : dueDate } : r,
+      ),
+    );
   };
 
   const backToSinglePayment = () => setInstallmentRows([]);
@@ -388,11 +417,9 @@ export function FeesStepPanel({
             : feeMasterDueDate.trim() || null,
         installmentRows:
           installmentRows.length >= 2
-            ? balanceInstallmentAmounts(
-                installmentRows.map((r) => ({ ...r })),
-                finalFromBase,
-              ).map((r) => ({
+            ? installmentRows.map((r) => ({
                 ...r,
+                description: "",
                 amountInr: Math.max(0, Math.round(Number(r.amountInr) || 0)),
               }))
             : [],
@@ -400,16 +427,13 @@ export function FeesStepPanel({
         installmentCount: Math.max(installmentRows.length, 1),
         installmentAmounts:
           installmentRows.length >= 2
-            ? balanceInstallmentAmounts(
-                installmentRows,
-                finalFromBase,
-              ).map((r) => Math.max(0, Math.round(r.amountInr)))
+            ? installmentRows.map((r) =>
+                Math.max(0, Math.round(Number(r.amountInr) || 0)),
+              )
             : [],
         installmentDates:
           installmentRows.length >= 2
-            ? balanceInstallmentAmounts(installmentRows, finalFromBase).map(
-                (r) => r.dueDate,
-              )
+            ? installmentRows.map((r) => r.dueDate)
             : [],
       };
       await onPatchLead({
@@ -651,11 +675,6 @@ export function FeesStepPanel({
             <span className="font-semibold tabular-nums text-slate-900">
               {formatInr(finalFromBase)}
             </span>
-            {headSumExceedsNet ? (
-              <span className="ml-2 text-[11px] font-medium text-rose-700">
-                Earlier installments exceed net — reduce amounts.
-              </span>
-            ) : null}
           </p>
           <div className="flex flex-wrap gap-2">
             {!isInstallments ? (
@@ -663,9 +682,9 @@ export function FeesStepPanel({
                 type="button"
                 className={SX.btnSecondary}
                 disabled={finalFromBase <= 0}
-                onClick={startTwoInstallments}
+                onClick={startInstallmentsTable}
               >
-                Split into 2 installments
+                Add installments
               </button>
             ) : (
               <>
@@ -690,56 +709,33 @@ export function FeesStepPanel({
 
         {isInstallments ? (
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className={cn(SX.dataTable, "min-w-[720px]")}>
+            <table className={cn(SX.dataTable, "min-w-[420px]")}>
               <thead>
                 <tr>
                   <th className={SX.dataTh}>#</th>
-                  <th className={SX.dataTh}>Description</th>
                   <th className={SX.dataTh}>Amount (INR)</th>
                   <th className={SX.dataTh}>Due date</th>
                   <th className={SX.dataTh} />
                 </tr>
               </thead>
               <tbody>
-                {installmentRows.map((r, i) => {
-                  const isLast = i === installmentRows.length - 1;
-                  return (
+                {installmentRows.map((r, i) => (
                     <tr key={r.id}>
                       <td className={SX.dataTd}>{i + 1}</td>
                       <td className={SX.dataTd}>
                         <input
-                          className={cn(SX.input, "min-w-[200px]")}
-                          value={r.description}
+                          type="number"
+                          min={0}
+                          max={finalFromBase}
+                          className={cn(SX.input, "w-28 tabular-nums")}
+                          value={r.amountInr || ""}
                           onChange={(e) =>
-                            updateRow(r.id, { description: e.target.value })
+                            updateAmountAtIndex(
+                              i,
+                              Math.round(Number(e.target.value) || 0),
+                            )
                           }
-                          placeholder={defaultFeeLineDescription(
-                            i + 1,
-                            selectedCourseName,
-                          )}
                         />
-                      </td>
-                      <td className={SX.dataTd}>
-                        {isLast ? (
-                          <span className="tabular-nums font-medium text-slate-800">
-                            {formatInr(r.amountInr)}
-                          </span>
-                        ) : (
-                          <input
-                            type="number"
-                            min={0}
-                            className={cn(SX.input, "w-28 tabular-nums")}
-                            value={r.amountInr || ""}
-                            onChange={(e) =>
-                              updateRow(r.id, {
-                                amountInr: Math.max(
-                                  0,
-                                  Math.round(Number(e.target.value) || 0),
-                                ),
-                              })
-                            }
-                          />
-                        )}
                       </td>
                       <td className={SX.dataTd}>
                         <input
@@ -749,9 +745,10 @@ export function FeesStepPanel({
                           value={r.dueDate >= minDue ? r.dueDate : minDue}
                           onChange={(e) => {
                             const v = e.target.value;
-                            updateRow(r.id, {
-                              dueDate: !v || v < minDue ? minDue : v,
-                            });
+                            updateDueDate(
+                              r.id,
+                              !v || v < minDue ? minDue : v,
+                            );
                           }}
                         />
                       </td>
@@ -765,13 +762,12 @@ export function FeesStepPanel({
                         </button>
                       </td>
                     </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
             <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
-              Last row auto-balances to net ({formatInr(finalFromBase)}). Edit
-              amounts above it; total stays matched.
+              Installments always sum to net ({formatInr(finalFromBase)}).
+              Editing one amount redistributes the rest equally.
             </p>
           </div>
         ) : null}
@@ -839,7 +835,7 @@ export function FeesStepPanel({
           <button
             type="button"
             className={SX.btnPrimary}
-            disabled={saving || headSumExceedsNet}
+            disabled={saving}
             onClick={() => void saveFeePlan()}
           >
             {saving ? "Saving…" : "Save fee plan"}
