@@ -100,6 +100,10 @@ export type LeadPipelineFees = {
   enrollmentSentAt?: string | null;
   /** Institute bank account id (from Bank & A/c Details) chosen for this lead’s fee step. */
   feeSelectedBankAccountId?: string | null;
+  /** Generated fee-plan PDF public URL (`/uploads/fee-plans/{leadId}/...pdf`). */
+  feePlanPdfUrl?: string | null;
+  feePlanPdfFileName?: string | null;
+  feePlanPdfGeneratedAt?: string | null;
 };
 
 export type LeadPipelineScheduleClass = {

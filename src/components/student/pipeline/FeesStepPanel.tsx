@@ -13,7 +13,6 @@ import {
   buildFeePreviewLines,
   equalSplitInr,
   formatInr,
-  formatStudentCountryFromInr,
   formatUsd,
   inrToUsd,
   redistributeAfterOneAmountEdit,
@@ -177,7 +176,7 @@ export function FeesStepPanel({
     } else {
       setInstallmentRows([]);
     }
-  }, [lead.id, feesKey, minDue]);
+  }, [lead.id, feesKey, minDue, lead.pipelineMeta?.fees]);
 
   useEffect(() => {
     if (!targetExamValue && lead.targetExams?.length) {
@@ -244,6 +243,11 @@ export function FeesStepPanel({
     return Math.round(b * (1 - s / 100));
   }, [baseTotal, scholarshipPct]);
 
+  const scholarshipAmountInr = useMemo(() => {
+    const gross = Math.max(0, Math.round(baseTotal));
+    return Math.max(0, gross - finalFromBase);
+  }, [baseTotal, finalFromBase]);
+
   /** When net total changes (not on first load of rows), re-split equally. */
   useEffect(() => {
     if (installmentRows.length < 2) {
@@ -282,6 +286,33 @@ export function FeesStepPanel({
   const effectiveFinalFee =
     installmentRows.length >= 2 ? installmentSum : finalFromBase;
 
+  const normalizedInstallmentRows = useMemo(
+    () =>
+      installmentRows.length >= 2
+        ? installmentRows.map((r) => ({
+            ...r,
+            description: "",
+            amountInr: Math.max(0, Math.round(Number(r.amountInr) || 0)),
+          }))
+        : [],
+    [installmentRows],
+  );
+
+  const hasSavedFeePlan = useMemo(() => {
+    const f = (lead.pipelineMeta?.fees ?? {}) as Record<string, unknown>;
+    const hasExam =
+      typeof f.targetExamValue === "string" && f.targetExamValue.trim().length > 0;
+    const hasCourse =
+      typeof f.catalogCourseId === "string" && f.catalogCourseId.trim().length > 0;
+    const hasBase =
+      typeof f.baseTotal === "number" && Number.isFinite(f.baseTotal) && f.baseTotal > 0;
+    const hasFinal =
+      typeof f.finalFee === "number" && Number.isFinite(f.finalFee) && f.finalFee >= 0;
+    const hasInstallments =
+      Array.isArray(f.installmentRows) && f.installmentRows.length >= 2;
+    return hasExam || hasCourse || hasBase || hasFinal || hasInstallments;
+  }, [lead.pipelineMeta?.fees]);
+
   const previewLines = useMemo(
     () =>
       buildFeePreviewLines({
@@ -295,6 +326,44 @@ export function FeesStepPanel({
 
   const option3Lines = previewLines.map((L) =>
     applyGstToLine({ ...L }, fx.feeGstPercent),
+  );
+
+  const showScholarshipColumns = scholarshipAmountInr > 0;
+
+  const scholarshipByRowNo = useCallback(
+    (lines: ReturnType<typeof buildFeePreviewLines>): Record<number, number> => {
+      const out: Record<number, number> = {};
+      if (!showScholarshipColumns || scholarshipPct <= 0) {
+        for (const row of lines) out[row.no] = 0;
+        return out;
+      }
+      const pct = Math.min(100, Math.max(0, scholarshipPct));
+      const rowAfter = lines.map((r) => Math.max(0, Math.round(r.totalInr || 0)));
+      const rowAfterSum = rowAfter.reduce((a, b) => a + b, 0);
+      if (rowAfterSum <= 0 || pct >= 100) {
+        for (const row of lines) out[row.no] = 0;
+        return out;
+      }
+      const gross = Math.round(rowAfterSum / (1 - pct / 100));
+      let scholarshipTotal = Math.max(0, gross - rowAfterSum);
+      const weighted = lines.map((row, i) => {
+        const w = rowAfter[i] ?? 0;
+        if (w <= 0) return { no: row.no, base: 0, frac: 0 };
+        const exact = (scholarshipTotal * w) / rowAfterSum;
+        const base = Math.floor(exact);
+        return { no: row.no, base, frac: exact - base };
+      });
+      for (const x of weighted) out[x.no] = x.base;
+      scholarshipTotal -= weighted.reduce((a, b) => a + b.base, 0);
+      weighted
+        .slice()
+        .sort((a, b) => b.frac - a.frac || a.no - b.no)
+        .forEach((x, idx) => {
+          if (idx < scholarshipTotal) out[x.no] = (out[x.no] ?? 0) + 1;
+        });
+      return out;
+    },
+    [showScholarshipColumns, scholarshipPct],
   );
 
   const pushToast = (msg: string) => {
@@ -436,7 +505,7 @@ export function FeesStepPanel({
         targetExamValue,
         catalogCourseId: effectiveCatalogCourseId,
         courseDuration: "",
-        customCourseName: "",
+        customCourseName: selectedCourseName,
         currency,
         scholarshipPct,
         baseTotal: Math.max(0, Math.round(baseTotal)),
@@ -445,25 +514,16 @@ export function FeesStepPanel({
           installmentRows.length >= 2
             ? null
             : feeMasterDueDate.trim() || null,
-        installmentRows:
-          installmentRows.length >= 2
-            ? installmentRows.map((r) => ({
-                ...r,
-                description: "",
-                amountInr: Math.max(0, Math.round(Number(r.amountInr) || 0)),
-              }))
-            : [],
+        installmentRows: normalizedInstallmentRows,
         installmentEnabled: installmentRows.length >= 2,
         installmentCount: Math.max(installmentRows.length, 1),
         installmentAmounts:
           installmentRows.length >= 2
-            ? installmentRows.map((r) =>
-                Math.max(0, Math.round(Number(r.amountInr) || 0)),
-              )
+            ? normalizedInstallmentRows.map((r) => r.amountInr)
             : [],
         installmentDates:
           installmentRows.length >= 2
-            ? installmentRows.map((r) => r.dueDate)
+            ? normalizedInstallmentRows.map((r) => r.dueDate)
             : [],
       };
       await onPatchLead({
@@ -477,7 +537,15 @@ export function FeesStepPanel({
         ),
       });
       await refreshLead();
-      pushToast("Fee plan saved.");
+      const pdfRes = await fetch(`/api/leads/${lead.id}/fee-plan/generate`, {
+        method: "POST",
+      });
+      if (pdfRes.ok) {
+        await refreshLead();
+        pushToast("Fee plan saved. PDF generated.");
+      } else {
+        pushToast("Fee plan saved. PDF generation failed.");
+      }
     } catch (e) {
       pushToast(e instanceof Error ? e.message : "Save failed.");
     } finally {
@@ -499,69 +567,72 @@ export function FeesStepPanel({
     title: string,
     lines: ReturnType<typeof buildFeePreviewLines>,
     showGstColumn: boolean,
-  ) => (
-    <div className="mb-3 overflow-hidden rounded-none border border-slate-200 bg-white shadow-none last:mb-0">
-      <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-        <h4 className="text-[12px] font-semibold text-slate-900">{title}</h4>
-      </div>
-      <div className="overflow-x-auto">
-        <table className={cn(SX.dataTable, "w-full min-w-[640px]")}>
-          <thead>
-            <tr>
-              <th className={SX.dataTh}>No.</th>
-              <th className={SX.dataTh}>Fee Description</th>
-              <th className={SX.dataTh}>GST (Tax)</th>
-              <th className={cn(SX.dataTh, "tabular-nums")}>Amount (USD)</th>
-              <th className={SX.dataTh}>Due Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((row) => (
-              <tr key={row.no}>
-                <td className={SX.dataTd}>{row.no}</td>
-                <td className={cn(SX.dataTd, "max-w-[280px]")}>
-                  {row.description}
-                </td>
-                <td className={SX.dataTd}>
-                  {showGstColumn ? (
-                    <>
-                      {row.gstApplicable
-                        ? formatUsd(inrToUsd(row.gstAmountInr, fx.inrPerUsd))
-                        : "No"}
-                    </>
-                  ) : (
-                    "No"
-                  )}
-                </td>
-                <td className={cn(SX.dataTd, "tabular-nums font-medium")}>
-                  {formatUsd(inrToUsd(row.totalInr, fx.inrPerUsd))}
-                </td>
-                <td className={cn(SX.dataTd, "tabular-nums")}>
-                  {fmtDue(row.dueDate)}
-                </td>
+  ) => {
+    const scholarships = scholarshipByRowNo(lines);
+    return (
+      <div className="mb-3 overflow-hidden rounded-none border border-slate-200 bg-white shadow-none last:mb-0">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+          <h4 className="text-[12px] font-semibold text-slate-900">{title}</h4>
+        </div>
+        <div className="overflow-x-auto">
+          <table className={cn(SX.dataTable, "w-full min-w-[860px]")}>
+            <thead>
+              <tr>
+                <th className={SX.dataTh}>No.</th>
+                <th className={SX.dataTh}>Fee Description</th>
+                <th className={SX.dataTh}>GST (Tax)</th>
+                {showScholarshipColumns ? (
+                  <>
+                    <th className={cn(SX.dataTh, "tabular-nums")}>
+                      Amount of scholarship (INR)
+                    </th>
+                    <th className={cn(SX.dataTh, "tabular-nums")}>
+                      After Total Amount of Scholarship (INR)
+                    </th>
+                  </>
+                ) : null}
+                <th className={cn(SX.dataTh, "tabular-nums")}>Total Amount (USD)</th>
+                <th className={SX.dataTh}>Due Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {lines.map((row) => (
+                <tr key={row.no}>
+                  <td className={SX.dataTd}>{row.no}</td>
+                  <td className={cn(SX.dataTd, "max-w-[280px]")}>
+                    {row.description}
+                  </td>
+                  <td className={SX.dataTd}>
+                    {showGstColumn
+                      ? row.gstApplicable
+                        ? formatUsd(inrToUsd(row.gstAmountInr, fx.inrPerUsd))
+                        : "No"
+                      : "No"}
+                  </td>
+                  {showScholarshipColumns ? (
+                    <>
+                      <td className={cn(SX.dataTd, "tabular-nums font-medium")}>
+                        {formatInr(scholarships[row.no] ?? 0)}
+                      </td>
+                      <td className={cn(SX.dataTd, "tabular-nums font-medium")}>
+                        {formatInr(row.totalInr)}
+                      </td>
+                    </>
+                  ) : null}
+                  <td className={cn(SX.dataTd, "tabular-nums font-medium")}>
+                    {formatUsd(inrToUsd(row.totalInr, fx.inrPerUsd))}
+                  </td>
+                  <td className={cn(SX.dataTd, "tabular-nums")}>
+                    {fmtDue(row.dueDate)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div className="border-t border-slate-200 bg-slate-50/90 px-3 py-2 text-[11px] text-slate-600">
-        <span className="font-medium text-slate-700">INR: </span>
-        {lines.map((row) => (
-          <span key={row.no} className="mr-3 inline-block">
-            #{row.no} {formatInr(row.totalInr)}
-          </span>
-        ))}
-        <span className="ml-1 text-slate-500">· </span>
-        <span className="font-medium">Student ({lead.country || "—"}): </span>
-        {lines.map((row) => (
-          <span key={`s-${row.no}`} className="mr-3 inline-block">
-            #{row.no}{" "}
-            {formatStudentCountryFromInr(row.totalInr, lead.country ?? "", fx)}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+    );
+  };
 
   const isInstallments = installmentRows.length >= 2;
 
@@ -601,7 +672,7 @@ export function FeesStepPanel({
           <div
             className={cn(
               SX.section,
-              "grid grid-cols-1 gap-x-4 gap-y-3.5 p-3 sm:grid-cols-2 lg:grid-cols-3",
+              "grid grid-cols-1 gap-x-4 gap-y-3.5 p-3 sm:grid-cols-2 lg:grid-cols-5",
             )}
           >
           <label className="block text-[12px] font-medium text-slate-700">
@@ -646,10 +717,7 @@ export function FeesStepPanel({
             </select>
           </label>
           <div className="block text-[12px] font-medium text-slate-700">
-            <span>Display currency (student)</span>
-            <p className="mb-1 mt-0.5 text-[10px] font-normal leading-snug text-slate-500">
-              Used for student-facing fee labels (profile / comms).
-            </p>
+            <span>Student&apos;s currency</span>
             <select
               className={cn(SX.select, "mt-1 w-full")}
               value={currency}
@@ -707,12 +775,8 @@ export function FeesStepPanel({
                 }}
               />
             </label>
-          ) : (
-            <div className="text-[12px] text-slate-600">
-              <span className="font-medium text-slate-700">Due dates: </span>
-              per installment below (today or future).
-            </div>
-          )}
+          ) : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-none border border-slate-200 bg-slate-50 px-3 py-2.5">
@@ -841,17 +905,17 @@ export function FeesStepPanel({
               %.
             </p>
             {renderPreviewTable(
-              "Option 1 — Pay in USD (no GST)",
+              "Option 1 — Pay in USD (No GST)",
               previewLines,
               false,
             )}
             {renderPreviewTable(
-              "Option 2 — Indian NRE (no GST)",
+              "Option 2 — Indian NRE (No GST)",
               previewLines,
               false,
             )}
             {renderPreviewTable(
-              "Option 3 — Indian NRO (GST)",
+               "Option 3 — Indian NRO (GST)",
               option3Lines,
               true,
             )}
@@ -880,12 +944,26 @@ export function FeesStepPanel({
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
           <button
             type="button"
-            className={SX.btnPrimary}
+            className={cn(
+              SX.btnPrimary,
+              hasSavedFeePlan &&
+                "border-success bg-success hover:bg-[#27692a] shadow-sm shadow-emerald-900/10",
+            )}
             disabled={saving || coursesLoading || !targetExamValue}
             onClick={() => void saveFeePlan()}
           >
-            {saving ? "Saving…" : "Save fee plan"}
+            {saving ? "Saving…" : hasSavedFeePlan ? "Save again" : "Save fee plan"}
           </button>
+          {typeof feesMeta.feePlanPdfUrl === "string" && feesMeta.feePlanPdfUrl ? (
+            <a
+              href={feesMeta.feePlanPdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={SX.btnSecondary}
+            >
+              Preview PDF
+            </a>
+          ) : null}
         </div>
 
         {toast ? (
@@ -893,7 +971,6 @@ export function FeesStepPanel({
             {toast}
           </div>
         ) : null}
-        </div>
       </div>
     </PipelineStepFrame>
   );

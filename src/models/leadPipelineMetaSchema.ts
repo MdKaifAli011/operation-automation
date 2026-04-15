@@ -146,6 +146,9 @@ const FeesBlockSchema = new Schema(
     feeSentEmailAt: { type: String, default: null },
     enrollmentSentAt: { type: String, default: null },
     feeSelectedBankAccountId: { type: String, default: null },
+    feePlanPdfUrl: { type: String, default: null },
+    feePlanPdfFileName: { type: String, default: null },
+    feePlanPdfGeneratedAt: { type: String, default: null },
   },
   { _id: false },
 );
