@@ -99,7 +99,8 @@ export async function buildFeePlanPdfBytes(input: {
       font: bold,
       color: rgb(0.08, 0.12, 0.2),
     });
-    y -= 16;
+    // Keep a clear visual gap between option heading and table.
+    y -= 24;
     ensureSpace(24);
     page.drawRectangle({
       x: left,
