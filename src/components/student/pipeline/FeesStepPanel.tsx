@@ -470,8 +470,8 @@ export function FeesStepPanel({
     lines: ReturnType<typeof buildFeePreviewLines>,
     showGstColumn: boolean,
   ) => (
-    <div className="mb-3 overflow-hidden rounded-lg border border-slate-200 bg-white last:mb-0">
-      <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+    <div className="mb-3 overflow-hidden rounded-none border border-slate-200 bg-white shadow-none last:mb-0">
+      <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
         <h4 className="text-[12px] font-semibold text-slate-900">{title}</h4>
       </div>
       <div className="overflow-x-auto">
@@ -514,7 +514,7 @@ export function FeesStepPanel({
           </tbody>
         </table>
       </div>
-      <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-600">
+      <div className="border-t border-slate-200 bg-slate-50/90 px-3 py-2 text-[11px] text-slate-600">
         <span className="font-medium text-slate-700">INR: </span>
         {lines.map((row) => (
           <span key={row.no} className="mr-3 inline-block">
@@ -540,12 +540,14 @@ export function FeesStepPanel({
       <div className="space-y-3 px-2 py-3 sm:px-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-[15px] font-semibold text-slate-900">Fees</h3>
-            <p className="mt-0.5 text-[12px] text-slate-600">
+            <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">
+              Fees
+            </h3>
+            <p className="mt-0.5 text-[12px] leading-snug text-slate-600">
               GST/FX:{" "}
               <Link
                 href="/fee-management"
-                className="font-medium text-primary underline"
+                className="font-medium text-primary underline underline-offset-2"
               >
                 Fee management
               </Link>
@@ -555,14 +557,19 @@ export function FeesStepPanel({
           {instLoading ? (
             <span className="text-[11px] text-slate-500">Loading…</span>
           ) : (
-            <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-700">
+            <span className="inline-flex items-center rounded-none border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] tabular-nums text-slate-800">
               GST {fx.feeGstPercent}% · USD ₹{fx.inrPerUsd.toFixed(2)} · AED ₹
               {fx.inrPerAed.toFixed(2)}
             </span>
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={cn(
+            SX.section,
+            "grid grid-cols-1 gap-x-4 gap-y-3 p-3 sm:grid-cols-2 lg:grid-cols-3",
+          )}
+        >
           <label className="block text-[12px] font-medium text-slate-700">
             Target exam
             <select
@@ -601,9 +608,6 @@ export function FeesStepPanel({
           </label>
           <div className="block text-[12px] font-medium text-slate-700">
             <span>Display currency (student)</span>
-            <p className="mb-1 mt-0.5 text-[10px] font-normal text-slate-500">
-              Used for student-facing fee labels (profile / comms).
-            </p>
             <select
               className={cn(SX.select, "w-full")}
               value={currency}
@@ -669,8 +673,8 @@ export function FeesStepPanel({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <p className="text-[13px] text-slate-700">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-none border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <p className="text-[13px] text-slate-800">
             <span className="text-slate-600">Net: </span>
             <span className="font-semibold tabular-nums text-slate-900">
               {formatInr(finalFromBase)}
@@ -708,7 +712,7 @@ export function FeesStepPanel({
         </div>
 
         {isInstallments ? (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-none border border-slate-200 bg-white shadow-none">
             <table className={cn(SX.dataTable, "min-w-[420px]")}>
               <thead>
                 <tr>
@@ -720,62 +724,62 @@ export function FeesStepPanel({
               </thead>
               <tbody>
                 {installmentRows.map((r, i) => (
-                    <tr key={r.id}>
-                      <td className={SX.dataTd}>{i + 1}</td>
-                      <td className={SX.dataTd}>
-                        <input
-                          type="number"
-                          min={0}
-                          max={finalFromBase}
-                          className={cn(SX.input, "w-28 tabular-nums")}
-                          value={r.amountInr || ""}
-                          onChange={(e) =>
-                            updateAmountAtIndex(
-                              i,
-                              Math.round(Number(e.target.value) || 0),
-                            )
-                          }
-                        />
-                      </td>
-                      <td className={SX.dataTd}>
-                        <input
-                          type="date"
-                          min={minDue}
-                          className={cn(SX.input, "tabular-nums")}
-                          value={r.dueDate >= minDue ? r.dueDate : minDue}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            updateDueDate(
-                              r.id,
-                              !v || v < minDue ? minDue : v,
-                            );
-                          }}
-                        />
-                      </td>
-                      <td className={SX.dataTd}>
-                        <button
-                          type="button"
-                          className={cn(SX.btnGhost, "text-rose-700")}
-                          onClick={() => removeInstallment(r.id)}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
+                  <tr key={r.id}>
+                    <td className={SX.dataTd}>{i + 1}</td>
+                    <td className={SX.dataTd}>
+                      <input
+                        type="number"
+                        min={0}
+                        max={finalFromBase}
+                        className={cn(SX.input, "w-28 tabular-nums")}
+                        value={r.amountInr || ""}
+                        onChange={(e) =>
+                          updateAmountAtIndex(
+                            i,
+                            Math.round(Number(e.target.value) || 0),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className={SX.dataTd}>
+                      <input
+                        type="date"
+                        min={minDue}
+                        className={cn(SX.input, "min-w-38 tabular-nums")}
+                        value={r.dueDate >= minDue ? r.dueDate : minDue}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          updateDueDate(
+                            r.id,
+                            !v || v < minDue ? minDue : v,
+                          );
+                        }}
+                      />
+                    </td>
+                    <td className={SX.dataTd}>
+                      <button
+                        type="button"
+                        className={cn(SX.btnGhost, "text-rose-700")}
+                        onClick={() => removeInstallment(r.id)}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
-            <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+            <p className="border-t border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] leading-snug text-slate-600">
               Installments always sum to net ({formatInr(finalFromBase)}).
               Editing one amount redistributes the rest equally.
             </p>
           </div>
         ) : null}
 
-        <details className="group rounded-lg border border-slate-200 bg-white">
+        <details className="group rounded-none border border-slate-200 bg-white shadow-none">
           <summary
             className={cn(
-              "cursor-pointer list-none px-3 py-2.5 text-[13px] font-semibold text-slate-900",
+              "cursor-pointer list-none border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] font-semibold text-slate-900",
               "[&::-webkit-details-marker]:hidden",
             )}
           >
@@ -789,7 +793,7 @@ export function FeesStepPanel({
               </span>
             </span>
           </summary>
-          <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-3">
+          <div className="bg-slate-50/80 px-3 py-3">
             <p className="mb-2 text-[11px] text-slate-600">
               Options 1–2: no GST. Option 3: NRO with GST @ {fx.feeGstPercent}
               %.
@@ -843,7 +847,7 @@ export function FeesStepPanel({
         </div>
 
         {toast ? (
-          <div className="pointer-events-none fixed right-4 top-4 z-260 w-[min(92vw,360px)] rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[14px] font-semibold text-emerald-900 shadow-lg">
+          <div className="pointer-events-none fixed right-4 top-4 z-260 w-[min(92vw,360px)] rounded-none border border-emerald-300 bg-emerald-50 px-4 py-3 text-[14px] font-semibold text-emerald-900 shadow-md shadow-emerald-900/10">
             {toast}
           </div>
         ) : null}
