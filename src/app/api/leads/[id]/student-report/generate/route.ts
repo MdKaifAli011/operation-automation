@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { mkdir, unlink, writeFile } from "fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
@@ -94,6 +94,10 @@ export async function POST(req: Request, context: Ctx) {
       );
     }
 
+    const generatedAt = new Date().toISOString();
+    const logoPath = path.join(process.cwd(), "public", "logo.png");
+    const logoPngBytes = await readFile(logoPath).catch(() => null);
+
     const pdfBytes = await buildStudentReportPdfBytes({
       studentName:
         typeof lead.studentName === "string" ? lead.studentName : "Student",
@@ -101,6 +105,8 @@ export async function POST(req: Request, context: Ctx) {
         selectedRows as Parameters<typeof buildStudentReportPdfBytes>[0]["demoRows"],
       additionalNotes,
       recommendations,
+      logoPngBytes: logoPngBytes ? new Uint8Array(logoPngBytes) : null,
+      generatedAtIso: generatedAt,
     });
 
     const prevSr = meta?.studentReport as
@@ -120,8 +126,6 @@ export async function POST(req: Request, context: Ctx) {
 
     const pdfUrl = `/uploads/student-reports/${id}/${safeName}`;
     const fileName = `Progress report — ${String(lead.studentName || "Student").trim() || "Student"}.pdf`;
-    const generatedAt = new Date().toISOString();
-
     const existingMeta =
       meta && typeof meta === "object" && !Array.isArray(meta)
         ? { ...meta }
