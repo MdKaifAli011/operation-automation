@@ -873,7 +873,13 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                     refreshLead={refreshLead}
                   />
                 )}
-                {activeStep === 3 && <FeesStepPanel lead={lead} />}
+                {activeStep === 3 && (
+              <FeesStepPanel
+                lead={lead}
+                onPatchLead={patchLead}
+                refreshLead={refreshLead}
+              />
+            )}
                 {activeStep === 4 && <ScheduleStepPanel lead={lead} />}
                 <StepFooter
                   completed={completed}

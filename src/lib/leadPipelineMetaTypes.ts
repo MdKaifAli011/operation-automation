@@ -61,6 +61,15 @@ export type LeadPipelineBrochure = {
   sentEmailAt?: string | null;
 };
 
+/** One installment line on the Fees step (amounts in INR). */
+export type LeadPipelineFeeInstallmentRow = {
+  id: string;
+  description: string;
+  amountInr: number;
+  /** yyyy-mm-dd */
+  dueDate: string;
+};
+
 export type LeadPipelineFees = {
   scholarshipPct?: number;
   installmentEnabled?: boolean;
@@ -72,6 +81,17 @@ export type LeadPipelineFees = {
   baseTotal?: number;
   /** After scholarship % */
   finalFee?: number;
+  /** Selected target exam value for this fee quote */
+  targetExamValue?: string;
+  /** Catalog course id (Exam courses) when applicable */
+  catalogCourseId?: string;
+  courseDuration?: string;
+  /** Optional label when not using catalog only */
+  customCourseName?: string;
+  /** Primary due date when using a single payment line */
+  feeMasterDueDate?: string | null;
+  /** Dynamic installments; when empty, single line uses finalFee + feeMasterDueDate */
+  installmentRows?: LeadPipelineFeeInstallmentRow[];
   feeSentWhatsApp?: boolean;
   feeSentEmail?: boolean;
   enrollmentSent?: boolean;

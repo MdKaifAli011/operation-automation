@@ -6,6 +6,10 @@ import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import type { FeeRecord } from "@/lib/types";
+import {
+  DEFAULT_INSTITUTE,
+  type InstituteRecord,
+} from "@/lib/instituteProfileTypes";
 
 type FeeRow = {
   id: string;
@@ -46,6 +50,77 @@ export default function FeeManagementPage() {
   const [examSaving, setExamSaving] = useState(false);
   const [examError, setExamError] = useState<string | null>(null);
   const [examSavedAt, setExamSavedAt] = useState<string | null>(null);
+
+  const [taxInstitute, setTaxInstitute] =
+    useState<InstituteRecord>(DEFAULT_INSTITUTE);
+  const [taxLoading, setTaxLoading] = useState(true);
+  const [taxSaving, setTaxSaving] = useState(false);
+  const [taxError, setTaxError] = useState<string | null>(null);
+  const [taxSavedAt, setTaxSavedAt] = useState<string | null>(null);
+
+  const loadTaxSettings = useCallback(async () => {
+    setTaxLoading(true);
+    setTaxError(null);
+    try {
+      const res = await fetch("/api/settings/institute-profile", {
+        cache: "no-store",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        institute?: InstituteRecord;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Load failed.",
+        );
+      }
+      const inst = data.institute;
+      setTaxInstitute(
+        inst && typeof inst === "object"
+          ? { ...DEFAULT_INSTITUTE, ...inst }
+          : DEFAULT_INSTITUTE,
+      );
+    } catch (e) {
+      setTaxError(e instanceof Error ? e.message : "Load failed.");
+    } finally {
+      setTaxLoading(false);
+    }
+  }, []);
+
+  const saveTaxSettings = useCallback(async () => {
+    setTaxSaving(true);
+    setTaxError(null);
+    setTaxSavedAt(null);
+    try {
+      const res = await fetch("/api/settings/institute-profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ institute: taxInstitute }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        institute?: InstituteRecord;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Save failed.",
+        );
+      }
+      const inst = data.institute;
+      if (inst && typeof inst === "object") {
+        setTaxInstitute({ ...DEFAULT_INSTITUTE, ...inst });
+      }
+      setTaxSavedAt(new Date().toISOString());
+    } catch (e) {
+      setTaxError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setTaxSaving(false);
+    }
+  }, [taxInstitute]);
+
+  useEffect(() => {
+    void loadTaxSettings();
+  }, [loadTaxSettings]);
 
   const loadExamStructures = useCallback(async () => {
     setExamLoading(true);
@@ -212,6 +287,111 @@ export default function FeeManagementPage() {
 
   return (
     <div className={SX.pageWrap}>
+      <div className={cn(SX.outerSheet, "mb-6")}>
+        <div className={SX.toolbar}>
+          <div className="min-w-0 flex-1">
+            <h2 className={SX.toolbarTitle}>GST &amp; FX (fee preview)</h2>
+            <p className={SX.toolbarMeta}>
+              Used on student Step 3 · Fees to compute NRO GST and USD/AED display.
+              Same fields as{" "}
+              <Link
+                href="/bank-details"
+                className="font-medium text-primary underline"
+              >
+                Bank &amp; institute
+              </Link>
+              .
+            </p>
+          </div>
+          <button
+            type="button"
+            className={SX.leadBtnGreen}
+            disabled={taxSaving || taxLoading}
+            onClick={() => void saveTaxSettings()}
+          >
+            {taxSaving ? "Saving…" : "Save tax & FX"}
+          </button>
+        </div>
+        <div
+          className={cn(
+            SX.leadStatBar,
+            "border-t-0",
+            taxError && "bg-rose-50/80 text-rose-900",
+            !taxError && taxSavedAt && "bg-emerald-50/50 text-emerald-900",
+          )}
+        >
+          <span className="text-[13px]" role={taxError ? "alert" : undefined}>
+            {taxError ? (
+              taxError
+            ) : taxSavedAt ? (
+              `Saved (${new Date(taxSavedAt).toLocaleString()}).`
+            ) : taxLoading ? (
+              "Loading…"
+            ) : (
+              "Adjust GST % and reference FX rates for fee previews."
+            )}
+          </span>
+        </div>
+        {!taxLoading ? (
+          <div className="grid gap-4 border-b border-slate-200 bg-white px-4 py-4 sm:grid-cols-3">
+            <label className="block text-[12px] font-medium text-slate-700">
+              GST % (NRO)
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                className={cn(SX.input, "mt-1 tabular-nums")}
+                value={taxInstitute.feeGstPercent}
+                onChange={(e) =>
+                  setTaxInstitute((s) => ({
+                    ...s,
+                    feeGstPercent: Math.min(
+                      100,
+                      Math.max(0, Number(e.target.value) || 0),
+                    ),
+                  }))
+                }
+              />
+            </label>
+            <label className="block text-[12px] font-medium text-slate-700">
+              INR per 1 USD
+              <input
+                type="number"
+                min={0.0001}
+                step={0.01}
+                className={cn(SX.input, "mt-1 tabular-nums")}
+                value={taxInstitute.inrPerUsd}
+                onChange={(e) =>
+                  setTaxInstitute((s) => ({
+                    ...s,
+                    inrPerUsd: Math.max(0.0001, Number(e.target.value) || 0),
+                  }))
+                }
+              />
+            </label>
+            <label className="block text-[12px] font-medium text-slate-700">
+              INR per 1 AED
+              <input
+                type="number"
+                min={0.0001}
+                step={0.01}
+                className={cn(SX.input, "mt-1 tabular-nums")}
+                value={taxInstitute.inrPerAed}
+                onChange={(e) =>
+                  setTaxInstitute((s) => ({
+                    ...s,
+                    inrPerAed: Math.max(0.0001, Number(e.target.value) || 0),
+                  }))
+                }
+              />
+            </label>
+          </div>
+        ) : (
+          <p className="px-4 py-3 text-sm text-slate-600">Loading…</p>
+        )}
+      </div>
+
       <div className={SX.outerSheet} id="exam-fee-defaults">
         <div className={SX.toolbar}>
           <div className="min-w-0 flex-1">

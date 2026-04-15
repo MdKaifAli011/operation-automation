@@ -111,6 +111,16 @@ const DocumentsBlockSchema = new Schema(
   { _id: false },
 );
 
+const FeeInstallmentRowSchema = new Schema(
+  {
+    id: { type: String, default: "" },
+    description: { type: String, default: "" },
+    amountInr: { type: Number, default: 0 },
+    dueDate: { type: String, default: "" },
+  },
+  { _id: false },
+);
+
 const FeesBlockSchema = new Schema(
   {
     scholarshipPct: { type: Number, default: 0 },
@@ -123,6 +133,12 @@ const FeesBlockSchema = new Schema(
     baseTotal: { type: Number, default: 0 },
     /** Final fee after scholarship % */
     finalFee: { type: Number, default: 0 },
+    targetExamValue: { type: String, default: "" },
+    catalogCourseId: { type: String, default: "" },
+    courseDuration: { type: String, default: "" },
+    customCourseName: { type: String, default: "" },
+    feeMasterDueDate: { type: String, default: null },
+    installmentRows: { type: [FeeInstallmentRowSchema], default: [] },
     feeSentWhatsApp: { type: Boolean, default: false },
     feeSentEmail: { type: Boolean, default: false },
     enrollmentSent: { type: Boolean, default: false },

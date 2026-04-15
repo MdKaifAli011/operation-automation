@@ -362,6 +362,70 @@ export default function BankDetailsPage() {
                       disabled={formDisabled}
                     />
                   </KvRow>
+                  <KvRow label="Fee GST % (NRO / tax preview)">
+                    <input
+                      className={cn(SX.input, "max-w-[120px] tabular-nums")}
+                      name="feeGstPercent"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={institute.feeGstPercent}
+                      onChange={(e) =>
+                        setInstitute((s) => ({
+                          ...s,
+                          feeGstPercent: Math.min(
+                            100,
+                            Math.max(0, Number(e.target.value) || 0),
+                          ),
+                        }))
+                      }
+                      disabled={formDisabled}
+                    />
+                    <span className="ml-2 text-[11px] text-slate-500">
+                      Used on Step 3 fee preview (Option 3 — NRO).
+                    </span>
+                  </KvRow>
+                  <KvRow label="INR per 1 USD (FX)">
+                    <input
+                      className={cn(SX.input, "max-w-[140px] tabular-nums")}
+                      name="inrPerUsd"
+                      type="number"
+                      min={0.0001}
+                      step={0.01}
+                      value={institute.inrPerUsd}
+                      onChange={(e) =>
+                        setInstitute((s) => ({
+                          ...s,
+                          inrPerUsd: Math.max(
+                            0.0001,
+                            Number(e.target.value) || 0,
+                          ),
+                        }))
+                      }
+                      disabled={formDisabled}
+                    />
+                  </KvRow>
+                  <KvRow label="INR per 1 AED (FX)">
+                    <input
+                      className={cn(SX.input, "max-w-[140px] tabular-nums")}
+                      name="inrPerAed"
+                      type="number"
+                      min={0.0001}
+                      step={0.01}
+                      value={institute.inrPerAed}
+                      onChange={(e) =>
+                        setInstitute((s) => ({
+                          ...s,
+                          inrPerAed: Math.max(
+                            0.0001,
+                            Number(e.target.value) || 0,
+                          ),
+                        }))
+                      }
+                      disabled={formDisabled}
+                    />
+                  </KvRow>
                   <KvRow label="Address">
                     <textarea
                       className={SX.textarea}

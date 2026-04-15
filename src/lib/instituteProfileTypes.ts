@@ -18,6 +18,12 @@ export type InstituteRecord = {
   instituteName: string;
   regNo: string;
   gst: string;
+  /** GST % applied for NRO / India tax-inclusive quotes (fee step preview). */
+  feeGstPercent: number;
+  /** How many INR equal 1 USD (e.g. 83). Used to convert ₹ ↔ USD in fee previews. */
+  inrPerUsd: number;
+  /** How many INR equal 1 AED (e.g. 22.5). */
+  inrPerAed: number;
   address: string;
   city: string;
   state: string;
@@ -44,6 +50,9 @@ export const DEFAULT_INSTITUTE: InstituteRecord = {
   instituteName: "",
   regNo: "",
   gst: "",
+  feeGstPercent: 18,
+  inrPerUsd: 83,
+  inrPerAed: 22.5,
   address: "",
   city: "",
   state: "",

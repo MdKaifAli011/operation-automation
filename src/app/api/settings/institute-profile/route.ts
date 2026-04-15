@@ -17,6 +17,12 @@ function str(v: unknown, max: number): string {
   return v.trim().slice(0, max);
 }
 
+function num(v: unknown, fallback: number, min: number, max: number): number {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 function parseInstitute(raw: unknown): InstituteRecord {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ...DEFAULT_INSTITUTE };
@@ -26,6 +32,9 @@ function parseInstitute(raw: unknown): InstituteRecord {
     instituteName: str(o.instituteName, 200),
     regNo: str(o.regNo, 120),
     gst: str(o.gst, 32),
+    feeGstPercent: num(o.feeGstPercent, DEFAULT_INSTITUTE.feeGstPercent, 0, 100),
+    inrPerUsd: num(o.inrPerUsd, DEFAULT_INSTITUTE.inrPerUsd, 0.0001, 1_000_000),
+    inrPerAed: num(o.inrPerAed, DEFAULT_INSTITUTE.inrPerAed, 0.0001, 1_000_000),
     address: str(o.address, 2000),
     city: str(o.city, 120),
     state: str(o.state, 120),

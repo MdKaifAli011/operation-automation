@@ -18,3 +18,9 @@ export type DocumentsStepPanelProps = PipelineStepPanelProps & {
   onPatchLead: (updates: Partial<Lead>) => Promise<Lead>;
   refreshLead: () => Promise<void>;
 };
+
+/** Fees step: save fee plan + bank selection. */
+export type FeesStepPanelProps = PipelineStepPanelProps & {
+  onPatchLead: (updates: Partial<Lead>) => Promise<Lead>;
+  refreshLead: () => Promise<void>;
+};
