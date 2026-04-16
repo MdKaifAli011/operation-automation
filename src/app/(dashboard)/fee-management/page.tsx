@@ -33,78 +33,145 @@ type ExamCourseFeeRow = {
   updatedAt?: string | null;
 };
 
+type FeePagePayload = {
+  rows: FeeRow[];
+  leadCount: number | null;
+};
+
+type TaxPayload = {
+  institute: InstituteRecord;
+  currencyFx: CurrencyFxPublic | null;
+};
+
+function normalizeExamFeeRows(data: ExamCourseFeeRow[]) {
+  return data.map((d) => ({
+    exam: typeof d.exam === "string" ? d.exam : "",
+    courseId: typeof d.courseId === "string" ? d.courseId : "",
+    courseName: typeof d.courseName === "string" ? d.courseName : "",
+    baseFee:
+      typeof d.baseFee === "number" && Number.isFinite(d.baseFee)
+        ? d.baseFee
+        : 0,
+    notes: typeof d.notes === "string" ? d.notes : "",
+    updatedAt: d.updatedAt ?? null,
+  }));
+}
+
+const FEE_PAGE_CACHE_TTL_MS = 60_000;
+let feeRowsCache: { data: FeePagePayload; fetchedAt: number } | null = null;
+let feeRowsInFlight: Promise<FeePagePayload> | null = null;
+let feeExamStructuresCache:
+  | { data: ExamCourseFeeRow[]; fetchedAt: number }
+  | null = null;
+let feeExamStructuresInFlight: Promise<ExamCourseFeeRow[]> | null = null;
+let feeTaxCache: { data: TaxPayload; fetchedAt: number } | null = null;
+let feeTaxInFlight: Promise<TaxPayload> | null = null;
+
+function hasFreshFeeCache(ts: number) {
+  return Date.now() - ts < FEE_PAGE_CACHE_TTL_MS;
+}
+
 export default function FeeManagementPage() {
   const {
     activeValues: targetCourseOptions,
     labelFor: targetCourseLabel,
     loading: targetExamsLoading,
   } = useTargetExamOptions();
-  const [rows, setRows] = useState<FeeRow[]>([]);
-  const [leadCount, setLeadCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<FeeRow[]>(() => feeRowsCache?.data.rows ?? []);
+  const [leadCount, setLeadCount] = useState<number | null>(
+    () => feeRowsCache?.data.leadCount ?? null,
+  );
+  const [loading, setLoading] = useState(() => !feeRowsCache);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourse, setFilterCourse] = useState("");
 
-  const [examRows, setExamRows] = useState<ExamCourseFeeRow[]>([]);
-  const [examLoading, setExamLoading] = useState(true);
+  const [examRows, setExamRows] = useState<ExamCourseFeeRow[]>(
+    () => feeExamStructuresCache?.data ?? [],
+  );
+  const [examLoading, setExamLoading] = useState(() => !feeExamStructuresCache);
   const [examSaving, setExamSaving] = useState(false);
   const [examError, setExamError] = useState<string | null>(null);
   const [examSavedAt, setExamSavedAt] = useState<string | null>(null);
 
-  const [taxInstitute, setTaxInstitute] =
-    useState<InstituteRecord>(DEFAULT_INSTITUTE);
-  const [taxLoading, setTaxLoading] = useState(true);
+  const [taxInstitute, setTaxInstitute] = useState<InstituteRecord>(
+    () => feeTaxCache?.data.institute ?? DEFAULT_INSTITUTE,
+  );
+  const [taxLoading, setTaxLoading] = useState(() => !feeTaxCache);
   const [taxSaving, setTaxSaving] = useState(false);
   const [taxError, setTaxError] = useState<string | null>(null);
   const [taxSavedAt, setTaxSavedAt] = useState<string | null>(null);
-  const [currencyFx, setCurrencyFx] = useState<CurrencyFxPublic | null>(null);
+  const [currencyFx, setCurrencyFx] = useState<CurrencyFxPublic | null>(
+    () => feeTaxCache?.data.currencyFx ?? null,
+  );
   const [cronSecretInput, setCronSecretInput] = useState("");
   const [fxSyncing, setFxSyncing] = useState(false);
   const [fxSyncMsg, setFxSyncMsg] = useState<string | null>(null);
 
-  const loadTaxSettings = useCallback(async () => {
-    setTaxLoading(true);
+  const loadTaxSettings = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setTaxLoading(true);
     setTaxError(null);
     try {
-      const res = await fetch("/api/settings/institute-profile", {
-        cache: "no-store",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        institute?: InstituteRecord;
-        error?: string;
-        currencyFx?: CurrencyFxPublic | null;
-      };
-      if (!res.ok) {
-        throw new Error(
-          typeof data.error === "string" ? data.error : "Load failed.",
-        );
+      if (!force && feeTaxCache && hasFreshFeeCache(feeTaxCache.fetchedAt)) {
+        setTaxInstitute(feeTaxCache.data.institute);
+        setCurrencyFx(feeTaxCache.data.currencyFx);
+        return;
       }
-      const inst = data.institute;
-      setTaxInstitute(
-        inst && typeof inst === "object"
-          ? { ...DEFAULT_INSTITUTE, ...inst }
-          : DEFAULT_INSTITUTE,
-      );
-      const cf = data.currencyFx;
-      setCurrencyFx(
-        cf && typeof cf === "object"
-          ? {
-              istDate:
-                typeof cf.istDate === "string" ? cf.istDate : null,
-              fetchedAt:
-                typeof cf.fetchedAt === "string" ? cf.fetchedAt : null,
-              inrPerUsd:
-                typeof cf.inrPerUsd === "number" ? cf.inrPerUsd : null,
-              inrPerAed:
-                typeof cf.inrPerAed === "number" ? cf.inrPerAed : null,
-            }
-          : null,
-      );
+      if (!force && feeTaxInFlight) {
+        const cached = await feeTaxInFlight;
+        setTaxInstitute(cached.institute);
+        setCurrencyFx(cached.currencyFx);
+        return;
+      }
+      feeTaxInFlight = fetch("/api/settings/institute-profile", {
+        cache: "no-store",
+      })
+        .then(async (res) => {
+          const data = (await res.json().catch(() => ({}))) as {
+            institute?: InstituteRecord;
+            error?: string;
+            currencyFx?: CurrencyFxPublic | null;
+          };
+          if (!res.ok) {
+            throw new Error(
+              typeof data.error === "string" ? data.error : "Load failed.",
+            );
+          }
+          const inst =
+            data.institute && typeof data.institute === "object"
+              ? { ...DEFAULT_INSTITUTE, ...data.institute }
+              : DEFAULT_INSTITUTE;
+          const cf = data.currencyFx;
+          const payload = {
+            institute: inst,
+            currencyFx:
+              cf && typeof cf === "object"
+                ? {
+                    istDate: typeof cf.istDate === "string" ? cf.istDate : null,
+                    fetchedAt:
+                      typeof cf.fetchedAt === "string" ? cf.fetchedAt : null,
+                    inrPerUsd:
+                      typeof cf.inrPerUsd === "number" ? cf.inrPerUsd : null,
+                    inrPerAed:
+                      typeof cf.inrPerAed === "number" ? cf.inrPerAed : null,
+                  }
+                : null,
+          } as TaxPayload;
+          feeTaxCache = { data: payload, fetchedAt: Date.now() };
+          return payload;
+        })
+        .finally(() => {
+          feeTaxInFlight = null;
+        });
+      const payload = await feeTaxInFlight;
+      setTaxInstitute(payload.institute);
+      setCurrencyFx(payload.currencyFx);
     } catch (e) {
       setTaxError(e instanceof Error ? e.message : "Load failed.");
     } finally {
-      setTaxLoading(false);
+      if (showLoading) setTaxLoading(false);
     }
   }, []);
 
@@ -129,7 +196,12 @@ export default function FeeManagementPage() {
       }
       const inst = data.institute;
       if (inst && typeof inst === "object") {
-        setTaxInstitute({ ...DEFAULT_INSTITUTE, ...inst });
+        const normalized = { ...DEFAULT_INSTITUTE, ...inst };
+        setTaxInstitute(normalized);
+        feeTaxCache = {
+          data: { institute: normalized, currencyFx },
+          fetchedAt: Date.now(),
+        };
       }
       setTaxSavedAt(new Date().toISOString());
     } catch (e) {
@@ -211,35 +283,51 @@ export default function FeeManagementPage() {
   );
 
   useEffect(() => {
-    void loadTaxSettings();
+    if (feeTaxCache && hasFreshFeeCache(feeTaxCache.fetchedAt)) {
+      setTaxInstitute(feeTaxCache.data.institute);
+      setCurrencyFx(feeTaxCache.data.currencyFx);
+      setTaxLoading(false);
+      return;
+    }
+    void loadTaxSettings({ force: true, showLoading: !feeTaxCache });
   }, [loadTaxSettings]);
 
-  const loadExamStructures = useCallback(async () => {
-    setExamLoading(true);
+  const loadExamStructures = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setExamLoading(true);
     setExamError(null);
     try {
-      const res = await fetch("/api/exam-fee-structures", { cache: "no-store" });
-      if (!res.ok) throw new Error("Could not load exam fee defaults.");
-      const data = (await res.json()) as ExamCourseFeeRow[];
-      if (Array.isArray(data)) {
-        setExamRows(
-          data.map((d) => ({
-            exam: typeof d.exam === "string" ? d.exam : "",
-            courseId: typeof d.courseId === "string" ? d.courseId : "",
-            courseName: typeof d.courseName === "string" ? d.courseName : "",
-            baseFee:
-              typeof d.baseFee === "number" && Number.isFinite(d.baseFee)
-                ? d.baseFee
-                : 0,
-            notes: typeof d.notes === "string" ? d.notes : "",
-            updatedAt: d.updatedAt ?? null,
-          })),
-        );
+      if (
+        !force &&
+        feeExamStructuresCache &&
+        hasFreshFeeCache(feeExamStructuresCache.fetchedAt)
+      ) {
+        setExamRows(feeExamStructuresCache.data);
+        return;
       }
+      if (!force && feeExamStructuresInFlight) {
+        setExamRows(await feeExamStructuresInFlight);
+        return;
+      }
+      feeExamStructuresInFlight = fetch("/api/exam-fee-structures", {
+        cache: "no-store",
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Could not load exam fee defaults.");
+          const data = (await res.json()) as ExamCourseFeeRow[];
+          const out = Array.isArray(data) ? normalizeExamFeeRows(data) : [];
+          feeExamStructuresCache = { data: out, fetchedAt: Date.now() };
+          return out;
+        })
+        .finally(() => {
+          feeExamStructuresInFlight = null;
+        });
+      setExamRows(await feeExamStructuresInFlight);
     } catch (e) {
       setExamError(e instanceof Error ? e.message : "Load failed.");
     } finally {
-      setExamLoading(false);
+      if (showLoading) setExamLoading(false);
     }
   }, []);
 
@@ -265,19 +353,9 @@ export default function FeeManagementPage() {
       if (!res.ok) throw new Error("Save failed.");
       const data = (await res.json()) as ExamCourseFeeRow[];
       if (Array.isArray(data)) {
-        setExamRows(
-          data.map((d) => ({
-            exam: typeof d.exam === "string" ? d.exam : "",
-            courseId: typeof d.courseId === "string" ? d.courseId : "",
-            courseName: typeof d.courseName === "string" ? d.courseName : "",
-            baseFee:
-              typeof d.baseFee === "number" && Number.isFinite(d.baseFee)
-                ? d.baseFee
-                : 0,
-            notes: typeof d.notes === "string" ? d.notes : "",
-            updatedAt: d.updatedAt ?? null,
-          })),
-        );
+        const normalized = normalizeExamFeeRows(data);
+        setExamRows(normalized);
+        feeExamStructuresCache = { data: normalized, fetchedAt: Date.now() };
       }
       setExamSavedAt(new Date().toISOString());
     } catch (e) {
@@ -287,46 +365,81 @@ export default function FeeManagementPage() {
     }
   }, [examRows]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
-      const [feesRes, leadsRes] = await Promise.all([
+      if (!force && feeRowsCache && hasFreshFeeCache(feeRowsCache.fetchedAt)) {
+        setRows(feeRowsCache.data.rows);
+        setLeadCount(feeRowsCache.data.leadCount);
+        return;
+      }
+      if (!force && feeRowsInFlight) {
+        const payload = await feeRowsInFlight;
+        setRows(payload.rows);
+        setLeadCount(payload.leadCount);
+        return;
+      }
+      feeRowsInFlight = Promise.all([
         fetch("/api/fees", { cache: "no-store" }),
         fetch("/api/leads", { cache: "no-store" }),
-      ]);
-      if (!feesRes.ok) throw new Error("fees");
-      const fees = (await feesRes.json()) as FeeRecord[];
-      setRows(
-        fees.map((f) => ({
-          id: f.id,
-          student: f.studentName,
-          course: f.course,
-          total: f.total,
-          discount: f.discount,
-          final: f.final,
-          paid: f.paid,
-          emi: f.emi,
-          status: f.status,
-        })),
-      );
-      if (leadsRes.ok) {
-        const leads = (await leadsRes.json()) as unknown[];
-        setLeadCount(leads.length);
-      }
+      ])
+        .then(async ([feesRes, leadsRes]) => {
+          if (!feesRes.ok) throw new Error("fees");
+          const fees = (await feesRes.json()) as FeeRecord[];
+          const rowsOut = fees.map((f) => ({
+            id: f.id,
+            student: f.studentName,
+            course: f.course,
+            total: f.total,
+            discount: f.discount,
+            final: f.final,
+            paid: f.paid,
+            emi: f.emi,
+            status: f.status,
+          }));
+          const leadCountOut = leadsRes.ok
+            ? ((await leadsRes.json()) as unknown[]).length
+            : null;
+          const payload = { rows: rowsOut, leadCount: leadCountOut };
+          feeRowsCache = { data: payload, fetchedAt: Date.now() };
+          return payload;
+        })
+        .finally(() => {
+          feeRowsInFlight = null;
+        });
+      const payload = await feeRowsInFlight;
+      setRows(payload.rows);
+      setLeadCount(payload.leadCount);
     } catch {
       setError("Could not load fee data. Check MongoDB and try again.");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    if (feeRowsCache && hasFreshFeeCache(feeRowsCache.fetchedAt)) {
+      setRows(feeRowsCache.data.rows);
+      setLeadCount(feeRowsCache.data.leadCount);
+      setLoading(false);
+      return;
+    }
+    void load({ force: true, showLoading: !feeRowsCache });
   }, [load]);
 
   useEffect(() => {
-    void loadExamStructures();
+    if (
+      feeExamStructuresCache &&
+      hasFreshFeeCache(feeExamStructuresCache.fetchedAt)
+    ) {
+      setExamRows(feeExamStructuresCache.data);
+      setExamLoading(false);
+      return;
+    }
+    void loadExamStructures({ force: true, showLoading: !feeExamStructuresCache });
   }, [loadExamStructures]);
 
   const filtered = useMemo(() => {

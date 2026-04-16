@@ -31,6 +31,19 @@ type ExamGroup = {
   updatedAt?: string | null;
 };
 
+const COURSE_BROCHURE_CACHE_TTL_MS = 60_000;
+let courseBrochureCache: { data: ExamGroup[]; fetchedAt: number } | null = null;
+let courseBrochureInFlight: Promise<ExamGroup[]> | null = null;
+
+function hasFreshCourseBrochureCache() {
+  if (!courseBrochureCache) return false;
+  return Date.now() - courseBrochureCache.fetchedAt < COURSE_BROCHURE_CACHE_TTL_MS;
+}
+
+function writeCourseBrochureCache(data: ExamGroup[]) {
+  courseBrochureCache = { data, fetchedAt: Date.now() };
+}
+
 function mapServerRow(raw: unknown): ExamGroup | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -104,8 +117,10 @@ function brochureOpenHref(b: BrochureItem): string | null {
 
 export default function CourseBrochurePage() {
   const { activeValues, labelFor, loading: examsLoading } = useTargetExamOptions();
-  const [groups, setGroups] = useState<ExamGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState<ExamGroup[]>(
+    () => courseBrochureCache?.data ?? [],
+  );
+  const [loading, setLoading] = useState(() => !courseBrochureCache);
   const [savingBrochureKey, setSavingBrochureKey] = useState<string | null>(
     null,
   );
@@ -119,10 +134,21 @@ export default function CourseBrochurePage() {
   const groupsRef = useRef(groups);
   groupsRef.current = groups;
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
+      if (!force && hasFreshCourseBrochureCache() && courseBrochureCache) {
+        setGroups(courseBrochureCache.data);
+        return;
+      }
+      if (!force && courseBrochureInFlight) {
+        setGroups(await courseBrochureInFlight);
+        return;
+      }
+      courseBrochureInFlight = (async () => {
       const [examRes, brochureRes] = await Promise.all([
         fetch("/api/settings/target-exams", { cache: "no-store" }),
         fetch("/api/exam-brochure-templates", { cache: "no-store" }),
@@ -140,9 +166,8 @@ export default function CourseBrochurePage() {
       const merged = unionExamOrder(exams, list);
       const examKeys =
         merged.length > 0 ? merged : [...new Set(list.map((g) => g.exam))];
-      if (examKeys.length === 0) {
-        setGroups([]);
-      } else {
+      let next: ExamGroup[] = [];
+      if (examKeys.length !== 0) {
         const order = new Map(examKeys.map((e, i) => [e, i]));
         const sorted = [...list].sort((a, b) => {
           const ae = order.get(a.exam) ?? 99;
@@ -150,17 +175,29 @@ export default function CourseBrochurePage() {
           if (ae !== be) return ae - be;
           return a.courseName.localeCompare(b.courseName);
         });
-        setGroups(sorted.filter((g) => examKeys.includes(g.exam)));
+        next = sorted.filter((g) => examKeys.includes(g.exam));
       }
+      writeCourseBrochureCache(next);
+      return next;
+      })().finally(() => {
+        courseBrochureInFlight = null;
+      });
+      setGroups(await courseBrochureInFlight);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed.");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!examsLoading) void load();
+    if (examsLoading) return;
+    if (hasFreshCourseBrochureCache() && courseBrochureCache) {
+      setGroups(courseBrochureCache.data);
+      setLoading(false);
+      return;
+    }
+    void load({ force: true, showLoading: !courseBrochureCache });
   }, [examsLoading, load]);
 
   const persistExamBrochure = useCallback(
@@ -205,6 +242,7 @@ export default function CourseBrochurePage() {
         const data = Array.isArray(raw)
           ? raw.map(mapServerRow).filter((x): x is ExamGroup => Boolean(x))
           : [];
+        writeCourseBrochureCache(data);
         setGroups(data);
         setLastSaved({
           exam,
@@ -350,7 +388,7 @@ export default function CourseBrochurePage() {
             <button
               type="button"
               className="underline"
-              onClick={() => void load()}
+      onClick={() => void load({ force: true, showLoading: true })}
             >
               Retry
             </button>

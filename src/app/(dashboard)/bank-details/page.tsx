@@ -19,6 +19,25 @@ type Snapshot = {
   defaultFeeBankAccountId: string | null;
 };
 
+type BankPagePayload = Snapshot & {
+  instituteUpdatedAt: string | null;
+  bankUpdatedAt: string | null;
+  currencyFx: CurrencyFxPublic | null;
+};
+
+const BANK_PAGE_CACHE_TTL_MS = 60_000;
+let bankPageCache: { data: BankPagePayload; fetchedAt: number } | null = null;
+let bankPageInFlight: Promise<BankPagePayload> | null = null;
+
+function hasFreshBankPageCache() {
+  if (!bankPageCache) return false;
+  return Date.now() - bankPageCache.fetchedAt < BANK_PAGE_CACHE_TTL_MS;
+}
+
+function writeBankPageCache(data: BankPagePayload) {
+  bankPageCache = { data, fetchedAt: Date.now() };
+}
+
 function formatSavedAt(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -29,22 +48,39 @@ function formatSavedAt(iso: string | null): string {
 }
 
 export default function BankDetailsPage() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !bankPageCache);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [institute, setInstitute] = useState<InstituteRecord>(DEFAULT_INSTITUTE);
-  const [bankAccounts, setBankAccounts] = useState<BankAccountRecord[]>([]);
+  const [institute, setInstitute] = useState<InstituteRecord>(
+    () => bankPageCache?.data.institute ?? DEFAULT_INSTITUTE,
+  );
+  const [bankAccounts, setBankAccounts] = useState<BankAccountRecord[]>(
+    () => bankPageCache?.data.bankAccounts ?? [],
+  );
   const [defaultFeeBankAccountId, setDefaultFeeBankAccountId] = useState<
     string | null
-  >(null);
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [instituteUpdatedAt, setInstituteUpdatedAt] = useState<string | null>(
-    null,
+  >(() => bankPageCache?.data.defaultFeeBankAccountId ?? null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(
+    () =>
+      bankPageCache
+        ? {
+            institute: { ...bankPageCache.data.institute },
+            bankAccounts: bankPageCache.data.bankAccounts.map((a) => ({ ...a })),
+            defaultFeeBankAccountId: bankPageCache.data.defaultFeeBankAccountId,
+          }
+        : null,
   );
-  const [bankUpdatedAt, setBankUpdatedAt] = useState<string | null>(null);
-  const [currencyFx, setCurrencyFx] = useState<CurrencyFxPublic | null>(null);
+  const [instituteUpdatedAt, setInstituteUpdatedAt] = useState<string | null>(
+    () => bankPageCache?.data.instituteUpdatedAt ?? null,
+  );
+  const [bankUpdatedAt, setBankUpdatedAt] = useState<string | null>(
+    () => bankPageCache?.data.bankUpdatedAt ?? null,
+  );
+  const [currencyFx, setCurrencyFx] = useState<CurrencyFxPublic | null>(
+    () => bankPageCache?.data.currencyFx ?? null,
+  );
 
   const applyInstitutePayload = useCallback(
     (data: Record<string, unknown>) => {
@@ -84,11 +120,22 @@ export default function BankDetailsPage() {
     setBankUpdatedAt(typeof u === "string" ? u : null);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    void Promise.all([
+  const applyResolvedPayload = useCallback((payload: BankPagePayload) => {
+    setInstitute({ ...payload.institute });
+    setBankAccounts(payload.bankAccounts.map((a) => ({ ...a })));
+    setDefaultFeeBankAccountId(payload.defaultFeeBankAccountId);
+    setInstituteUpdatedAt(payload.instituteUpdatedAt);
+    setBankUpdatedAt(payload.bankUpdatedAt);
+    setCurrencyFx(payload.currencyFx);
+    setSnapshot({
+      institute: { ...payload.institute },
+      bankAccounts: payload.bankAccounts.map((a) => ({ ...a })),
+      defaultFeeBankAccountId: payload.defaultFeeBankAccountId,
+    });
+  }, []);
+
+  const fetchBankPagePayload = useCallback(async () => {
+    const [instData, bankData] = await Promise.all([
       fetch("/api/settings/institute-profile", { cache: "no-store" }).then(
         async (res) => {
           const data = (await res.json().catch(() => ({}))) as Record<
@@ -121,24 +168,56 @@ export default function BankDetailsPage() {
           return data;
         },
       ),
-    ])
-      .then(([instData, bankData]) => {
+    ]);
+    const inst = instData.institute;
+    const banks = bankData.bankAccounts;
+    const defId = bankData.defaultFeeBankAccountId;
+    const cf = instData.currencyFx as CurrencyFxPublic | null | undefined;
+    return {
+      institute:
+        inst && typeof inst === "object" && !Array.isArray(inst)
+          ? { ...DEFAULT_INSTITUTE, ...(inst as InstituteRecord) }
+          : { ...DEFAULT_INSTITUTE },
+      bankAccounts: Array.isArray(banks)
+        ? (banks as BankAccountRecord[]).map((a) => ({ ...a }))
+        : [],
+      defaultFeeBankAccountId: normBankAccountId(defId) || null,
+      instituteUpdatedAt:
+        typeof instData.updatedAt === "string" ? instData.updatedAt : null,
+      bankUpdatedAt: typeof bankData.updatedAt === "string" ? bankData.updatedAt : null,
+      currencyFx:
+        cf && typeof cf === "object"
+          ? {
+              istDate: typeof cf.istDate === "string" ? cf.istDate : null,
+              fetchedAt: typeof cf.fetchedAt === "string" ? cf.fetchedAt : null,
+              inrPerUsd: typeof cf.inrPerUsd === "number" ? cf.inrPerUsd : null,
+              inrPerAed: typeof cf.inrPerAed === "number" ? cf.inrPerAed : null,
+            }
+          : null,
+    } as BankPagePayload;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (hasFreshBankPageCache() && bankPageCache) {
+      applyResolvedPayload(bankPageCache.data);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setLoading(!bankPageCache);
+    setLoadError(null);
+    if (!bankPageInFlight) {
+      bankPageInFlight = fetchBankPagePayload().finally(() => {
+        bankPageInFlight = null;
+      });
+    }
+    void bankPageInFlight
+      .then((payload) => {
         if (cancelled) return;
-        applyInstitutePayload(instData);
-        applyBankPayload(bankData);
-        const inst = instData.institute;
-        const banks = bankData.bankAccounts;
-        const defId = bankData.defaultFeeBankAccountId;
-        setSnapshot({
-          institute:
-            inst && typeof inst === "object" && !Array.isArray(inst)
-              ? { ...DEFAULT_INSTITUTE, ...(inst as InstituteRecord) }
-              : { ...DEFAULT_INSTITUTE },
-          bankAccounts: Array.isArray(banks)
-            ? (banks as BankAccountRecord[]).map((a) => ({ ...a }))
-            : [],
-          defaultFeeBankAccountId: normBankAccountId(defId) || null,
-        });
+        writeBankPageCache(payload);
+        applyResolvedPayload(payload);
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -151,7 +230,7 @@ export default function BankDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyInstitutePayload, applyBankPayload]);
+  }, [applyResolvedPayload, fetchBankPagePayload]);
 
   const save = useCallback(async () => {
     setSaveError(null);
@@ -199,7 +278,7 @@ export default function BankDetailsPage() {
       const inst = dataI.institute;
       const banks = dataB.bankAccounts;
       const defId = dataB.defaultFeeBankAccountId;
-      setSnapshot({
+      const nextSnapshot = {
         institute:
           inst && typeof inst === "object" && !Array.isArray(inst)
             ? { ...DEFAULT_INSTITUTE, ...(inst as InstituteRecord) }
@@ -208,6 +287,16 @@ export default function BankDetailsPage() {
           ? (banks as BankAccountRecord[]).map((a) => ({ ...a }))
           : [],
         defaultFeeBankAccountId: normBankAccountId(defId) || null,
+      };
+      setSnapshot(nextSnapshot);
+      writeBankPageCache({
+        ...nextSnapshot,
+        instituteUpdatedAt:
+          typeof dataI.updatedAt === "string" ? dataI.updatedAt : instituteUpdatedAt,
+        bankUpdatedAt:
+          typeof dataB.updatedAt === "string" ? dataB.updatedAt : bankUpdatedAt,
+        currencyFx:
+          (dataI.currencyFx as CurrencyFxPublic | null | undefined) ?? currencyFx,
       });
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : "Could not save.");
@@ -218,8 +307,11 @@ export default function BankDetailsPage() {
     applyInstitutePayload,
     applyBankPayload,
     bankAccounts,
+    bankUpdatedAt,
+    currencyFx,
     defaultFeeBankAccountId,
     institute,
+    instituteUpdatedAt,
   ]);
 
   const resetToSnapshot = useCallback(() => {

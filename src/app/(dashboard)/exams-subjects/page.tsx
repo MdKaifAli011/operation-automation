@@ -28,22 +28,52 @@ function uniqueExamValue(name: string, rows: TargetExamOption[]): string {
   return v;
 }
 
+const EXAMS_SUBJECTS_CACHE_TTL_MS = 60_000;
+let examsSettingsCache:
+  | { data: { exams: TargetExamOption[]; updatedAt: string | null }; fetchedAt: number }
+  | null = null;
+let examsSettingsInFlight:
+  | Promise<{ exams: TargetExamOption[]; updatedAt: string | null }>
+  | null = null;
+let examSubjectsCatalogCache:
+  | { data: ExamSubjectEntry[]; fetchedAt: number }
+  | null = null;
+let examSubjectsCatalogInFlight: Promise<ExamSubjectEntry[]> | null = null;
+let examsSubjectsFacultiesCache:
+  | { data: Faculty[]; fetchedAt: number }
+  | null = null;
+let examsSubjectsFacultiesInFlight: Promise<Faculty[]> | null = null;
+
+function hasFreshExamsSubjectsCache(ts: number) {
+  return Date.now() - ts < EXAMS_SUBJECTS_CACHE_TTL_MS;
+}
+
 export default function ExamsAndSubjectsPage() {
-  const [exams, setExams] = useState<TargetExamOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [exams, setExams] = useState<TargetExamOption[]>(
+    () => examsSettingsCache?.data.exams ?? [],
+  );
+  const [loading, setLoading] = useState(() => !examsSettingsCache);
   const [examBusy, setExamBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null);
+  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(
+    () => examsSettingsCache?.data.updatedAt ?? null,
+  );
 
-  const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [subjectsLoading, setSubjectsLoading] = useState(true);
+  const [faculties, setFaculties] = useState<Faculty[]>(
+    () => examsSubjectsFacultiesCache?.data ?? [],
+  );
+  const [subjectsLoading, setSubjectsLoading] = useState(
+    () => !examsSubjectsFacultiesCache,
+  );
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
 
   const [catalogSubjects, setCatalogSubjects] = useState<ExamSubjectEntry[]>(
-    [],
+    () => examSubjectsCatalogCache?.data ?? [],
   );
-  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogLoading, setCatalogLoading] = useState(
+    () => !examSubjectsCatalogCache,
+  );
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [catalogMessage, setCatalogMessage] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -97,82 +127,167 @@ export default function ExamsAndSubjectsPage() {
     [catalogSubjects],
   );
 
-  const loadExams = useCallback(async () => {
-    setLoading(true);
+  const loadExams = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/settings/target-exams", {
+      if (!force && examsSettingsCache && hasFreshExamsSubjectsCache(examsSettingsCache.fetchedAt)) {
+        setExams(examsSettingsCache.data.exams);
+        setServerUpdatedAt(examsSettingsCache.data.updatedAt);
+        return;
+      }
+      if (!force && examsSettingsInFlight) {
+        const out = await examsSettingsInFlight;
+        setExams(out.exams);
+        setServerUpdatedAt(out.updatedAt);
+        return;
+      }
+      examsSettingsInFlight = fetch("/api/settings/target-exams", {
         cache: "no-store",
-      });
-      if (!res.ok) throw new Error("Load failed");
-      const data = (await res.json()) as {
-        exams?: unknown;
-        updatedAt?: string | null;
-      };
-      setExams(normalizeTargetExams(data.exams));
-      setServerUpdatedAt(
-        typeof data.updatedAt === "string" ? data.updatedAt : null,
-      );
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Load failed");
+          const data = (await res.json()) as {
+            exams?: unknown;
+            updatedAt?: string | null;
+          };
+          const out = {
+            exams: normalizeTargetExams(data.exams),
+            updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
+          };
+          examsSettingsCache = { data: out, fetchedAt: Date.now() };
+          return out;
+        })
+        .finally(() => {
+          examsSettingsInFlight = null;
+        });
+      const out = await examsSettingsInFlight;
+      setExams(out.exams);
+      setServerUpdatedAt(out.updatedAt);
     } catch {
       setError("Could not load target course settings.");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
-  const loadFaculties = useCallback(async () => {
-    setSubjectsLoading(true);
+  const loadFaculties = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setSubjectsLoading(true);
     setSubjectsError(null);
     try {
-      const res = await fetch("/api/faculties", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed");
-      const data = (await res.json()) as Faculty[];
-      setFaculties(Array.isArray(data) ? data : []);
+      if (
+        !force &&
+        examsSubjectsFacultiesCache &&
+        hasFreshExamsSubjectsCache(examsSubjectsFacultiesCache.fetchedAt)
+      ) {
+        setFaculties(examsSubjectsFacultiesCache.data);
+        return;
+      }
+      if (!force && examsSubjectsFacultiesInFlight) {
+        setFaculties(await examsSubjectsFacultiesInFlight);
+        return;
+      }
+      examsSubjectsFacultiesInFlight = fetch("/api/faculties", { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Failed");
+          const data = (await res.json()) as Faculty[];
+          const out = Array.isArray(data) ? data : [];
+          examsSubjectsFacultiesCache = { data: out, fetchedAt: Date.now() };
+          return out;
+        })
+        .finally(() => {
+          examsSubjectsFacultiesInFlight = null;
+        });
+      setFaculties(await examsSubjectsFacultiesInFlight);
     } catch {
       setSubjectsError("Could not load faculties for subject directory.");
       setFaculties([]);
     } finally {
-      setSubjectsLoading(false);
+      if (showLoading) setSubjectsLoading(false);
     }
   }, []);
 
-  const loadCatalog = useCallback(async () => {
-    setCatalogLoading(true);
+  const loadCatalog = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setCatalogLoading(true);
     setCatalogError(null);
     try {
-      const res = await fetch("/api/settings/exam-subjects", {
-        cache: "no-store",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        subjects?: unknown;
-        error?: string;
-      };
-      if (!res.ok) {
-        setCatalogError(
-          typeof data.error === "string" ? data.error : "Load failed",
-        );
-        setCatalogSubjects([]);
+      if (
+        !force &&
+        examSubjectsCatalogCache &&
+        hasFreshExamsSubjectsCache(examSubjectsCatalogCache.fetchedAt)
+      ) {
+        setCatalogSubjects(examSubjectsCatalogCache.data);
         return;
       }
-      setCatalogSubjects(normalizeExamSubjectEntries(data.subjects));
-    } catch {
-      setCatalogError("Could not load subject catalog.");
+      if (!force && examSubjectsCatalogInFlight) {
+        setCatalogSubjects(await examSubjectsCatalogInFlight);
+        return;
+      }
+      examSubjectsCatalogInFlight = fetch("/api/settings/exam-subjects", {
+        cache: "no-store",
+      })
+        .then(async (res) => {
+          const data = (await res.json().catch(() => ({}))) as {
+            subjects?: unknown;
+            error?: string;
+          };
+          if (!res.ok) {
+            throw new Error(typeof data.error === "string" ? data.error : "Load failed");
+          }
+          const out = normalizeExamSubjectEntries(data.subjects);
+          examSubjectsCatalogCache = { data: out, fetchedAt: Date.now() };
+          return out;
+        })
+        .finally(() => {
+          examSubjectsCatalogInFlight = null;
+        });
+      setCatalogSubjects(await examSubjectsCatalogInFlight);
+    } catch (e) {
+      setCatalogError(e instanceof Error ? e.message : "Could not load subject catalog.");
       setCatalogSubjects([]);
     } finally {
-      setCatalogLoading(false);
+      if (showLoading) setCatalogLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadExams();
+    if (examsSettingsCache && hasFreshExamsSubjectsCache(examsSettingsCache.fetchedAt)) {
+      setExams(examsSettingsCache.data.exams);
+      setServerUpdatedAt(examsSettingsCache.data.updatedAt);
+      setLoading(false);
+      return;
+    }
+    void loadExams({ force: true, showLoading: !examsSettingsCache });
   }, [loadExams]);
 
   useEffect(() => {
-    void loadFaculties();
+    if (
+      examsSubjectsFacultiesCache &&
+      hasFreshExamsSubjectsCache(examsSubjectsFacultiesCache.fetchedAt)
+    ) {
+      setFaculties(examsSubjectsFacultiesCache.data);
+      setSubjectsLoading(false);
+      return;
+    }
+    void loadFaculties({ force: true, showLoading: !examsSubjectsFacultiesCache });
   }, [loadFaculties]);
 
   useEffect(() => {
-    void loadCatalog();
+    if (
+      examSubjectsCatalogCache &&
+      hasFreshExamsSubjectsCache(examSubjectsCatalogCache.fetchedAt)
+    ) {
+      setCatalogSubjects(examSubjectsCatalogCache.data);
+      setCatalogLoading(false);
+      return;
+    }
+    void loadCatalog({ force: true, showLoading: !examSubjectsCatalogCache });
   }, [loadCatalog]);
 
   const persistExams = async (next: TargetExamOption[]) => {
@@ -196,7 +311,15 @@ export default function ExamsAndSubjectsPage() {
         );
         return false;
       }
-      setExams(normalizeTargetExams(data.exams));
+      const normalized = normalizeTargetExams(data.exams);
+      setExams(normalized);
+      examsSettingsCache = {
+        data: {
+          exams: normalized,
+          updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
+        },
+        fetchedAt: Date.now(),
+      };
       setServerUpdatedAt(
         typeof data.updatedAt === "string" ? data.updatedAt : null,
       );
@@ -230,9 +353,11 @@ export default function ExamsAndSubjectsPage() {
         );
         return false;
       }
-      setCatalogSubjects(normalizeExamSubjectEntries(data.subjects));
+      const normalized = normalizeExamSubjectEntries(data.subjects);
+      setCatalogSubjects(normalized);
+      examSubjectsCatalogCache = { data: normalized, fetchedAt: Date.now() };
       setCatalogMessage("Subjects saved.");
-      void loadFaculties();
+      void loadFaculties({ force: true });
       return true;
     } catch {
       setCatalogError("Network error.");
@@ -806,7 +931,7 @@ export default function ExamsAndSubjectsPage() {
             <button
               type="button"
               className="underline"
-              onClick={() => void loadFaculties()}
+              onClick={() => void loadFaculties({ force: true, showLoading: true })}
             >
               Retry
             </button>

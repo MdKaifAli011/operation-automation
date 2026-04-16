@@ -9,6 +9,52 @@ import { cn } from "@/lib/cn";
 import { formatTargetExams } from "@/lib/lead-display";
 import type { FeeRecord, Lead } from "@/lib/types";
 
+type EnrollPayload = {
+  leads: Lead[];
+  fees: FeeRecord[];
+};
+
+const ENROLL_PAGE_CACHE_TTL_MS = 60_000;
+let enrollPageCache: { data: EnrollPayload; fetchedAt: number } | null = null;
+let enrollPageInFlight: Promise<EnrollPayload> | null = null;
+
+function hasFreshEnrollPageCache() {
+  if (!enrollPageCache) return false;
+  return Date.now() - enrollPageCache.fetchedAt < ENROLL_PAGE_CACHE_TTL_MS;
+}
+
+function writeEnrollPageCache(data: EnrollPayload) {
+  enrollPageCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchEnrollPageFromApi() {
+  const [lr, fr] = await Promise.all([fetch("/api/leads"), fetch("/api/fees")]);
+  if (!lr.ok) throw new Error("Could not load leads.");
+  if (!fr.ok) throw new Error("Could not load fee records.");
+  const leadData = (await lr.json()) as Lead[];
+  const feeData = (await fr.json()) as FeeRecord[];
+  return {
+    leads: Array.isArray(leadData) ? leadData : [],
+    fees: Array.isArray(feeData) ? feeData : [],
+  };
+}
+
+async function getEnrollPageCached(force = false) {
+  if (!force && hasFreshEnrollPageCache() && enrollPageCache) {
+    return enrollPageCache.data;
+  }
+  if (!force && enrollPageInFlight) return enrollPageInFlight;
+  enrollPageInFlight = fetchEnrollPageFromApi()
+    .then((data) => {
+      writeEnrollPageCache(data);
+      return data;
+    })
+    .finally(() => {
+      enrollPageInFlight = null;
+    });
+  return enrollPageInFlight;
+}
+
 function safeFormatLeadDate(iso: string): string {
   try {
     return format(parseISO(iso), "dd/MM/yyyy");
@@ -23,36 +69,37 @@ export default function EnrollStudentPage() {
     labelFor: targetExamLabel,
     loading: targetExamsLoading,
   } = useTargetExamOptions();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [fees, setFees] = useState<FeeRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [leads, setLeads] = useState<Lead[]>(() => enrollPageCache?.data.leads ?? []);
+  const [fees, setFees] = useState<FeeRecord[]>(() => enrollPageCache?.data.fees ?? []);
+  const [loading, setLoading] = useState(() => !enrollPageCache);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
-      const [lr, fr] = await Promise.all([
-        fetch("/api/leads"),
-        fetch("/api/fees"),
-      ]);
-      if (!lr.ok) throw new Error("Could not load leads.");
-      if (!fr.ok) throw new Error("Could not load fee records.");
-      const leadData = (await lr.json()) as Lead[];
-      const feeData = (await fr.json()) as FeeRecord[];
-      setLeads(Array.isArray(leadData) ? leadData : []);
-      setFees(Array.isArray(feeData) ? feeData : []);
+      const data = await getEnrollPageCached(force);
+      setLeads(data.leads);
+      setFees(data.fees);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load.");
       setLeads([]);
       setFees([]);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    if (hasFreshEnrollPageCache() && enrollPageCache) {
+      setLeads(enrollPageCache.data.leads);
+      setFees(enrollPageCache.data.fees);
+      setLoading(false);
+      return;
+    }
+    void load({ force: true, showLoading: !enrollPageCache });
   }, [load]);
 
   const enrolled = useMemo(
@@ -145,7 +192,7 @@ export default function EnrollStudentPage() {
             <button
               type="button"
               className="font-medium underline"
-              onClick={() => void load()}
+              onClick={() => void load({ force: true, showLoading: true })}
             >
               Retry
             </button>

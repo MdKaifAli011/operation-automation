@@ -9,40 +9,97 @@ import {
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
+type LeadSourcesPayload = {
+  sources: LeadSourceOption[];
+  updatedAt: string | null;
+};
+
+const LEAD_SOURCES_PAGE_CACHE_TTL_MS = 60_000;
+let leadSourcesPageCache: { data: LeadSourcesPayload; fetchedAt: number } | null =
+  null;
+let leadSourcesPageInFlight: Promise<LeadSourcesPayload> | null = null;
+
+function hasFreshLeadSourcesPageCache() {
+  if (!leadSourcesPageCache) return false;
+  return Date.now() - leadSourcesPageCache.fetchedAt < LEAD_SOURCES_PAGE_CACHE_TTL_MS;
+}
+
+function writeLeadSourcesPageCache(data: LeadSourcesPayload) {
+  leadSourcesPageCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchLeadSourcesPageFromApi() {
+  const res = await fetch("/api/settings/lead-sources", {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Load failed");
+  const data = (await res.json()) as {
+    sources?: unknown;
+    updatedAt?: string | null;
+  };
+  return {
+    sources: normalizeLeadSources(data.sources),
+    updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
+  };
+}
+
+async function getLeadSourcesPageCached(force = false) {
+  if (!force && hasFreshLeadSourcesPageCache() && leadSourcesPageCache) {
+    return leadSourcesPageCache.data;
+  }
+  if (!force && leadSourcesPageInFlight) return leadSourcesPageInFlight;
+  leadSourcesPageInFlight = fetchLeadSourcesPageFromApi()
+    .then((data) => {
+      writeLeadSourcesPageCache(data);
+      return data;
+    })
+    .finally(() => {
+      leadSourcesPageInFlight = null;
+    });
+  return leadSourcesPageInFlight;
+}
+
 export default function LeadSourcesSettingsPage() {
-  const [sources, setSources] = useState<LeadSourceOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sources, setSources] = useState<LeadSourceOption[]>(
+    () => leadSourcesPageCache?.data.sources ?? [],
+  );
+  const [loading, setLoading] = useState(() => !leadSourcesPageCache);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null);
+  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(
+    () => leadSourcesPageCache?.data.updatedAt ?? null,
+  );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const applyPayload = useCallback((payload: LeadSourcesPayload) => {
+    writeLeadSourcesPageCache(payload);
+    setSources(payload.sources);
+    setServerUpdatedAt(payload.updatedAt);
+  }, []);
+
+  const load = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/settings/lead-sources", {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("Load failed");
-      const data = (await res.json()) as {
-        sources?: unknown;
-        updatedAt?: string | null;
-      };
-      setSources(normalizeLeadSources(data.sources));
-      setServerUpdatedAt(
-        typeof data.updatedAt === "string" ? data.updatedAt : null,
-      );
+      const payload = await getLeadSourcesPageCached(force);
+      applyPayload(payload);
     } catch {
       setError("Could not load settings.");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  }, []);
+  }, [applyPayload]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (hasFreshLeadSourcesPageCache() && leadSourcesPageCache) {
+      applyPayload(leadSourcesPageCache.data);
+      setLoading(false);
+      return;
+    }
+    void load({ force: true, showLoading: !leadSourcesPageCache });
+  }, [load, applyPayload]);
 
   const save = async () => {
     setSaving(true);
@@ -65,10 +122,10 @@ export default function LeadSourcesSettingsPage() {
         );
         return;
       }
-      setSources(normalizeLeadSources(data.sources));
-      setServerUpdatedAt(
-        typeof data.updatedAt === "string" ? data.updatedAt : null,
-      );
+      applyPayload({
+        sources: normalizeLeadSources(data.sources),
+        updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
+      });
       setMessage("Saved.");
     } catch {
       setError("Network error.");
@@ -103,10 +160,10 @@ export default function LeadSourcesSettingsPage() {
         );
         return;
       }
-      setSources(normalizeLeadSources(data.sources));
-      setServerUpdatedAt(
-        typeof data.updatedAt === "string" ? data.updatedAt : null,
-      );
+      applyPayload({
+        sources: normalizeLeadSources(data.sources),
+        updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
+      });
       setMessage("Restored defaults.");
     } catch {
       setError("Network error.");

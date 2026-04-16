@@ -14,12 +14,101 @@ import {
   type ExamCourseEntry,
 } from "@/lib/examCourseTypes";
 
-export default function ExamCoursesPage() {
-  const [exams, setExams] = useState<TargetExamOption[]>([]);
-  const [examsLoading, setExamsLoading] = useState(true);
+const EXAM_COURSES_PAGE_CACHE_TTL_MS = 60_000;
+let examCoursesExamsCache:
+  | { data: TargetExamOption[]; fetchedAt: number }
+  | null = null;
+let examCoursesExamsInFlight: Promise<TargetExamOption[]> | null = null;
+let examCoursesCatalogCache:
+  | { data: ExamCourseEntry[]; fetchedAt: number }
+  | null = null;
+let examCoursesCatalogInFlight: Promise<ExamCourseEntry[]> | null = null;
 
-  const [catalogCourses, setCatalogCourses] = useState<ExamCourseEntry[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(true);
+function hasFreshExamCoursesExamsCache() {
+  if (!examCoursesExamsCache) return false;
+  return Date.now() - examCoursesExamsCache.fetchedAt < EXAM_COURSES_PAGE_CACHE_TTL_MS;
+}
+
+function hasFreshExamCoursesCatalogCache() {
+  if (!examCoursesCatalogCache) return false;
+  return Date.now() - examCoursesCatalogCache.fetchedAt < EXAM_COURSES_PAGE_CACHE_TTL_MS;
+}
+
+function writeExamCoursesExamsCache(data: TargetExamOption[]) {
+  examCoursesExamsCache = { data, fetchedAt: Date.now() };
+}
+
+function writeExamCoursesCatalogCache(data: ExamCourseEntry[]) {
+  examCoursesCatalogCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchExamCoursesExamsFromApi() {
+  const res = await fetch("/api/settings/target-exams", {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("load");
+  const data = (await res.json()) as { exams?: unknown };
+  return normalizeTargetExams(data.exams);
+}
+
+async function getExamCoursesExamsCached(force = false) {
+  if (!force && hasFreshExamCoursesExamsCache() && examCoursesExamsCache) {
+    return examCoursesExamsCache.data;
+  }
+  if (!force && examCoursesExamsInFlight) return examCoursesExamsInFlight;
+  examCoursesExamsInFlight = fetchExamCoursesExamsFromApi()
+    .then((data) => {
+      writeExamCoursesExamsCache(data);
+      return data;
+    })
+    .finally(() => {
+      examCoursesExamsInFlight = null;
+    });
+  return examCoursesExamsInFlight;
+}
+
+async function fetchExamCoursesCatalogFromApi() {
+  const res = await fetch("/api/settings/exam-courses", {
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    courses?: unknown;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(typeof data.error === "string" ? data.error : "Load failed.");
+  }
+  return normalizeExamCourseEntries(data.courses);
+}
+
+async function getExamCoursesCatalogCached(force = false) {
+  if (!force && hasFreshExamCoursesCatalogCache() && examCoursesCatalogCache) {
+    return examCoursesCatalogCache.data;
+  }
+  if (!force && examCoursesCatalogInFlight) return examCoursesCatalogInFlight;
+  examCoursesCatalogInFlight = fetchExamCoursesCatalogFromApi()
+    .then((data) => {
+      writeExamCoursesCatalogCache(data);
+      return data;
+    })
+    .finally(() => {
+      examCoursesCatalogInFlight = null;
+    });
+  return examCoursesCatalogInFlight;
+}
+
+export default function ExamCoursesPage() {
+  const [exams, setExams] = useState<TargetExamOption[]>(
+    () => examCoursesExamsCache?.data ?? [],
+  );
+  const [examsLoading, setExamsLoading] = useState(() => !examCoursesExamsCache);
+
+  const [catalogCourses, setCatalogCourses] = useState<ExamCourseEntry[]>(
+    () => examCoursesCatalogCache?.data ?? [],
+  );
+  const [catalogLoading, setCatalogLoading] = useState(
+    () => !examCoursesCatalogCache,
+  );
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [catalogMessage, setCatalogMessage] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -52,55 +141,52 @@ export default function ExamCoursesPage() {
     [catalogCourses],
   );
 
-  const loadExams = useCallback(async () => {
-    setExamsLoading(true);
+  const loadExams = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setExamsLoading(true);
     try {
-      const res = await fetch("/api/settings/target-exams", {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("load");
-      const data = (await res.json()) as { exams?: unknown };
-      setExams(normalizeTargetExams(data.exams));
+      const data = await getExamCoursesExamsCached(force);
+      setExams(data);
     } catch {
       setExams([]);
     } finally {
-      setExamsLoading(false);
+      if (showLoading) setExamsLoading(false);
     }
   }, []);
 
-  const loadCatalog = useCallback(async () => {
-    setCatalogLoading(true);
+  const loadCatalog = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setCatalogLoading(true);
     setCatalogError(null);
     try {
-      const res = await fetch("/api/settings/exam-courses", {
-        cache: "no-store",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        courses?: unknown;
-        error?: string;
-      };
-      if (!res.ok) {
-        setCatalogError(
-          typeof data.error === "string" ? data.error : "Load failed.",
-        );
-        setCatalogCourses([]);
-        return;
-      }
-      setCatalogCourses(normalizeExamCourseEntries(data.courses));
-    } catch {
-      setCatalogError("Could not load courses.");
+      const data = await getExamCoursesCatalogCached(force);
+      setCatalogCourses(data);
+    } catch (e) {
+      setCatalogError(e instanceof Error ? e.message : "Could not load courses.");
       setCatalogCourses([]);
     } finally {
-      setCatalogLoading(false);
+      if (showLoading) setCatalogLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadExams();
+    if (hasFreshExamCoursesExamsCache() && examCoursesExamsCache) {
+      setExams(examCoursesExamsCache.data);
+      setExamsLoading(false);
+      return;
+    }
+    void loadExams({ force: true, showLoading: !examCoursesExamsCache });
   }, [loadExams]);
 
   useEffect(() => {
-    void loadCatalog();
+    if (hasFreshExamCoursesCatalogCache() && examCoursesCatalogCache) {
+      setCatalogCourses(examCoursesCatalogCache.data);
+      setCatalogLoading(false);
+      return;
+    }
+    void loadCatalog({ force: true, showLoading: !examCoursesCatalogCache });
   }, [loadCatalog]);
 
   const persistCatalog = async (next: ExamCourseEntry[]) => {
@@ -123,7 +209,9 @@ export default function ExamCoursesPage() {
         );
         return false;
       }
-      setCatalogCourses(normalizeExamCourseEntries(data.courses));
+      const normalized = normalizeExamCourseEntries(data.courses);
+      writeExamCoursesCatalogCache(normalized);
+      setCatalogCourses(normalized);
       setCatalogMessage("Courses saved.");
       return true;
     } catch {
