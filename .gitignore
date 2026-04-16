@@ -43,3 +43,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# vscode
+.vscode/
+
+# email templates
+/emailTemplete
+/emailTemplete/*

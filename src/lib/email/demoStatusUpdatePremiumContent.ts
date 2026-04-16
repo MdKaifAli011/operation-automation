@@ -97,10 +97,10 @@ function pendingLinkNoticeHtml(): string {
  */
 export function buildDemoStatusUpdatePremiumPlaceholders(
   row: DemoTableRowPersisted | undefined,
-  parentName: string,
+  recipientGreeting: string,
   studentName: string,
 ): Record<string, string> {
-  const parent = parentName.trim() || "there";
+  const parent = recipientGreeting.trim() || "there";
   const student = studentName.trim() || "your child";
   const raw = str(row?.status);
   const status: "Scheduled" | "Completed" | "Cancelled" =

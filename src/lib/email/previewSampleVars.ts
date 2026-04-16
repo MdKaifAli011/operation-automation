@@ -10,14 +10,21 @@ export function getPreviewSampleVars(key: EmailTemplateKey): Record<string, stri
     country: "Country",
     grade: "Class / grade",
     targetExams: "Target exam(s)",
+    logoUrl: "https://example.com/logo.png",
   };
 
   switch (key) {
     case "demo_invite":
       return {
         ...base,
+        sessionDate: "18 Apr 2026",
+        sessionTime: "07:00 PM",
+        subject: "Biology",
+        facultyName: "Dr. Sharma",
+        duration: "60 minutes",
+        sessionLink: "https://meet.google.com/abc-defg-hij",
         demoSummary: "Subject · Teacher · Date · Time (timezone)",
-        meetLink: "https://…",
+        meetLink: "https://meet.google.com/abc-defg-hij",
       };
     case "brochure":
       return {
@@ -28,6 +35,19 @@ export function getPreviewSampleVars(key: EmailTemplateKey): Record<string, stri
 <div style="background:linear-gradient(180deg,#e3f2fd 0%,#bbdefb 100%);padding:12px 14px;font-weight:700;font-size:14px;color:#0d47a1;">Course brochures (by target exam)</div>
 <table style="width:100%;border-collapse:collapse;background:#fafafa;"><tr><td style="padding:10px 12px;vertical-align:top;border-bottom:1px solid #eee;width:36px;">1.</td><td style="padding:10px 12px;vertical-align:top;border-bottom:1px solid #eee;"><div style="font-weight:600;color:#1565c0;font-size:15px;margin-bottom:8px;">JEE · Physics overview</div><a href="#" style="display:inline-block;padding:8px 14px;background:#1565c0;color:#fff;text-decoration:none;border-radius:4px;font-size:13px;font-weight:600;">Open document</a></td></tr>
 <tr><td style="padding:10px 12px;vertical-align:top;width:36px;">2.</td><td style="padding:10px 12px;vertical-align:top;"><div style="font-weight:600;color:#1565c0;font-size:15px;margin-bottom:8px;">NEET · Biology brochure</div><a href="#" style="display:inline-block;padding:8px 14px;background:#1565c0;color:#fff;text-decoration:none;border-radius:4px;font-size:13px;font-weight:600;">Open document</a></td></tr></table></div>`,
+      };
+    case "demo_status_update":
+      return {
+        ...base,
+        demoStatus: "scheduled",
+        demoStatusLabel: "Scheduled",
+        demoSummary: "Biology · Faculty name · 18 Apr 2026 · 07:00 PM IST",
+        meetLink: "https://meet.google.com/abc-defg-hij",
+        demoStatusEmailSubject: "Demo scheduled for Student name",
+        demoStatusEmailBodyHtml:
+          "<p style='margin:0 0 12px;font-size:14px;line-height:1.7;'>The demo for <strong>Student name</strong> has been scheduled successfully. Please keep the student ready 10 minutes early.</p>",
+        demoStatusMeetSectionHtml:
+          "<p style='margin:0;font-size:14px;line-height:1.7;'>Join link: <a href='https://meet.google.com/abc-defg-hij'>https://meet.google.com/abc-defg-hij</a></p>",
       };
     case "courier_address":
       return base;

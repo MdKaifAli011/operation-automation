@@ -34,17 +34,27 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     description:
       "Sent when staff taps Share → Send link on a demo row. Teacher CC when listed on the demo; enrollment team BCC when ENROLLMENT_TEAM_BCC is set.",
     editorTips: [
-      "Uses the selected demo row’s Meet link and summary.",
+      "Uses the selected demo row to fill date, time, subject, faculty, duration, and session link.",
+      "{{sessionLink}} and {{meetLink}} point to the same demo join URL.",
+      "On send, faculty receives a separate dedicated UI email to their configured address.",
       "Enrollment team receives BCC if ENROLLMENT_TEAM_BCC is configured in .env.",
     ],
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{country}}",
       "{{grade}}",
       "{{targetExams}}",
+      "{{sessionDate}}",
+      "{{sessionTime}}",
+      "{{subject}}",
+      "{{facultyName}}",
+      "{{duration}}",
+      "{{sessionLink}}",
       "{{demoSummary}}",
       "{{meetLink}}",
     ],
@@ -61,6 +71,8 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{country}}",
@@ -88,6 +100,8 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{country}}",
@@ -109,6 +123,8 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{country}}",
@@ -128,6 +144,8 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{country}}",
@@ -149,6 +167,8 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{feeFinal}}",
@@ -169,6 +189,8 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{enrollmentLink}}",
@@ -195,6 +217,8 @@ export const EMAIL_TEMPLATE_META: Record<EmailTemplateKey, EmailTemplateMetaEntr
     placeholders: [
       "{{studentName}}",
       "{{parentName}}",
+      "{{recipientGreeting}}",
+      "{{logoUrl}}",
       "{{email}}",
       "{{phone}}",
       "{{scheduleSummary}}",

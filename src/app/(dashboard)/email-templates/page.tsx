@@ -33,55 +33,6 @@ type TemplateRow = {
   enabled: boolean;
 };
 
-type EmailTemplatesPayload = {
-  templates: TemplateRow[];
-  smtpConfigured: boolean;
-};
-
-const EMAIL_TEMPLATES_CACHE_TTL_MS = 60_000;
-let emailTemplatesCache:
-  | { data: EmailTemplatesPayload; fetchedAt: number }
-  | null = null;
-let emailTemplatesInFlight: Promise<EmailTemplatesPayload> | null = null;
-
-function hasFreshEmailTemplatesCache() {
-  if (!emailTemplatesCache) return false;
-  return Date.now() - emailTemplatesCache.fetchedAt < EMAIL_TEMPLATES_CACHE_TTL_MS;
-}
-
-function writeEmailTemplatesCache(data: EmailTemplatesPayload) {
-  emailTemplatesCache = { data, fetchedAt: Date.now() };
-}
-
-async function fetchEmailTemplatesFromApi() {
-  const res = await fetch("/api/email-templates", { cache: "no-store" });
-  if (!res.ok) throw new Error("Could not load templates.");
-  const data = (await res.json()) as {
-    templates?: TemplateRow[];
-    smtpConfigured?: boolean;
-  };
-  return {
-    templates: Array.isArray(data.templates) ? (data.templates as TemplateRow[]) : [],
-    smtpConfigured: Boolean(data.smtpConfigured),
-  };
-}
-
-async function getEmailTemplatesCached(force = false) {
-  if (!force && hasFreshEmailTemplatesCache() && emailTemplatesCache) {
-    return emailTemplatesCache.data;
-  }
-  if (!force && emailTemplatesInFlight) return emailTemplatesInFlight;
-  emailTemplatesInFlight = fetchEmailTemplatesFromApi()
-    .then((data) => {
-      writeEmailTemplatesCache(data);
-      return data;
-    })
-    .finally(() => {
-      emailTemplatesInFlight = null;
-    });
-  return emailTemplatesInFlight;
-}
-
 const PIPELINE_ORDER: EmailTemplateKey[] = [
   "demo_invite",
   "brochure",
@@ -372,48 +323,42 @@ function TemplateEditorPanel({
 }
 
 export default function EmailTemplatesPage() {
-  const [rows, setRows] = useState<TemplateRow[]>(
-    () => emailTemplatesCache?.data.templates ?? [],
-  );
-  const [loading, setLoading] = useState(() => !emailTemplatesCache);
+  const [rows, setRows] = useState<TemplateRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [smtpConfigured, setSmtpConfigured] = useState(
-    () => emailTemplatesCache?.data.smtpConfigured ?? false,
-  );
+  const [smtpConfigured, setSmtpConfigured] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<Set<EmailTemplateKey>>(
     () => new Set(),
   );
   const [copiedPh, setCopiedPh] = useState<string | null>(null);
 
-  const load = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
-    const force = opts?.force ?? false;
-    const showLoading = opts?.showLoading ?? false;
-    if (showLoading) setLoading(true);
+  const load = useCallback(async () => {
+    setLoading(true);
     setError(null);
     try {
-      const data = await getEmailTemplatesCached(force);
-      setRows(data.templates);
-      setSmtpConfigured(data.smtpConfigured);
+      const res = await fetch("/api/email-templates", { cache: "no-store" });
+      if (!res.ok) throw new Error("Could not load templates.");
+      const data = (await res.json()) as {
+        templates?: TemplateRow[];
+        smtpConfigured?: boolean;
+      };
+      if (Array.isArray(data.templates)) {
+        setRows(data.templates as TemplateRow[]);
+      }
+      setSmtpConfigured(Boolean(data.smtpConfigured));
       setDirty(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed.");
     } finally {
-      if (showLoading) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (hasFreshEmailTemplatesCache() && emailTemplatesCache) {
-      setRows(emailTemplatesCache.data.templates);
-      setSmtpConfigured(emailTemplatesCache.data.smtpConfigured);
-      setDirty(false);
-      setLoading(false);
-      return;
-    }
-    void load({ force: true, showLoading: !emailTemplatesCache });
+    void load();
   }, [load]);
 
   const sortedRows = useMemo(() => {
@@ -442,14 +387,9 @@ export default function EmailTemplatesPage() {
         smtpConfigured?: boolean;
       };
       if (Array.isArray(data.templates)) {
-        const payload = {
-          templates: data.templates as TemplateRow[],
-          smtpConfigured: Boolean(data.smtpConfigured),
-        };
-        writeEmailTemplatesCache(payload);
-        setRows(payload.templates);
-        setSmtpConfigured(payload.smtpConfigured);
+        setRows(data.templates as TemplateRow[]);
       }
+      setSmtpConfigured(Boolean(data.smtpConfigured));
       setSavedAt(new Date().toISOString());
       setDirty(false);
     } catch (e) {
@@ -529,7 +469,7 @@ export default function EmailTemplatesPage() {
             <button
               type="button"
               disabled={loading}
-              onClick={() => void load({ force: true, showLoading: true })}
+              onClick={() => void load()}
               className={btnOutline}
             >
               Refresh
@@ -568,7 +508,7 @@ export default function EmailTemplatesPage() {
           <button
             type="button"
             className="font-semibold underline underline-offset-2"
-            onClick={() => void load({ force: true, showLoading: true })}
+            onClick={() => void load()}
           >
             Retry
           </button>
@@ -741,7 +681,7 @@ export default function EmailTemplatesPage() {
           <button
             type="button"
             className={cn(btnGreen, "mt-6")}
-            onClick={() => void load({ force: true, showLoading: true })}
+            onClick={() => void load()}
           >
             Reload
           </button>

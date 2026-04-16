@@ -228,12 +228,6 @@ export async function POST(
         pipelineMeta: { ...meta, demo: demoBucket },
       };
 
-      const vars = buildLeadEmailVars(mergedLead, "demo_status_update", {
-        demoRowIndex: demoRowIndexResolved,
-      });
-      const subject = renderTemplate(String(tmpl.subject), vars);
-      const html = renderTemplate(String(tmpl.bodyHtml), vars);
-
       const teacherName = String(
         (list[demoRowIndexResolved] as { teacher?: string }).teacher ?? "",
       ).trim();
@@ -258,7 +252,13 @@ export async function POST(
             { status: 400 },
           );
         }
-        await sendMail({ to: parentTo, subject, html });
+        const varsParent = buildLeadEmailVars(mergedLead, "demo_status_update", {
+          demoRowIndex: demoRowIndexResolved,
+          recipientType: "parent_or_student",
+        });
+        const subjectParent = renderTemplate(String(tmpl.subject), varsParent);
+        const htmlParent = renderTemplate(String(tmpl.bodyHtml), varsParent);
+        await sendMail({ to: parentTo, subject: subjectParent, html: htmlParent });
         sent += 1;
       }
       if (notifyFaculty) {
@@ -271,7 +271,14 @@ export async function POST(
             { status: 400 },
           );
         }
-        await sendMail({ to: teacherEmail, subject, html });
+        const varsFaculty = buildLeadEmailVars(mergedLead, "demo_status_update", {
+          demoRowIndex: demoRowIndexResolved,
+          recipientType: "faculty",
+          recipientName: teacherName,
+        });
+        const subjectFaculty = renderTemplate(String(tmpl.subject), varsFaculty);
+        const htmlFaculty = renderTemplate(String(tmpl.bodyHtml), varsFaculty);
+        await sendMail({ to: teacherEmail, subject: subjectFaculty, html: htmlFaculty });
         sent += 1;
       }
       if (sent === 0) {
@@ -388,7 +395,8 @@ export async function POST(
     let html = renderTemplate(String(tmpl.bodyHtml), vars);
 
     if (reportOnlyBrochureEmail) {
-      const parentName = String(vars.parentName || "Parent").trim() || "Parent";
+      const parentName =
+        String(vars.recipientGreeting || vars.parentName || "Parent").trim() || "Parent";
       const studentName = String(vars.studentName || "Student").trim() || "Student";
       const grade = String(vars.grade || "").trim();
       const exams = String(vars.targetExams || "").trim();
@@ -416,7 +424,25 @@ ${vars.brochureBundleHtml ?? ""}
       );
       const bccList = getEnrollmentTeamBccEmails();
       const { to: toNorm, bcc } = normalizeMailRecipients(to, undefined, bccList);
-      await sendMail({ to: toNorm, subject, html, bcc });
+      await sendMail({ to: toNorm, subject, html });
+      if (bcc) {
+        const varsTeam: Record<string, string> = {
+          ...vars,
+          recipientGreeting: "Enrollment Team",
+        };
+        let htmlTeam = renderTemplate(String(tmpl.bodyHtml), varsTeam);
+        if (reportOnlyBrochureEmail) {
+          htmlTeam = html.replace(/Dear\s+[^,<]+,/, "Dear Enrollment Team,");
+        } else {
+          htmlTeam = ensureBrochureBundleHtmlInRenderedHtml(
+            String(tmpl.bodyHtml),
+            htmlTeam,
+            varsTeam.brochureBundleHtml ?? "",
+          );
+        }
+        const subjectTeam = renderTemplate(String(tmpl.subject), varsTeam);
+        await sendMail({ to: bcc, subject: subjectTeam, html: htmlTeam });
+      }
     } else if (templateKey === "fees" || templateKey === "bank_details") {
       html = ensureFeeBankDetailsInRenderedHtml(
         String(tmpl.bodyHtml),
@@ -425,7 +451,21 @@ ${vars.brochureBundleHtml ?? ""}
       );
       const bccList = getEnrollmentTeamBccEmails();
       const { to: toNorm, bcc } = normalizeMailRecipients(to, undefined, bccList);
-      await sendMail({ to: toNorm, subject, html, bcc });
+      await sendMail({ to: toNorm, subject, html });
+      if (bcc) {
+        const varsTeam: Record<string, string> = {
+          ...vars,
+          recipientGreeting: "Enrollment Team",
+        };
+        let htmlTeam = renderTemplate(String(tmpl.bodyHtml), varsTeam);
+        htmlTeam = ensureFeeBankDetailsInRenderedHtml(
+          String(tmpl.bodyHtml),
+          htmlTeam,
+          varsTeam.feeBankDetailsHtml ?? "",
+        );
+        const subjectTeam = renderTemplate(String(tmpl.subject), varsTeam);
+        await sendMail({ to: bcc, subject: subjectTeam, html: htmlTeam });
+      }
     } else {
       await sendMail({ to, subject, html });
     }

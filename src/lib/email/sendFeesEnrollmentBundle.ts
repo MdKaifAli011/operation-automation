@@ -43,15 +43,40 @@ export async function sendFeesEnrollmentBundleEmail(opts: {
     enrollVars,
   );
   const subject = `${feeSubj} · ${enrollSubj}`;
-  const html = `<div style="font-family:system-ui,'Segoe UI',sans-serif;font-size:15px;line-height:1.55;color:#212121;max-width:640px;">
-<div style="margin:0 0 14px;padding:10px 14px;background:linear-gradient(90deg,#e3f2fd 0%,#f5f5f5 100%);border-left:4px solid #1565c0;font-weight:700;font-size:15px;color:#0d47a1;">Fee &amp; payment details</div>
-<div style="padding:0 4px 8px;">${feeHtml}</div>
-<div style="margin:24px 0 16px;height:1px;background:linear-gradient(90deg,transparent,#e0e0e0,transparent);"></div>
-<div style="margin:0 0 14px;padding:10px 14px;background:linear-gradient(90deg,#f3e5f5 0%,#fafafa 100%);border-left:4px solid #7b1fa2;font-weight:700;font-size:15px;color:#4a148c;">Enrollment form</div>
-<div style="padding:0 4px;">${enrollHtml}</div>
-</div>`;
+  const html = `${feeHtml}<div style="height:20px;"></div>${enrollHtml}`;
 
   const bccList = getEnrollmentTeamBccEmails();
   const { to: toNorm, bcc } = normalizeMailRecipients(to, undefined, bccList);
-  await sendMail({ to: toNorm, subject, html, bcc });
+  await sendMail({ to: toNorm, subject, html });
+  if (bcc) {
+    let feeVarsTeam = buildLeadEmailVars(lead, "fees" as EmailTemplateKey, {
+      recipientType: "enrollment_team",
+    });
+    feeVarsTeam = await mergeFeeEmailVarsWithBankDetails(lead, feeVarsTeam);
+    const enrollVarsTeam = buildLeadEmailVars(lead, "enrollment" as EmailTemplateKey, {
+      recipientType: "enrollment_team",
+    });
+    const feeBodyTeam = String(feesTmpl.bodyHtml ?? "");
+    let feeHtmlTeam = renderTemplate(feeBodyTeam, feeVarsTeam);
+    feeHtmlTeam = ensureFeeBankDetailsInRenderedHtml(
+      feeBodyTeam,
+      feeHtmlTeam,
+      feeVarsTeam.feeBankDetailsHtml ?? "",
+    );
+    const enrollHtmlTeam = renderTemplate(
+      String(enrollmentTmpl.bodyHtml ?? ""),
+      enrollVarsTeam,
+    );
+    const feeSubjTeam = renderTemplate(
+      String(feesTmpl.subject ?? "Fee structure"),
+      feeVarsTeam,
+    );
+    const enrollSubjTeam = renderTemplate(
+      String(enrollmentTmpl.subject ?? "Enrollment"),
+      enrollVarsTeam,
+    );
+    const subjectTeam = `${feeSubjTeam} · ${enrollSubjTeam}`;
+    const htmlTeam = `${feeHtmlTeam}<div style="height:20px;"></div>${enrollHtmlTeam}`;
+    await sendMail({ to: bcc, subject: subjectTeam, html: htmlTeam });
+  }
 }
