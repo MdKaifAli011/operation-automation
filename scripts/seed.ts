@@ -561,6 +561,9 @@ function buildSeedPipelineMeta(i: number, exams: readonly string[]) {
       feeSentEmailAt: i % 6 === 0 ? "2026-04-11T08:00:00.000Z" : null,
       enrollmentSent: i % 7 === 0,
       enrollmentSentAt: i % 7 === 0 ? "2026-04-11T08:05:00.000Z" : null,
+      /** Pipeline Fees step completion (email fee plan from Step 3). */
+      feePlanEmailSentAt:
+        i % 5 === 0 ? "2026-04-11T08:10:00.000Z" : null,
     },
   };
 }

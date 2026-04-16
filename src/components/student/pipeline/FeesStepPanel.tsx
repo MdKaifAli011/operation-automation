@@ -21,6 +21,7 @@ import {
 import type { LeadPipelineFeeInstallmentRow } from "@/lib/leadPipelineMetaTypes";
 import { DEFAULT_INSTITUTE, type InstituteRecord } from "@/lib/instituteProfileTypes";
 import { appendActivity, mergePipelineMeta } from "@/lib/pipeline";
+import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
 import { useExamCourseCatalog } from "@/hooks/useExamCourseCatalog";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 
@@ -75,6 +76,7 @@ export function FeesStepPanel({
     LeadPipelineFeeInstallmentRow[]
   >([]);
   const [saving, setSaving] = useState(false);
+  const [sendingFeeEmail, setSendingFeeEmail] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   /** Tracks net we last synced so installment re-split runs on net change, not on hydrate. */
@@ -496,6 +498,46 @@ export function FeesStepPanel({
   };
 
   const backToSinglePayment = () => setInstallmentRows([]);
+
+  const feePlanPdfUrl =
+    typeof feesMeta.feePlanPdfUrl === "string" && String(feesMeta.feePlanPdfUrl).trim()
+      ? String(feesMeta.feePlanPdfUrl).trim()
+      : "";
+  const feePlanEmailedToParent = Boolean(
+    typeof feesMeta.feePlanEmailSentAt === "string" &&
+      String(feesMeta.feePlanEmailSentAt).trim(),
+  );
+
+  const sendFeePlanToParent = async () => {
+    if (!feePlanPdfUrl) {
+      pushToast("Save the fee plan and generate the PDF first.");
+      return;
+    }
+    setSendingFeeEmail(true);
+    try {
+      await sendLeadPipelineEmail(lead.id, { templateKey: "fees" });
+      const now = new Date().toISOString();
+      await onPatchLead({
+        pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+          fees: {
+            ...((lead.pipelineMeta?.fees ?? {}) as object),
+            feePlanEmailSentAt: now,
+          },
+        }),
+        activityLog: appendActivity(
+          lead.activityLog,
+          "fees",
+          "Fee plan emailed to parent (Step 3).",
+        ),
+      });
+      await refreshLead();
+      pushToast("Fee plan sent to parent.");
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Could not send email.");
+    } finally {
+      setSendingFeeEmail(false);
+    }
+  };
 
   const saveFeePlan = async () => {
     setSaving(true);
@@ -954,9 +996,9 @@ export function FeesStepPanel({
           >
             {saving ? "Saving…" : hasSavedFeePlan ? "Save again" : "Save fee plan"}
           </button>
-          {typeof feesMeta.feePlanPdfUrl === "string" && feesMeta.feePlanPdfUrl ? (
+          {feePlanPdfUrl ? (
             <a
-              href={feesMeta.feePlanPdfUrl}
+              href={feePlanPdfUrl}
               target="_blank"
               rel="noreferrer"
               className={SX.btnSecondary}
@@ -964,6 +1006,21 @@ export function FeesStepPanel({
               Preview PDF
             </a>
           ) : null}
+          <button
+            type="button"
+            className={cn(
+              feePlanEmailedToParent ? SX.leadBtnGreen : SX.btnPrimary,
+              "h-9 min-w-40 justify-center px-3 text-[12px]",
+            )}
+            disabled={sendingFeeEmail || !feePlanPdfUrl || coursesLoading}
+            onClick={() => void sendFeePlanToParent()}
+          >
+            {sendingFeeEmail
+              ? "Sending…"
+              : feePlanEmailedToParent
+                ? "Send again"
+                : "Email fee plan to parent"}
+          </button>
         </div>
 
         {toast ? (

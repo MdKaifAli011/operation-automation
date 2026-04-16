@@ -53,8 +53,7 @@ export function computePipelineStepsFromMeta(
   );
   const br = m.brochure as { sentEmail?: boolean; sentEmailAt?: string | null } | undefined;
   const fees = m.fees as {
-    feeSentEmail?: boolean;
-    feeSentEmailAt?: string | null;
+    feePlanEmailSentAt?: string | null;
     enrollmentSent?: boolean;
     enrollmentSentAt?: string | null;
   } | undefined;
@@ -69,10 +68,8 @@ export function computePipelineStepsFromMeta(
     !!String(fees?.enrollmentSentAt ?? "").trim();
   const courierSent = sentKeys.has("courier");
   const rankingSent = sentKeys.has("ranking");
-  const bankSent =
-    sentKeys.has("bank") ||
-    !!fees?.feeSentEmail ||
-    !!String(fees?.feeSentEmailAt ?? "").trim();
+  /** Bank row in Documents is tracked on `documents.items`, not via fee email flags. */
+  const bankSent = sentKeys.has("bank");
   const documentsDone =
     reportSent &&
     brochureSent &&
@@ -83,9 +80,8 @@ export function computePipelineStepsFromMeta(
     !hasUnsentCustomDoc;
   if (!documentsDone) return 1;
 
-  const feesDone =
-    !!fees?.feeSentEmail ||
-    !!fees?.enrollmentSent;
+  /** Fees step completes only after the fee plan is emailed to the parent from Step 3 (not bank/enrollment from Documents). */
+  const feesDone = !!String(fees?.feePlanEmailSentAt ?? "").trim();
   if (!feesDone) return 2;
 
   const sch = m.schedule as {

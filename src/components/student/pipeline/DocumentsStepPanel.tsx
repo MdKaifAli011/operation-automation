@@ -198,7 +198,7 @@ export function DocumentsStepPanel({
   const reportSentRaw = !!docsByKey.get("report")?.sentAt;
   const brochureSent = !!brochure.sentEmail || !!brochure.sentEmailAt;
   const enrollmentSent = !!fees.enrollmentSent || !!fees.enrollmentSentAt;
-  const bankSent = !!fees.feeSentEmail || !!fees.feeSentEmailAt;
+  const bankSent = !!docsByKey.get("bank")?.sentAt;
   const courierSent = !!docsByKey.get("courier")?.sentAt;
   const rankingSent = !!docsByKey.get("ranking")?.sentAt;
 
@@ -610,7 +610,7 @@ export function DocumentsStepPanel({
         "bank",
         { key: "bank", title: row?.title || "Bank & Account Details", countLabel: bankCountLabel, sentAt: now },
         "Bank details sent from Step 2.",
-        { fees: { feeSentEmail: true, feeSentEmailAt: now, feeSelectedBankAccountId: selectedBankId } },
+        { fees: { feeSelectedBankAccountId: selectedBankId } },
       );
       setBankModalOpen(false);
       await refreshLead();

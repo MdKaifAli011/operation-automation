@@ -98,6 +98,8 @@ export type LeadPipelineFees = {
   feeSentWhatsAppAt?: string | null;
   feeSentEmailAt?: string | null;
   enrollmentSentAt?: string | null;
+  /** ISO — fee plan / fee-details email sent to parent from Step 3 (Fees). Drives pipeline completion for this step. */
+  feePlanEmailSentAt?: string | null;
   /** Institute bank account id (from Bank & A/c Details) chosen for this lead’s fee step. */
   feeSelectedBankAccountId?: string | null;
   /** Generated fee-plan PDF public URL (`/uploads/fee-plans/{leadId}/...pdf`). */
