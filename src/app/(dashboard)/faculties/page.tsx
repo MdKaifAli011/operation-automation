@@ -127,6 +127,42 @@ const btnGreen =
 const btnDanger =
   "inline-flex items-center justify-center border border-[#ffcdd2] bg-[#ffebee] px-3 py-1.5 text-sm font-medium text-[#c62828] hover:bg-[#ffcdd2]/40";
 
+const FACULTY_CACHE_TTL_MS = 60_000;
+let facultyCache: { data: Faculty[]; fetchedAt: number } | null = null;
+let facultyInFlight: Promise<Faculty[]> | null = null;
+
+function hasFreshFacultyCache() {
+  if (!facultyCache) return false;
+  return Date.now() - facultyCache.fetchedAt < FACULTY_CACHE_TTL_MS;
+}
+
+function writeFacultyCache(data: Faculty[]) {
+  facultyCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchFacultyFromApi() {
+  const res = await fetch("/api/faculties", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load faculty");
+  const data = (await res.json()) as Faculty[];
+  return Array.isArray(data) ? data : [];
+}
+
+async function getFacultyCached(force = false) {
+  if (!force && hasFreshFacultyCache() && facultyCache) {
+    return facultyCache.data;
+  }
+  if (!force && facultyInFlight) return facultyInFlight;
+  facultyInFlight = fetchFacultyFromApi()
+    .then((data) => {
+      writeFacultyCache(data);
+      return data;
+    })
+    .finally(() => {
+      facultyInFlight = null;
+    });
+  return facultyInFlight;
+}
+
 export default function FacultiesPage() {
   const { activeValues, labelFor } = useTargetExamOptions();
   const {
@@ -134,9 +170,10 @@ export default function FacultiesPage() {
     loading: catalogLoading,
     nameById: catalogNameById,
   } = useExamSubjectCatalog();
-  const [faculty, setFaculty] = useState<Faculty[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [faculty, setFaculty] = useState<Faculty[]>(() => facultyCache?.data ?? []);
+  const [loading, setLoading] = useState(() => !facultyCache);
   const [listError, setListError] = useState<string | null>(null);
+  const [listNotice, setListNotice] = useState<string | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
@@ -152,26 +189,42 @@ export default function FacultiesPage() {
   const [pickSubjectId, setPickSubjectId] = useState("");
   const inferLockRef = useRef<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const setFacultyAndCache = useCallback((next: Faculty[]) => {
+    writeFacultyCache(next);
+    setFaculty(next);
+  }, []);
+
+  const load = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setListError(null);
     try {
-      const res = await fetch("/api/faculties", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load faculty");
-      const data = (await res.json()) as Faculty[];
-      setFaculty(Array.isArray(data) ? data : []);
+      const data = await getFacultyCached(force);
+      setFacultyAndCache(data);
     } catch {
       setListError(
         "Could not load faculty. Check MongoDB connection and try again.",
       );
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  }, []);
+  }, [setFacultyAndCache]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (hasFreshFacultyCache() && facultyCache) {
+      setFacultyAndCache(facultyCache.data);
+      setLoading(false);
+      return;
+    }
+    void load({ force: true, showLoading: !facultyCache });
+  }, [load, setFacultyAndCache]);
+
+  useEffect(() => {
+    if (!listNotice) return;
+    const timer = window.setTimeout(() => setListNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [listNotice]);
 
   const openCreate = useCallback(() => {
     inferLockRef.current = null;
@@ -287,7 +340,8 @@ export default function FacultiesPage() {
       if (!res.ok) {
         throw new Error(data.error || "Request failed.");
       }
-      await load();
+      await load({ force: true });
+      setListNotice(isEdit ? "Faculty updated." : "Faculty added.");
       closeDrawer();
       setForm(emptyForm());
     } catch (e) {
@@ -309,7 +363,8 @@ export default function FacultiesPage() {
         });
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(data.error || "Update failed.");
-        await load();
+        await load({ force: true });
+        setListNotice(f.active ? "Faculty deactivated." : "Faculty activated.");
       } catch (e) {
         setListError(
           e instanceof Error ? e.message : "Could not update status.",
@@ -333,7 +388,8 @@ export default function FacultiesPage() {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Delete failed.");
       setDeleteTarget(null);
-      await load();
+      await load({ force: true });
+      setListNotice("Faculty deleted.");
     } catch (e) {
       setListError(e instanceof Error ? e.message : "Delete failed.");
     } finally {
@@ -384,10 +440,19 @@ export default function FacultiesPage() {
           <button
             type="button"
             className="font-semibold underline"
-            onClick={() => void load()}
+            onClick={() => void load({ force: true, showLoading: true })}
           >
             Retry
           </button>
+        </div>
+      ) : null}
+
+      {listNotice ? (
+        <div
+          className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          role="status"
+        >
+          {listNotice}
         </div>
       ) : null}
 

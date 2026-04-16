@@ -6,32 +6,67 @@ import {
   type ExamCourseEntry,
 } from "@/lib/examCourseTypes";
 
+const EXAM_COURSES_CACHE_TTL_MS = 5 * 60_000;
+let examCoursesCache: { data: ExamCourseEntry[]; fetchedAt: number } | null =
+  null;
+let examCoursesInFlight: Promise<ExamCourseEntry[]> | null = null;
+
+function hasFreshExamCoursesCache() {
+  if (!examCoursesCache) return false;
+  return Date.now() - examCoursesCache.fetchedAt < EXAM_COURSES_CACHE_TTL_MS;
+}
+
+function writeExamCoursesCache(data: ExamCourseEntry[]) {
+  examCoursesCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchExamCoursesFromApi() {
+  const res = await fetch("/api/settings/exam-courses", {
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    courses?: unknown;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(
+      typeof data.error === "string" ? data.error : "Could not load courses.",
+    );
+  }
+  return normalizeExamCourseEntries(data.courses);
+}
+
+async function getExamCoursesCached(force = false) {
+  if (!force && hasFreshExamCoursesCache() && examCoursesCache) {
+    return examCoursesCache.data;
+  }
+  if (!force && examCoursesInFlight) return examCoursesInFlight;
+  examCoursesInFlight = fetchExamCoursesFromApi()
+    .then((data) => {
+      writeExamCoursesCache(data);
+      return data;
+    })
+    .finally(() => {
+      examCoursesInFlight = null;
+    });
+  return examCoursesInFlight;
+}
+
 export function useExamCourseCatalog() {
-  const [courses, setCourses] = useState<ExamCourseEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [courses, setCourses] = useState<ExamCourseEntry[]>(
+    () => examCoursesCache?.data ?? [],
+  );
+  const [loading, setLoading] = useState(() => !examCoursesCache);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/settings/exam-courses", {
-        cache: "no-store",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        courses?: unknown;
-        error?: string;
-      };
-      if (!res.ok) {
-        setError(
-          typeof data.error === "string" ? data.error : "Could not load courses.",
-        );
-        setCourses([]);
-        return;
-      }
-      setCourses(normalizeExamCourseEntries(data.courses));
-    } catch {
-      setError("Could not load courses.");
+      const data = await getExamCoursesCached(force);
+      setCourses(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load courses.");
       setCourses([]);
     } finally {
       setLoading(false);
@@ -39,7 +74,7 @@ export function useExamCourseCatalog() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, [load]);
 
   const byExam = useMemo(() => {
@@ -63,6 +98,6 @@ export function useExamCourseCatalog() {
     byExam,
     loading,
     error,
-    reload: load,
+    reload: () => load(true),
   };
 }

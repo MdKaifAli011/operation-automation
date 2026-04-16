@@ -7,19 +7,56 @@ import {
   type TargetExamOption,
 } from "@/lib/targetExams";
 
-export function useTargetExamOptions() {
-  const [exams, setExams] = useState<TargetExamOption[]>([]);
-  const [loading, setLoading] = useState(true);
+const TARGET_EXAMS_CACHE_TTL_MS = 5 * 60_000;
+let targetExamsCache: { data: TargetExamOption[]; fetchedAt: number } | null =
+  null;
+let targetExamsInFlight: Promise<TargetExamOption[]> | null = null;
 
-  const load = useCallback(async () => {
+function hasFreshTargetExamsCache() {
+  if (!targetExamsCache) return false;
+  return Date.now() - targetExamsCache.fetchedAt < TARGET_EXAMS_CACHE_TTL_MS;
+}
+
+function writeTargetExamsCache(data: TargetExamOption[]) {
+  targetExamsCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchTargetExamsFromApi() {
+  const res = await fetch("/api/settings/target-exams", {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Could not load target exams.");
+  const data = (await res.json()) as { exams?: unknown };
+  return normalizeTargetExams(data.exams);
+}
+
+async function getTargetExamsCached(force = false) {
+  if (!force && hasFreshTargetExamsCache() && targetExamsCache) {
+    return targetExamsCache.data;
+  }
+  if (!force && targetExamsInFlight) return targetExamsInFlight;
+  targetExamsInFlight = fetchTargetExamsFromApi()
+    .then((data) => {
+      writeTargetExamsCache(data);
+      return data;
+    })
+    .finally(() => {
+      targetExamsInFlight = null;
+    });
+  return targetExamsInFlight;
+}
+
+export function useTargetExamOptions() {
+  const [exams, setExams] = useState<TargetExamOption[]>(
+    () => targetExamsCache?.data ?? [],
+  );
+  const [loading, setLoading] = useState(() => !targetExamsCache);
+
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/settings/target-exams", {
-        cache: "no-store",
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as { exams?: unknown };
-      setExams(normalizeTargetExams(data.exams));
+      const data = await getTargetExamsCached(force);
+      setExams(data);
     } catch {
       /* leave empty until a successful load */
     } finally {
@@ -28,7 +65,7 @@ export function useTargetExamOptions() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, [load]);
 
   const activeValues = useMemo(() => activeTargetExamValues(exams), [exams]);
@@ -38,5 +75,9 @@ export function useTargetExamOptions() {
     [exams],
   );
 
-  return { exams, activeValues, labelFor, loading, reload: load };
+  const reload = useCallback(async () => {
+    await load(true);
+  }, [load]);
+
+  return { exams, activeValues, labelFor, loading, reload };
 }

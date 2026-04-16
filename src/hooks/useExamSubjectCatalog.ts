@@ -6,32 +6,67 @@ import {
   type ExamSubjectEntry,
 } from "@/lib/examSubjectTypes";
 
+const EXAM_SUBJECTS_CACHE_TTL_MS = 5 * 60_000;
+let examSubjectsCache: { data: ExamSubjectEntry[]; fetchedAt: number } | null =
+  null;
+let examSubjectsInFlight: Promise<ExamSubjectEntry[]> | null = null;
+
+function hasFreshExamSubjectsCache() {
+  if (!examSubjectsCache) return false;
+  return Date.now() - examSubjectsCache.fetchedAt < EXAM_SUBJECTS_CACHE_TTL_MS;
+}
+
+function writeExamSubjectsCache(data: ExamSubjectEntry[]) {
+  examSubjectsCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchExamSubjectsFromApi() {
+  const res = await fetch("/api/settings/exam-subjects", {
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    subjects?: unknown;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(
+      typeof data.error === "string" ? data.error : "Could not load subjects.",
+    );
+  }
+  return normalizeExamSubjectEntries(data.subjects);
+}
+
+async function getExamSubjectsCached(force = false) {
+  if (!force && hasFreshExamSubjectsCache() && examSubjectsCache) {
+    return examSubjectsCache.data;
+  }
+  if (!force && examSubjectsInFlight) return examSubjectsInFlight;
+  examSubjectsInFlight = fetchExamSubjectsFromApi()
+    .then((data) => {
+      writeExamSubjectsCache(data);
+      return data;
+    })
+    .finally(() => {
+      examSubjectsInFlight = null;
+    });
+  return examSubjectsInFlight;
+}
+
 export function useExamSubjectCatalog() {
-  const [subjects, setSubjects] = useState<ExamSubjectEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [subjects, setSubjects] = useState<ExamSubjectEntry[]>(
+    () => examSubjectsCache?.data ?? [],
+  );
+  const [loading, setLoading] = useState(() => !examSubjectsCache);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/settings/exam-subjects", {
-        cache: "no-store",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        subjects?: unknown;
-        error?: string;
-      };
-      if (!res.ok) {
-        setError(
-          typeof data.error === "string" ? data.error : "Could not load subjects.",
-        );
-        setSubjects([]);
-        return;
-      }
-      setSubjects(normalizeExamSubjectEntries(data.subjects));
-    } catch {
-      setError("Could not load subjects.");
+      const data = await getExamSubjectsCached(force);
+      setSubjects(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load subjects.");
       setSubjects([]);
     } finally {
       setLoading(false);
@@ -39,7 +74,7 @@ export function useExamSubjectCatalog() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, [load]);
 
   const byExam = useMemo(() => {
@@ -76,6 +111,6 @@ export function useExamSubjectCatalog() {
     activeSubjectIds,
     loading,
     error,
-    reload: load,
+    reload: () => load(true),
   };
 }

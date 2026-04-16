@@ -11,6 +11,14 @@ type MeetLinkRow = {
   sortOrder: number;
 };
 
+type MeetLinksPayload = {
+  links: MeetLinkRow[];
+  holdDurationMinutes?: number;
+  teacherBlockMinutes?: number;
+  demoAutoCompleteAfterMinutes?: number;
+  teacherFeedbackAfterMinutes?: number;
+};
+
 const btnGreen =
   "inline-flex items-center justify-center rounded-none bg-[#2e7d32] px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-95 disabled:opacity-60";
 const btnOutline =
@@ -18,16 +26,72 @@ const btnOutline =
 const btnDanger =
   "inline-flex items-center justify-center rounded-none border border-[#ffcdd2] bg-[#ffebee] px-3 py-1.5 text-sm font-medium text-[#c62828] hover:bg-[#ffcdd2]/40 disabled:opacity-50";
 
+const MEET_LINKS_CACHE_TTL_MS = 60_000;
+let meetLinksCache: { data: MeetLinksPayload; fetchedAt: number } | null = null;
+let meetLinksInFlight: Promise<MeetLinksPayload> | null = null;
+
+function hasFreshMeetLinksCache() {
+  if (!meetLinksCache) return false;
+  return Date.now() - meetLinksCache.fetchedAt < MEET_LINKS_CACHE_TTL_MS;
+}
+
+function writeMeetLinksCache(data: MeetLinksPayload) {
+  meetLinksCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchMeetLinksFromApi() {
+  const res = await fetch("/api/meet-links", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load");
+  const data = (await res.json()) as {
+    links?: MeetLinkRow[];
+    holdDurationMinutes?: number;
+    teacherBlockMinutes?: number;
+    demoAutoCompleteAfterMinutes?: number;
+    teacherFeedbackAfterMinutes?: number;
+  };
+  return {
+    links: Array.isArray(data.links) ? data.links : [],
+    holdDurationMinutes: data.holdDurationMinutes,
+    teacherBlockMinutes: data.teacherBlockMinutes,
+    demoAutoCompleteAfterMinutes: data.demoAutoCompleteAfterMinutes,
+    teacherFeedbackAfterMinutes: data.teacherFeedbackAfterMinutes,
+  };
+}
+
+async function getMeetLinksCached(force = false) {
+  if (!force && hasFreshMeetLinksCache() && meetLinksCache) {
+    return meetLinksCache.data;
+  }
+  if (!force && meetLinksInFlight) return meetLinksInFlight;
+  meetLinksInFlight = fetchMeetLinksFromApi()
+    .then((data) => {
+      writeMeetLinksCache(data);
+      return data;
+    })
+    .finally(() => {
+      meetLinksInFlight = null;
+    });
+  return meetLinksInFlight;
+}
+
 export default function MeetLinksPage() {
-  const [links, setLinks] = useState<MeetLinkRow[]>([]);
-  const [holdMinutes, setHoldMinutes] = useState<number>(300);
-  const [teacherBlockMinutes, setTeacherBlockMinutes] = useState<number>(120);
-  const [demoAutoCompleteMinutes, setDemoAutoCompleteMinutes] =
-    useState<number>(300);
+  const [links, setLinks] = useState<MeetLinkRow[]>(
+    () => meetLinksCache?.data.links ?? [],
+  );
+  const [holdMinutes, setHoldMinutes] = useState<number>(
+    () => meetLinksCache?.data.holdDurationMinutes ?? 300,
+  );
+  const [teacherBlockMinutes, setTeacherBlockMinutes] = useState<number>(
+    () => meetLinksCache?.data.teacherBlockMinutes ?? 120,
+  );
+  const [demoAutoCompleteMinutes, setDemoAutoCompleteMinutes] = useState<number>(
+    () => meetLinksCache?.data.demoAutoCompleteAfterMinutes ?? 300,
+  );
   const [teacherFeedbackAfterMinutes, setTeacherFeedbackAfterMinutes] =
-    useState<number>(45);
-  const [loading, setLoading] = useState(true);
+    useState<number>(() => meetLinksCache?.data.teacherFeedbackAfterMinutes ?? 45);
+  const [loading, setLoading] = useState(() => !meetLinksCache);
   const [listError, setListError] = useState<string | null>(null);
+  const [listNotice, setListNotice] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false);
@@ -36,55 +100,65 @@ export default function MeetLinksPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const setMeetLinksState = useCallback((data: MeetLinksPayload) => {
+    writeMeetLinksCache(data);
+    setLinks(data.links);
+    if (
+      typeof data.holdDurationMinutes === "number" &&
+      Number.isFinite(data.holdDurationMinutes)
+    ) {
+      setHoldMinutes(data.holdDurationMinutes);
+    }
+    if (
+      typeof data.teacherBlockMinutes === "number" &&
+      Number.isFinite(data.teacherBlockMinutes)
+    ) {
+      setTeacherBlockMinutes(data.teacherBlockMinutes);
+    }
+    if (
+      typeof data.demoAutoCompleteAfterMinutes === "number" &&
+      Number.isFinite(data.demoAutoCompleteAfterMinutes)
+    ) {
+      setDemoAutoCompleteMinutes(data.demoAutoCompleteAfterMinutes);
+    }
+    if (
+      typeof data.teacherFeedbackAfterMinutes === "number" &&
+      Number.isFinite(data.teacherFeedbackAfterMinutes)
+    ) {
+      setTeacherFeedbackAfterMinutes(data.teacherFeedbackAfterMinutes);
+    }
+  }, []);
+
+  const load = useCallback(async (opts?: { force?: boolean; showLoading?: boolean }) => {
+    const force = opts?.force ?? false;
+    const showLoading = opts?.showLoading ?? false;
+    if (showLoading) setLoading(true);
     setListError(null);
     try {
-      const res = await fetch("/api/meet-links", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load");
-      const data = (await res.json()) as {
-        links?: MeetLinkRow[];
-        holdDurationMinutes?: number;
-        teacherBlockMinutes?: number;
-        demoAutoCompleteAfterMinutes?: number;
-        teacherFeedbackAfterMinutes?: number;
-      };
-      setLinks(Array.isArray(data.links) ? data.links : []);
-      if (
-        typeof data.holdDurationMinutes === "number" &&
-        Number.isFinite(data.holdDurationMinutes)
-      ) {
-        setHoldMinutes(data.holdDurationMinutes);
-      }
-      if (
-        typeof data.teacherBlockMinutes === "number" &&
-        Number.isFinite(data.teacherBlockMinutes)
-      ) {
-        setTeacherBlockMinutes(data.teacherBlockMinutes);
-      }
-      if (
-        typeof data.demoAutoCompleteAfterMinutes === "number" &&
-        Number.isFinite(data.demoAutoCompleteAfterMinutes)
-      ) {
-        setDemoAutoCompleteMinutes(data.demoAutoCompleteAfterMinutes);
-      }
-      if (
-        typeof data.teacherFeedbackAfterMinutes === "number" &&
-        Number.isFinite(data.teacherFeedbackAfterMinutes)
-      ) {
-        setTeacherFeedbackAfterMinutes(data.teacherFeedbackAfterMinutes);
-      }
+      const data = await getMeetLinksCached(force);
+      setMeetLinksState(data);
     } catch {
       setListError("Could not load Meet links. Check MongoDB and try again.");
       setLinks([]);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  }, []);
+  }, [setMeetLinksState]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (hasFreshMeetLinksCache() && meetLinksCache) {
+      setMeetLinksState(meetLinksCache.data);
+      setLoading(false);
+      return;
+    }
+    void load({ force: true, showLoading: !meetLinksCache });
+  }, [load, setMeetLinksState]);
+
+  useEffect(() => {
+    if (!listNotice) return;
+    const timer = window.setTimeout(() => setListNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [listNotice]);
 
   const addLink = useCallback(async () => {
     setAddError(null);
@@ -107,7 +181,8 @@ export default function MeetLinksPage() {
       }
       setUrl("");
       setLabel("");
-      await load();
+      await load({ force: true });
+      setListNotice("Meet link added.");
     } catch {
       setAddError("Could not add link.");
     } finally {
@@ -125,7 +200,8 @@ export default function MeetLinksPage() {
           body: JSON.stringify({ active: !row.active }),
         });
         if (!res.ok) return;
-        await load();
+        await load({ force: true });
+        setListNotice(row.active ? "Meet link deactivated." : "Meet link activated.");
       } finally {
         setBusyId(null);
       }
@@ -147,7 +223,8 @@ export default function MeetLinksPage() {
         return;
       }
       setDeleteId(null);
-      await load();
+      await load({ force: true });
+      setListNotice("Meet link deleted.");
     } finally {
       setDeleting(false);
     }
@@ -210,9 +287,19 @@ export default function MeetLinksPage() {
       {listError ? (
         <p className="text-sm text-red-700" role="alert">
           {listError}{" "}
-          <button type="button" className="underline" onClick={() => void load()}>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => void load({ force: true, showLoading: true })}
+          >
             Retry
           </button>
+        </p>
+      ) : null}
+
+      {listNotice ? (
+        <p className="text-sm text-emerald-700" role="status">
+          {listNotice}
         </p>
       ) : null}
 

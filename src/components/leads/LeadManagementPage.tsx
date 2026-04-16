@@ -24,6 +24,47 @@ import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 
 type LeadMainTab = "ongoing" | "not_interested" | "followup" | "converted";
 
+const LEADS_CACHE_TTL_MS = 60_000;
+let leadsCache: { data: Lead[]; fetchedAt: number } | null = null;
+let leadsInFlight: Promise<Lead[]> | null = null;
+
+function hasFreshLeadsCache() {
+  if (!leadsCache) return false;
+  return Date.now() - leadsCache.fetchedAt < LEADS_CACHE_TTL_MS;
+}
+
+function writeLeadsCache(data: Lead[]) {
+  leadsCache = { data, fetchedAt: Date.now() };
+}
+
+async function fetchLeadsFromApi(): Promise<Lead[]> {
+  const res = await fetch("/api/leads", { cache: "no-store" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof err?.error === "string" ? err.error : "Failed to load leads",
+    );
+  }
+  return (await res.json()) as Lead[];
+}
+
+async function getLeadsCached(force = false): Promise<Lead[]> {
+  if (!force && hasFreshLeadsCache() && leadsCache) {
+    return leadsCache.data;
+  }
+  if (!force && leadsInFlight) return leadsInFlight;
+
+  leadsInFlight = fetchLeadsFromApi()
+    .then((data) => {
+      writeLeadsCache(data);
+      return data;
+    })
+    .finally(() => {
+      leadsInFlight = null;
+    });
+  return leadsInFlight;
+}
+
 function sortLeads(list: Lead[], key: SortKey, dir: SortDir): Lead[] {
   const mul = dir === "asc" ? 1 : -1;
   return [...list].sort((a, b) => {
@@ -47,9 +88,10 @@ function sortLeads(list: Lead[], key: SortKey, dir: SortDir): Lead[] {
 }
 
 export function LeadManagementPage() {
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<Lead[]>(() => leadsCache?.data ?? []);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(() => !leadsCache);
   const [mainTab, setMainTab] = useState<LeadMainTab>("ongoing");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -82,36 +124,58 @@ export function LeadManagementPage() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [leads, targetExamFilterOptions]);
 
-  const refreshLeads = useCallback(async () => {
-    const res = await fetch("/api/leads", { cache: "no-store" });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(
-        typeof err?.error === "string" ? err.error : "Failed to load leads",
-      );
-    }
-    const data = (await res.json()) as Lead[];
-    setLeads(data);
+  const setLeadsAndCache = useCallback((next: Lead[]) => {
+    writeLeadsCache(next);
+    setLeads(next);
   }, []);
+
+  const updateLeadsAndCache = useCallback((updater: (prev: Lead[]) => Lead[]) => {
+    setLeads((prev) => {
+      const next = updater(prev);
+      writeLeadsCache(next);
+      return next;
+    });
+  }, []);
+
+  const refreshLeads = useCallback(
+    async (opts?: { force?: boolean; showLoading?: boolean }) => {
+      const force = opts?.force ?? false;
+      const showLoading = opts?.showLoading ?? false;
+      if (showLoading) setLoading(true);
+      try {
+        const data = await getLeadsCached(force);
+        setLeadsAndCache(data);
+        setLoadError(null);
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [setLeadsAndCache],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (hasFreshLeadsCache() && leadsCache) {
+      setLeadsAndCache(leadsCache.data);
+      setLoading(false);
+      setLoadError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setLoading(!leadsCache);
     setLoadError(null);
-    refreshLeads()
+    refreshLeads({ force: true, showLoading: !leadsCache })
       .catch((e) => {
         if (!cancelled)
           setLoadError(
             e instanceof Error ? e.message : "Could not load leads from API.",
           );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [refreshLeads]);
+  }, [refreshLeads, setLeadsAndCache]);
 
   useEffect(() => {
     if (!filterOpen && !sortOpen) return;
@@ -133,6 +197,12 @@ export function LeadManagementPage() {
       document.removeEventListener("keydown", onKey);
     };
   }, [filterOpen, sortOpen]);
+
+  useEffect(() => {
+    if (!actionNotice) return;
+    const timer = window.setTimeout(() => setActionNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [actionNotice]);
 
   useEffect(() => {
     const onFu = (e: Event) => {
@@ -254,7 +324,7 @@ export function LeadManagementPage() {
 
   const onUpdateLead = useCallback(
     async (id: string, patch: Partial<Lead>) => {
-      setLeads((prev) =>
+      updateLeadsAndCache((prev) =>
         prev.map((l) => (l.id === id ? { ...l, ...patch } : l)),
       );
       try {
@@ -265,16 +335,19 @@ export function LeadManagementPage() {
         });
         if (!res.ok) throw new Error();
         const updated = (await res.json()) as Lead;
-        setLeads((prev) => prev.map((l) => (l.id === id ? updated : l)));
+        updateLeadsAndCache((prev) =>
+          prev.map((l) => (l.id === id ? updated : l)),
+        );
+        setActionNotice("Lead updated.");
       } catch {
         try {
-          await refreshLeads();
+          await refreshLeads({ force: true });
         } catch {
           setLoadError("Could not sync with server.");
         }
       }
     },
-    [refreshLeads],
+    [refreshLeads, updateLeadsAndCache],
   );
 
   const onDraftPatch = useCallback((id: string, patch: Partial<Lead>) => {
@@ -295,13 +368,18 @@ export function LeadManagementPage() {
   );
 
   const saveSheetDraft = async () => {
+    let changed = 0;
     for (const [id, patch] of Object.entries(leadDraft)) {
       if (patch && Object.keys(patch).length > 0) {
         await onUpdateLead(id, patch);
+        changed += 1;
       }
     }
     setLeadDraft({});
     setSheetEditMode(false);
+    if (changed > 0) {
+      setActionNotice(`${changed} lead${changed === 1 ? "" : "s"} saved.`);
+    }
   };
 
   const cancelSheetDraft = () => {
@@ -408,6 +486,11 @@ export function LeadManagementPage() {
           Loading leads…
         </p>
       )}
+      {actionNotice && (
+        <p className="text-sm text-emerald-700" role="status">
+          {actionNotice}
+        </p>
+      )}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
           Leads
@@ -428,7 +511,10 @@ export function LeadManagementPage() {
           </button>
           <ImportExcelControl
             ref={importExcelRef}
-            onImported={refreshLeads}
+            onImported={async () => {
+              await refreshLeads({ force: true });
+              setActionNotice("Leads imported.");
+            }}
             showTriggerButton={false}
           />
           <LeadSheetActionsMenu
@@ -870,7 +956,10 @@ export function LeadManagementPage() {
       <AddStudentLeadDialog
         open={addStudentOpen}
         onClose={() => setAddStudentOpen(false)}
-        onAdded={refreshLeads}
+        onAdded={async () => {
+          await refreshLeads({ force: true });
+          setActionNotice("Lead added.");
+        }}
         leadSourceOptions={leadSources}
       />
 
