@@ -6,6 +6,7 @@ import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import type { FeeRecord } from "@/lib/types";
+import type { CurrencyFxPublic } from "@/lib/currencyApiFx";
 import {
   DEFAULT_INSTITUTE,
   type InstituteRecord,
@@ -57,6 +58,10 @@ export default function FeeManagementPage() {
   const [taxSaving, setTaxSaving] = useState(false);
   const [taxError, setTaxError] = useState<string | null>(null);
   const [taxSavedAt, setTaxSavedAt] = useState<string | null>(null);
+  const [currencyFx, setCurrencyFx] = useState<CurrencyFxPublic | null>(null);
+  const [cronSecretInput, setCronSecretInput] = useState("");
+  const [fxSyncing, setFxSyncing] = useState(false);
+  const [fxSyncMsg, setFxSyncMsg] = useState<string | null>(null);
 
   const loadTaxSettings = useCallback(async () => {
     setTaxLoading(true);
@@ -68,6 +73,7 @@ export default function FeeManagementPage() {
       const data = (await res.json().catch(() => ({}))) as {
         institute?: InstituteRecord;
         error?: string;
+        currencyFx?: CurrencyFxPublic | null;
       };
       if (!res.ok) {
         throw new Error(
@@ -79,6 +85,21 @@ export default function FeeManagementPage() {
         inst && typeof inst === "object"
           ? { ...DEFAULT_INSTITUTE, ...inst }
           : DEFAULT_INSTITUTE,
+      );
+      const cf = data.currencyFx;
+      setCurrencyFx(
+        cf && typeof cf === "object"
+          ? {
+              istDate:
+                typeof cf.istDate === "string" ? cf.istDate : null,
+              fetchedAt:
+                typeof cf.fetchedAt === "string" ? cf.fetchedAt : null,
+              inrPerUsd:
+                typeof cf.inrPerUsd === "number" ? cf.inrPerUsd : null,
+              inrPerAed:
+                typeof cf.inrPerAed === "number" ? cf.inrPerAed : null,
+            }
+          : null,
       );
     } catch (e) {
       setTaxError(e instanceof Error ? e.message : "Load failed.");
@@ -117,6 +138,77 @@ export default function FeeManagementPage() {
       setTaxSaving(false);
     }
   }, [taxInstitute]);
+
+  const runManualFxSync = useCallback(
+    async (force: boolean) => {
+      setFxSyncing(true);
+      setFxSyncMsg(null);
+      setTaxError(null);
+      try {
+        const query = force ? "?force=1" : "";
+        const res = await fetch(`/api/cron/currency-fx${query}`, {
+          method: "POST",
+          headers: cronSecretInput.trim()
+            ? { "x-cron-secret": cronSecretInput.trim() }
+            : {},
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          skipped?: boolean;
+          istDate?: string;
+          inrPerUsd?: number;
+          inrPerAed?: number;
+          fetchedAt?: string;
+          error?: string;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(
+            typeof data.error === "string" ? data.error : "FX sync failed.",
+          );
+        }
+
+        if (
+          typeof data.inrPerUsd === "number" &&
+          Number.isFinite(data.inrPerUsd) &&
+          typeof data.inrPerAed === "number" &&
+          Number.isFinite(data.inrPerAed)
+        ) {
+          setTaxInstitute((s) => ({
+            ...s,
+            inrPerUsd: data.inrPerUsd as number,
+            inrPerAed: data.inrPerAed as number,
+          }));
+        }
+
+        const fetchedAt =
+          typeof data.fetchedAt === "string" ? data.fetchedAt : null;
+        const istDate = typeof data.istDate === "string" ? data.istDate : null;
+        setCurrencyFx((prev) => ({
+          istDate: istDate ?? prev?.istDate ?? null,
+          fetchedAt: fetchedAt ?? prev?.fetchedAt ?? null,
+          inrPerUsd:
+            typeof data.inrPerUsd === "number"
+              ? data.inrPerUsd
+              : prev?.inrPerUsd ?? null,
+          inrPerAed:
+            typeof data.inrPerAed === "number"
+              ? data.inrPerAed
+              : prev?.inrPerAed ?? null,
+        }));
+
+        setFxSyncMsg(
+          data.skipped
+            ? "Already synced for current IST day. Use Force sync only if needed."
+            : "Currency rates updated from CurrencyAPI.",
+        );
+      } catch (e) {
+        setTaxError(e instanceof Error ? e.message : "FX sync failed.");
+      } finally {
+        setFxSyncing(false);
+      }
+    },
+    [cronSecretInput],
+  );
 
   useEffect(() => {
     void loadTaxSettings();
@@ -303,26 +395,57 @@ export default function FeeManagementPage() {
               .
             </p>
           </div>
-          <button
-            type="button"
-            className={SX.leadBtnGreen}
-            disabled={taxSaving || taxLoading}
-            onClick={() => void saveTaxSettings()}
-          >
-            {taxSaving ? "Saving…" : "Save tax & FX"}
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <input
+              type="password"
+              className={cn(SX.input, "h-9 w-[220px]")}
+              placeholder="CRON_SECRET for manual sync"
+              value={cronSecretInput}
+              onChange={(e) => setCronSecretInput(e.target.value)}
+            />
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              disabled={fxSyncing || taxLoading}
+              onClick={() => void runManualFxSync(false)}
+              title="Runs daily sync (respects one-call-per-IST-day rule)"
+            >
+              {fxSyncing ? "Syncing…" : "Sync FX now"}
+            </button>
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              disabled={fxSyncing || taxLoading}
+              onClick={() => void runManualFxSync(true)}
+              title="For testing: bypasses daily skip and fetches again"
+            >
+              Force sync
+            </button>
+            <button
+              type="button"
+              className={SX.leadBtnGreen}
+              disabled={taxSaving || taxLoading}
+              onClick={() => void saveTaxSettings()}
+            >
+              {taxSaving ? "Saving…" : "Save tax & FX"}
+            </button>
+          </div>
         </div>
         <div
           className={cn(
             SX.leadStatBar,
             "border-t-0",
             taxError && "bg-rose-50/80 text-rose-900",
-            !taxError && taxSavedAt && "bg-emerald-50/50 text-emerald-900",
+            !taxError &&
+              (taxSavedAt || fxSyncMsg) &&
+              "bg-emerald-50/50 text-emerald-900",
           )}
         >
           <span className="text-[13px]" role={taxError ? "alert" : undefined}>
             {taxError ? (
               taxError
+            ) : fxSyncMsg ? (
+              fxSyncMsg
             ) : taxSavedAt ? (
               `Saved (${new Date(taxSavedAt).toLocaleString()}).`
             ) : taxLoading ? (
@@ -390,6 +513,16 @@ export default function FeeManagementPage() {
         ) : (
           <p className="px-4 py-3 text-sm text-slate-600">Loading…</p>
         )}
+        {!taxLoading ? (
+          <p className="border-b border-slate-200 bg-slate-50/80 px-4 py-3 text-[11px] leading-snug text-slate-600">
+            INR/USD and INR/AED shown above are written by the daily CurrencyAPI job
+            (one request per IST day, ~6:00 AM IST). Saving this form overrides them until
+            the next sync.
+            {currencyFx?.fetchedAt
+              ? ` Last automatic sync: ${new Date(currencyFx.fetchedAt).toLocaleString()}.`
+              : null}
+          </p>
+        ) : null}
       </div>
 
       <div className={SX.outerSheet} id="exam-fee-defaults">

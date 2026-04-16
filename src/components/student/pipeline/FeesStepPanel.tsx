@@ -1,6 +1,7 @@
 "use client";
 
 import { addDays, format, parseISO } from "date-fns";
+import type { CurrencyFxPublic } from "@/lib/currencyApiFx";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InstituteBankDetailsPanel } from "@/components/student/fee/InstituteBankDetailsPanel";
@@ -78,6 +79,7 @@ export function FeesStepPanel({
   const [saving, setSaving] = useState(false);
   const [sendingFeeEmail, setSendingFeeEmail] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [currencyFx, setCurrencyFx] = useState<CurrencyFxPublic | null>(null);
 
   /** Tracks net we last synced so installment re-split runs on net change, not on hydrate. */
   const lastSyncedNetForInstallmentsRef = useRef<number | undefined>(undefined);
@@ -101,12 +103,30 @@ export function FeesStepPanel({
       });
       const data = (await res.json().catch(() => ({}))) as {
         institute?: InstituteRecord;
+        currencyFx?: CurrencyFxPublic | null;
       };
       const inst = data.institute;
       setInstitute(
         inst && typeof inst === "object"
           ? { ...DEFAULT_INSTITUTE, ...inst }
           : DEFAULT_INSTITUTE,
+      );
+      const cf = data.currencyFx;
+      setCurrencyFx(
+        cf &&
+          typeof cf === "object" &&
+          ("fetchedAt" in cf || "istDate" in cf)
+          ? {
+              istDate:
+                typeof cf.istDate === "string" ? cf.istDate : null,
+              fetchedAt:
+                typeof cf.fetchedAt === "string" ? cf.fetchedAt : null,
+              inrPerUsd:
+                typeof cf.inrPerUsd === "number" ? cf.inrPerUsd : null,
+              inrPerAed:
+                typeof cf.inrPerAed === "number" ? cf.inrPerAed : null,
+            }
+          : null,
       );
     } finally {
       setInstLoading(false);
@@ -708,6 +728,30 @@ export function FeesStepPanel({
               </span>
             )}
           </div>
+          {!instLoading ? (
+            <p className="mt-2 max-w-3xl text-[11px] leading-snug text-slate-500">
+              USD/AED reference rates refresh at most once per IST calendar day (~6:00 AM
+              IST via scheduled cron; one CurrencyAPI request when the day rolls over).
+              {currencyFx?.fetchedAt ? (
+                <>
+                  {" "}
+                  Last API sync:{" "}
+                  {format(parseISO(currencyFx.fetchedAt), "dd MMM yyyy, HH:mm")}
+                  {currencyFx.istDate
+                    ? ` · IST date ${currencyFx.istDate}`
+                    : null}
+                  .
+                </>
+              ) : (
+                <>
+                  {" "}
+                  Configure <code className="rounded bg-slate-100 px-1">CURRENCYAPI_KEY</code>{" "}
+                  and <code className="rounded bg-slate-100 px-1">CRON_SECRET</code> for
+                  automatic updates.
+                </>
+              )}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex-1 space-y-4 px-2 py-3 sm:px-3">

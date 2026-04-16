@@ -6,6 +6,7 @@ import {
   type InstituteProfilePayload,
   type InstituteRecord,
 } from "@/lib/instituteProfileTypes";
+import { getCurrencyFxSnapshotForStatus } from "@/lib/currencyApiFx";
 import InstituteProfileSettingsModel from "@/models/InstituteProfileSettings";
 
 export const runtime = "nodejs";
@@ -72,10 +73,12 @@ export async function GET() {
     })
       .lean()
       .exec();
+    const currencyFx = await getCurrencyFxSnapshotForStatus();
     if (!doc) {
       return NextResponse.json({
         ...docToPayload({}),
         updatedAt: null as string | null,
+        currencyFx,
       });
     }
     const { institute, updatedAt } = doc as {
@@ -86,6 +89,7 @@ export async function GET() {
       ...docToPayload({ institute }),
       updatedAt:
         updatedAt instanceof Date ? updatedAt.toISOString() : null,
+      currencyFx,
     });
   } catch (e) {
     console.error(e);

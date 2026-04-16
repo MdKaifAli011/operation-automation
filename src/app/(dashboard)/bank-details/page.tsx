@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BankAccountsSection } from "@/components/bank-details/BankAccountsSection";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
+import type { CurrencyFxPublic } from "@/lib/currencyApiFx";
 import {
   DEFAULT_INSTITUTE,
   normBankAccountId,
@@ -43,6 +44,7 @@ export default function BankDetailsPage() {
     null,
   );
   const [bankUpdatedAt, setBankUpdatedAt] = useState<string | null>(null);
+  const [currencyFx, setCurrencyFx] = useState<CurrencyFxPublic | null>(null);
 
   const applyInstitutePayload = useCallback(
     (data: Record<string, unknown>) => {
@@ -54,6 +56,21 @@ export default function BankDetailsPage() {
       );
       const u = data.updatedAt;
       setInstituteUpdatedAt(typeof u === "string" ? u : null);
+      const cf = data.currencyFx as CurrencyFxPublic | null | undefined;
+      setCurrencyFx(
+        cf && typeof cf === "object"
+          ? {
+              istDate:
+                typeof cf.istDate === "string" ? cf.istDate : null,
+              fetchedAt:
+                typeof cf.fetchedAt === "string" ? cf.fetchedAt : null,
+              inrPerUsd:
+                typeof cf.inrPerUsd === "number" ? cf.inrPerUsd : null,
+              inrPerAed:
+                typeof cf.inrPerAed === "number" ? cf.inrPerAed : null,
+            }
+          : null,
+      );
     },
     [],
   );
@@ -426,6 +443,19 @@ export default function BankDetailsPage() {
                       disabled={formDisabled}
                     />
                   </KvRow>
+                  <tr>
+                    <td
+                      colSpan={2}
+                      className="border-t border-slate-100 bg-slate-50/90 px-3 py-2 text-[11px] leading-snug text-slate-600"
+                    >
+                      Daily job (~6:00 AM IST) pulls USD/AED rates from CurrencyAPI once per
+                      IST day and updates FX fields. Manual save overrides until the next
+                      sync.
+                      {currencyFx?.fetchedAt
+                        ? ` Last auto sync: ${formatSavedAt(currencyFx.fetchedAt)}.`
+                        : null}
+                    </td>
+                  </tr>
                   <KvRow label="Address">
                     <textarea
                       className={SX.textarea}

@@ -12,11 +12,18 @@ Internal **CRM** for education ops: **MongoDB** + **Mongoose**, **Next.js 16** A
 
 ## Environment
 
-| Variable        | Required | Purpose                          |
-|-----------------|----------|----------------------------------|
-| `MONGODB_URI`   | Yes      | MongoDB connection string        |
+| Variable            | Required | Purpose |
+|---------------------|----------|---------|
+| `MONGODB_URI`       | Yes      | MongoDB connection string |
+| `CURRENCYAPI_KEY`   | No*      | CurrencyAPI key for daily INR/USD/AED sync (one API call per IST day) |
+| `CRON_SECRET`       | No*      | Secures `POST/GET /api/cron/currency-fx` (required for that route to run) |
 
-Use `.env.local` (preferred) or `.env` at the repo root.
+\*Required if you use automatic FX: set both, schedule the cron, and keep the key out of source control.
+
+- **Linux VPS / self-hosted:** schedule `/api/cron/currency-fx` at **00:30 UTC** (= **6:00 AM IST**) using **system cron** or a scheduler. Send `Authorization: Bearer <CRON_SECRET>`. See **`docs/vps-hosting.md`** and `scripts/daily-currency-fx.example.sh`.
+- **Other hosts:** if your platform has native schedulers, call the same route with the same Bearer secret.
+
+Use `.env.local` (preferred) or `.env` at the repo root. See `.env.example`.
 
 ---
 
@@ -58,6 +65,7 @@ Run **`npm run build`** after non-trivial changes before considering work done.
 | Lead grid         | `src/components/leads/LeadManagementPage.tsx` |
 | Exam brochure admin | `src/app/(dashboard)/course-brochure/page.tsx` |
 | Nav               | `src/components/layout/Sidebar.tsx` |
+| VPS / cron FX     | `docs/vps-hosting.md`, `scripts/daily-currency-fx.example.sh` |
 
 ---
 
