@@ -9,6 +9,8 @@ import { getAppBaseUrl } from "@/lib/email/appBaseUrl";
 import { getEnrollmentFormLink } from "@/lib/email/enrollmentFormLink";
 import { getTeacherBlockDurationMinutes } from "@/lib/demoSchedule/durations";
 import { format, parseISO } from "date-fns";
+import { resolveStudentReportSendTarget } from "@/lib/studentReportVersions";
+import type { LeadPipelineStudentReport } from "@/lib/leadPipelineMetaTypes";
 
 type LeanLead = {
   studentName?: string;
@@ -263,14 +265,13 @@ export function buildLeadEmailVars(
   }
 
   if (key === "brochure") {
-    const sr = meta.studentReport as
-      | { pdfUrl?: string | null; fileName?: string | null }
-      | undefined;
-    const reportPath = str(sr?.pdfUrl);
+    const sr = meta.studentReport as LeadPipelineStudentReport | undefined;
+    const sendTarget = resolveStudentReportSendTarget(sr);
+    const reportPath = sendTarget?.pdfUrl ? str(sendTarget.pdfUrl) : "";
     if (reportPath) {
       const brochureLink = absUrl(reportPath);
       const brochureLabel =
-        str(sr?.fileName) || "Student progress report";
+        sendTarget?.fileName || "Student progress report";
       const brochureBundleHtml = `<p style="margin:12px 0 6px;font-weight:600;">Student progress report</p><p style="margin:4px 0;"><a href="${escapeAttr(brochureLink)}">${escapeHtmlForEmail(brochureLabel)}</a></p>`;
       return { ...base, brochureLabel, brochureLink, brochureBundleHtml };
     }

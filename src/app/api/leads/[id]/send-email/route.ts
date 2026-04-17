@@ -23,6 +23,11 @@ import {
   isEmailTemplateKey,
   type EmailTemplateKey,
 } from "@/lib/email/templateKeys";
+import {
+  isStudentReportPdfUrlForLead,
+  resolveStudentReportRowsForUrls,
+} from "@/lib/studentReportVersions";
+import type { LeadPipelineStudentReport } from "@/lib/leadPipelineMetaTypes";
 
 export const runtime = "nodejs";
 
@@ -42,6 +47,8 @@ type PostBody = {
   brochureEmail?: {
     selectionKeys: string[];
     includeStudentReportPdf: boolean;
+    /** Public paths under this lead’s report folders (`student-reports` or `lead-documents` from the report modal). */
+    studentReportPdfUrls?: string[];
   };
 };
 
@@ -373,10 +380,43 @@ export async function POST(
       const sel = body.brochureEmail.selectionKeys;
       const keys = Array.isArray(sel) ? sel.map((k) => String(k ?? "").trim()).filter(Boolean) : [];
       const includePdf = body.brochureEmail.includeStudentReportPdf === true;
+      const rawReportUrls = (body.brochureEmail as { studentReportPdfUrls?: unknown })
+        .studentReportPdfUrls;
+      const parsedReportUrls = Array.isArray(rawReportUrls)
+        ? rawReportUrls.map((u) => String(u ?? "").trim()).filter(Boolean)
+        : [];
+      const urlSeen = new Set<string>();
+      const studentReportPdfUrls: string[] = [];
+      for (const u of parsedReportUrls) {
+        if (urlSeen.has(u)) continue;
+        urlSeen.add(u);
+        studentReportPdfUrls.push(u);
+      }
+      if (includePdf && studentReportPdfUrls.length > 0) {
+        const meta = (lead.pipelineMeta ?? {}) as Record<string, unknown>;
+        const sr = meta.studentReport as LeadPipelineStudentReport | undefined;
+        for (const u of studentReportPdfUrls) {
+          if (!isStudentReportPdfUrlForLead(id, u)) {
+            return NextResponse.json(
+              { error: "Invalid student report file path." },
+              { status: 400 },
+            );
+          }
+        }
+        const resolved = resolveStudentReportRowsForUrls(sr, studentReportPdfUrls);
+        if (resolved.length !== studentReportPdfUrls.length) {
+          return NextResponse.json(
+            { error: "One or more selected reports are not on this lead." },
+            { status: 400 },
+          );
+        }
+      }
       try {
         vars = await buildBrochureBundleEmailVars(lead, {
           selectionKeys: keys,
           includeStudentReportPdf: includePdf,
+          studentReportPdfUrls:
+            studentReportPdfUrls.length > 0 ? studentReportPdfUrls : undefined,
         });
       } catch (err) {
         const msg =
@@ -404,7 +444,7 @@ export async function POST(
       html = `<div style="max-width:640px;margin:0 auto;font-family:Arial,'Segoe UI',sans-serif;color:#1f2937;line-height:1.6;">
 <p style="margin:0 0 14px;">Dear ${parentName},</p>
 <p style="margin:0 0 14px;">Greetings from <strong>Testprepkart</strong>.</p>
-<p style="margin:0 0 14px;">Please find the latest <strong>Demo Session Report</strong> for <strong>${studentName}</strong> attached below for your review.</p>
+<p style="margin:0 0 14px;">Please find the <strong>Demo Session Report</strong> for <strong>${studentName}</strong> linked below for your review.</p>
 <div style="margin:0 0 14px;padding:12px 14px;border:1px solid #e5e7eb;background:#f8fafc;">
 <p style="margin:0;font-size:13px;color:#475569;">
 Student: <strong>${studentName}</strong>${grade ? ` &nbsp;|&nbsp; Grade: <strong>${grade}</strong>` : ""}${exams && exams !== "—" ? ` &nbsp;|&nbsp; Exam track: <strong>${exams}</strong>` : ""}

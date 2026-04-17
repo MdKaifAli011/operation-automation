@@ -59,6 +59,8 @@ export type LeadPipelineBrochure = {
   sentEmail?: boolean;
   sentWhatsAppAt?: string | null;
   sentEmailAt?: string | null;
+  /** Catalog keys last emailed from Step 2 (e.g. `NEET-someKey`) */
+  lastSentSelectionKeys?: string[];
 };
 
 /** One installment line on the Fees step (amounts in INR). */
@@ -130,6 +132,16 @@ export type LeadPipelineSchedule = {
   weekStartIso?: string | null;
 };
 
+/** One archived PDF kept when staff generates or uploads a newer report */
+export type StudentReportVersionEntry = {
+  id: string;
+  pdfUrl: string;
+  fileName?: string | null;
+  generatedAt?: string | null;
+  source?: string;
+  generatedForMeetRowId?: string | null;
+};
+
 /** Full `pipelineMeta` object stored on each Lead document */
 /** Generated student progress report (PDF) + staff inputs; Step 2 · Documents */
 export type LeadPipelineStudentReport = {
@@ -151,6 +163,16 @@ export type LeadPipelineStudentReport = {
   sendConfirmedAt?: string | null;
   /** Optional demo row id when a single-report PDF was generated from one demo only. */
   generatedForMeetRowId?: string | null;
+  /** Older PDFs kept on disk when a new one is generated or uploaded */
+  versionHistory?: StudentReportVersionEntry[];
+  /** Which PDF path to attach on “Send report” (defaults to latest `pdfUrl`) */
+  activeSendPdfUrl?: string | null;
+  activeSendFileName?: string | null;
+  /** Last emailed report attachment (for student page visibility) */
+  lastSentPdfUrl?: string | null;
+  /** All PDF public paths included in the last report email (same send). */
+  lastSentPdfUrls?: string[] | null;
+  lastSentAt?: string | null;
 };
 
 /** Step 2 tracker rows (sheet-like Documents table). */

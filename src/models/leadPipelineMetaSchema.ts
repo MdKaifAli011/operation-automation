@@ -72,6 +72,19 @@ const BrochureBlockSchema = new Schema(
     sentEmail: { type: Boolean, default: false },
     sentWhatsAppAt: { type: String, default: null },
     sentEmailAt: { type: String, default: null },
+    lastSentSelectionKeys: { type: [String], default: undefined },
+  },
+  { _id: false },
+);
+
+const StudentReportVersionEntrySchema = new Schema(
+  {
+    id: { type: String, default: "" },
+    pdfUrl: { type: String, default: "" },
+    fileName: { type: String, default: null },
+    generatedAt: { type: String, default: null },
+    source: { type: String, default: "" },
+    generatedForMeetRowId: { type: String, default: null },
   },
   { _id: false },
 );
@@ -89,6 +102,12 @@ const StudentReportBlockSchema = new Schema(
     manualStudentLevel: { type: String, default: "" },
     generatedForMeetRowId: { type: String, default: null },
     sendConfirmedAt: { type: String, default: null },
+    versionHistory: { type: [StudentReportVersionEntrySchema], default: undefined },
+    activeSendPdfUrl: { type: String, default: null },
+    activeSendFileName: { type: String, default: null },
+    lastSentPdfUrl: { type: String, default: null },
+    lastSentPdfUrls: { type: [String], default: undefined },
+    lastSentAt: { type: String, default: null },
   },
   { _id: false },
 );

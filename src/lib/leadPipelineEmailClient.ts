@@ -13,6 +13,7 @@ export async function sendLeadPipelineEmail(
     brochureEmail?: {
       selectionKeys: string[];
       includeStudentReportPdf: boolean;
+      studentReportPdfUrls?: string[];
     };
   },
 ): Promise<void> {

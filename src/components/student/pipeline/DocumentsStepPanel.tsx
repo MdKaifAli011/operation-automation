@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BankAccountRecord } from "@/lib/instituteProfileTypes";
 import { StudentReportModal } from "@/components/student/StudentReportModal";
+import { StudentReportVersionsModal } from "@/components/student/StudentReportVersionsModal";
+import { listStudentReportFiles } from "@/lib/studentReportVersions";
+import type { LeadPipelineStudentReport } from "@/lib/leadPipelineMetaTypes";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
@@ -63,7 +66,9 @@ type MessageDialogState =
     };
 
 function norm(s: string): string {
-  return String(s ?? "").trim().toLowerCase();
+  return String(s ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function absOrBlank(input: string | undefined): string {
@@ -79,22 +84,6 @@ function accountLabel(a: BankAccountRecord): string {
   const bank = a.bankName.trim();
   if (lab && bank) return `${lab} · ${bank}`;
   return lab || bank || "Bank account";
-}
-
-function hasTeacherFeedback(r: {
-  teacherFeedbackSubmittedAt?: string | null;
-  teacherFeedbackRating?: string;
-  teacherFeedbackStrengths?: string;
-  teacherFeedbackImprovements?: string;
-  teacherFeedbackNotes?: string;
-}): boolean {
-  return Boolean(
-    r.teacherFeedbackSubmittedAt?.trim() ||
-      r.teacherFeedbackRating?.trim() ||
-      r.teacherFeedbackStrengths?.trim() ||
-      r.teacherFeedbackImprovements?.trim() ||
-      r.teacherFeedbackNotes?.trim(),
-  );
 }
 
 function sentAtLabel(iso: string | null | undefined): string {
@@ -129,18 +118,20 @@ export function DocumentsStepPanel({
   const [brochureOptions, setBrochureOptions] = useState<BrochureOption[]>([]);
   const [brochureLoading, setBrochureLoading] = useState(false);
   const [brochureModalOpen, setBrochureModalOpen] = useState(false);
-  const [selectedBrochureKeys, setSelectedBrochureKeys] = useState<string[]>([]);
+  const [selectedBrochureKeys, setSelectedBrochureKeys] = useState<string[]>(
+    [],
+  );
 
   const [bankOptions, setBankOptions] = useState<BankAccountRecord[]>([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankModalOpen, setBankModalOpen] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [reportVersionsModalOpen, setReportVersionsModalOpen] = useState(false);
 
   const docsMetaItems = useMemo(() => {
-    const raw = (lead.pipelineMeta as Record<string, unknown> | undefined)?.documents as
-      | { items?: DocumentItemPersisted[] }
-      | undefined;
+    const raw = (lead.pipelineMeta as Record<string, unknown> | undefined)
+      ?.documents as { items?: DocumentItemPersisted[] } | undefined;
     return Array.isArray(raw?.items) ? raw.items : [];
   }, [lead.pipelineMeta]);
 
@@ -170,19 +161,17 @@ export function DocumentsStepPanel({
     return m;
   }, [docsMetaItems]);
 
-  const studentReport = ((lead.pipelineMeta as Record<string, unknown> | undefined)
-    ?.studentReport ?? {}) as {
-    pdfUrl?: string | null;
-    generatedForMeetRowId?: string | null;
-    source?: "teacher_feedback" | "manual_sales" | "uploaded_custom";
-  };
-  const brochure = ((lead.pipelineMeta as Record<string, unknown> | undefined)?.brochure ??
-    {}) as {
+  const studentReport = ((
+    lead.pipelineMeta as Record<string, unknown> | undefined
+  )?.studentReport ?? {}) as LeadPipelineStudentReport;
+  const brochure = ((lead.pipelineMeta as Record<string, unknown> | undefined)
+    ?.brochure ?? {}) as {
     sentEmail?: boolean;
     sentEmailAt?: string | null;
+    lastSentSelectionKeys?: string[];
   };
-  const fees = ((lead.pipelineMeta as Record<string, unknown> | undefined)?.fees ??
-    {}) as {
+  const fees = ((lead.pipelineMeta as Record<string, unknown> | undefined)
+    ?.fees ?? {}) as {
     enrollmentSent?: boolean;
     enrollmentSentAt?: string | null;
     feeSentEmail?: boolean;
@@ -190,11 +179,6 @@ export function DocumentsStepPanel({
     feeSelectedBankAccountId?: string | null;
   };
 
-  const reportGeneratedForMeetRowId = String(
-    studentReport.generatedForMeetRowId ?? "",
-  ).trim();
-  const reportSource = String(studentReport.source ?? "").trim();
-  const reportGeneratedRaw = !!String(studentReport.pdfUrl ?? "").trim();
   const reportSentRaw = !!docsByKey.get("report")?.sentAt;
   const brochureSent = !!brochure.sentEmail || !!brochure.sentEmailAt;
   const enrollmentSent = !!fees.enrollmentSent || !!fees.enrollmentSentAt;
@@ -202,40 +186,70 @@ export function DocumentsStepPanel({
   const courierSent = !!docsByKey.get("courier")?.sentAt;
   const rankingSent = !!docsByKey.get("ranking")?.sentAt;
 
-  const demoRows =
-    ((lead.pipelineMeta as Record<string, unknown> | undefined)?.demo as {
-      rows?: Array<{
-        teacherFeedbackSubmittedAt?: string | null;
-        teacherFeedbackRating?: string;
-        teacherFeedbackStrengths?: string;
-        teacherFeedbackImprovements?: string;
-        teacherFeedbackNotes?: string;
-      }>;
-    } | undefined)?.rows ?? [];
-  const feedbackCount = demoRows.filter((r) => hasTeacherFeedback(r)).length;
-  const generatedRowStillValid = demoRows.some(
-    (r) =>
-      String((r as { meetRowId?: string }).meetRowId ?? "").trim() ===
-        reportGeneratedForMeetRowId && hasTeacherFeedback(r),
+  const reportFileList = useMemo(
+    () => listStudentReportFiles(studentReport),
+    [studentReport],
   );
-  const reportGenerated =
-    reportGeneratedRaw &&
-    (reportSource === "manual_sales" ||
-      reportSource === "uploaded_custom" ||
-      (reportGeneratedForMeetRowId.length > 0
-        ? generatedRowStillValid
-        : feedbackCount === 0 || generatedRowStillValid));
-  const reportSent = reportGenerated && reportSentRaw;
-  const reportCountLabel = reportGenerated ? "1" : String(feedbackCount || 0);
+  const reportGenerated = reportFileList.length > 0;
+  const reportSent = reportSentRaw;
+  const reportCountLabel = String(reportFileList.length);
+
+  const lastReportEmailedHint = useMemo(() => {
+    const multi = Array.isArray(studentReport.lastSentPdfUrls)
+      ? studentReport.lastSentPdfUrls.map((u) => String(u ?? "").trim()).filter(Boolean)
+      : [];
+    const urls =
+      multi.length > 0
+        ? multi
+        : String(studentReport.lastSentPdfUrl ?? "").trim()
+          ? [String(studentReport.lastSentPdfUrl).trim()]
+          : [];
+    if (urls.length === 0) return "";
+    const names = urls
+      .map(
+        (u) =>
+          reportFileList.find((f) => f.pdfUrl === u)?.fileName?.trim() ||
+          "Report PDF",
+      )
+      .join(", ");
+    const at = sentAtLabel(studentReport.lastSentAt ?? null);
+    if (urls.length > 1) {
+      return at
+        ? `Last emailed ${urls.length} PDFs: ${names} · ${at}`
+        : `Last emailed ${urls.length} PDFs: ${names}`;
+    }
+    return at ? `Last emailed: ${names} · ${at}` : `Last emailed: ${names}`;
+  }, [studentReport, reportFileList]);
+
+  const lastBrochureEmailedHint = useMemo(() => {
+    const keys = brochure.lastSentSelectionKeys;
+    if (!Array.isArray(keys) || keys.length === 0) return "";
+    const titles = keys
+      .map((k) => brochureOptions.find((b) => b.key === k)?.title ?? k)
+      .filter(Boolean);
+    if (titles.length === 0) return "";
+    return `Last emailed: ${titles.join(" · ")}`;
+  }, [brochure.lastSentSelectionKeys, brochureOptions]);
 
   useEffect(() => {
     setSelectedBankId(fees.feeSelectedBankAccountId ?? null);
   }, [fees.feeSelectedBankAccountId]);
 
+  useEffect(() => {
+    if (!brochureModalOpen) return;
+    const prev = brochure.lastSentSelectionKeys;
+    if (!Array.isArray(prev) || prev.length === 0) return;
+    if (brochureOptions.length === 0) return;
+    const valid = prev.filter((k) => brochureOptions.some((o) => o.key === k));
+    if (valid.length > 0) setSelectedBrochureKeys(valid);
+  }, [brochureModalOpen, brochure.lastSentSelectionKeys, brochureOptions]);
+
   const loadBrochureOptions = async () => {
     setBrochureLoading(true);
     try {
-      const res = await fetch("/api/exam-brochure-templates", { cache: "no-store" });
+      const res = await fetch("/api/exam-brochure-templates", {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error("Could not load brochure list.");
       const data = (await res.json()) as Array<{
         exam?: string;
@@ -267,7 +281,9 @@ export function DocumentsStepPanel({
         }
       }
       setBrochureOptions(out);
-      setSelectedBrochureKeys((prev) => prev.filter((k) => out.some((x) => x.key === k)));
+      setSelectedBrochureKeys((prev) =>
+        prev.filter((k) => out.some((x) => x.key === k)),
+      );
     } catch (e) {
       setMsgDlg({
         open: true,
@@ -284,14 +300,16 @@ export function DocumentsStepPanel({
   const loadBankOptions = async () => {
     setBankLoading(true);
     try {
-      const res = await fetch("/api/settings/bank-profile", { cache: "no-store" });
+      const res = await fetch("/api/settings/bank-profile", {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error("Could not load bank accounts.");
       const data = (await res.json()) as { bankAccounts?: BankAccountRecord[] };
       const list = Array.isArray(data.bankAccounts)
         ? data.bankAccounts.filter((a) => a.isActive)
         : [];
       setBankOptions(list);
-      setSelectedBankId((prev) => prev ?? (list[0]?.id ?? null));
+      setSelectedBankId((prev) => prev ?? list[0]?.id ?? null);
     } catch (e) {
       setMsgDlg({
         open: true,
@@ -311,8 +329,10 @@ export function DocumentsStepPanel({
   }, [lead.id]);
 
   const brochureCountLabel = String(brochureOptions.length || 0);
-  const bankCountLabel = bankOptions.length > 0 ? `${bankOptions.length} (Pvt.)` : "0";
-  const firstExam = lead.targetExams.find((x) => String(x ?? "").trim()) ?? "Course";
+  const bankCountLabel =
+    bankOptions.length > 0 ? `${bankOptions.length} (Pvt.)` : "0";
+  const firstExam =
+    lead.targetExams.find((x) => String(x ?? "").trim()) ?? "Course";
 
   const baseRows: DocumentRow[] = [
     {
@@ -421,7 +441,12 @@ export function DocumentsStepPanel({
             const now = new Date().toISOString();
             await patchDocsItem(
               row.key,
-              { key: row.key, title: row.title, countLabel: row.countLabel, sentAt: now },
+              {
+                key: row.key,
+                title: row.title,
+                countLabel: row.countLabel,
+                sentAt: now,
+              },
               `Document sent: ${row.title}`,
             );
             await refreshLead();
@@ -461,7 +486,12 @@ export function DocumentsStepPanel({
             await sendLeadPipelineEmail(lead.id, { templateKey: "enrollment" });
             await patchDocsItem(
               "enrollment",
-              { key: "enrollment", title: row.title, countLabel: row.countLabel, sentAt: now },
+              {
+                key: "enrollment",
+                title: row.title,
+                countLabel: row.countLabel,
+                sentAt: now,
+              },
               "Enrollment form link sent from Step 2.",
               { fees: { enrollmentSent: true, enrollmentSentAt: now } },
             );
@@ -500,10 +530,17 @@ export function DocumentsStepPanel({
           setSavingKey(row.key);
           try {
             const now = new Date().toISOString();
-            await sendLeadPipelineEmail(lead.id, { templateKey: "courier_address" });
+            await sendLeadPipelineEmail(lead.id, {
+              templateKey: "courier_address",
+            });
             await patchDocsItem(
               "courier",
-              { key: "courier", title: row.title, countLabel: row.countLabel, sentAt: now },
+              {
+                key: "courier",
+                title: row.title,
+                countLabel: row.countLabel,
+                sentAt: now,
+              },
               "Courier address request emailed from Step 2.",
             );
             await refreshLead();
@@ -555,7 +592,13 @@ export function DocumentsStepPanel({
           sentAt: now,
         },
         `Brochure bundle sent (${selectedBrochureKeys.length} selected).`,
-        { brochure: { sentEmail: true, sentEmailAt: now } },
+        {
+          brochure: {
+            sentEmail: true,
+            sentEmailAt: now,
+            lastSentSelectionKeys: [...selectedBrochureKeys],
+          },
+        },
       );
       setBrochureModalOpen(false);
       await refreshLead();
@@ -608,7 +651,12 @@ export function DocumentsStepPanel({
       await sendLeadPipelineEmail(lead.id, { templateKey: "bank_details" });
       await patchDocsItem(
         "bank",
-        { key: "bank", title: row?.title || "Bank & Account Details", countLabel: bankCountLabel, sentAt: now },
+        {
+          key: "bank",
+          title: row?.title || "Bank & Account Details",
+          countLabel: bankCountLabel,
+          sentAt: now,
+        },
         "Bank details sent from Step 2.",
         { fees: { feeSelectedBankAccountId: selectedBankId } },
       );
@@ -628,14 +676,20 @@ export function DocumentsStepPanel({
     }
   };
 
-  const uploadNewFile = async (): Promise<{ storedFileUrl: string; fileName: string } | null> => {
+  const uploadNewFile = async (): Promise<{
+    storedFileUrl: string;
+    fileName: string;
+  } | null> => {
     if (!newFile) return null;
     const fd = new FormData();
     fd.set("file", newFile);
-    const res = await fetch(`/api/leads/${encodeURIComponent(lead.id)}/documents-upload`, {
-      method: "POST",
-      body: fd,
-    });
+    const res = await fetch(
+      `/api/leads/${encodeURIComponent(lead.id)}/documents-upload`,
+      {
+        method: "POST",
+        body: fd,
+      },
+    );
     const data = (await res.json().catch(() => ({}))) as {
       error?: string;
       storedFileUrl?: string;
@@ -680,7 +734,8 @@ export function DocumentsStepPanel({
           mode: "alert",
           variant: "error",
           title: "Invalid URL",
-          description: "Use a full http(s) URL or an app path starting with '/'.",
+          description:
+            "Use a full http(s) URL or an app path starting with '/'.",
         });
         return;
       }
@@ -712,8 +767,14 @@ export function DocumentsStepPanel({
         },
       ];
       await onPatchLead({
-        pipelineMeta: mergePipelineMeta(lead.pipelineMeta, { documents: { items: list } }),
-        activityLog: appendActivity(lead.activityLog, "brochure", `Document added: ${title}`),
+        pipelineMeta: mergePipelineMeta(lead.pipelineMeta, {
+          documents: { items: list },
+        }),
+        activityLog: appendActivity(
+          lead.activityLog,
+          "brochure",
+          `Document added: ${title}`,
+        ),
       });
       await refreshLead();
       pushToast(`Document added: ${title}`);
@@ -757,7 +818,9 @@ export function DocumentsStepPanel({
 
       <div className="bg-white px-2 py-2 sm:px-3">
         <div className="w-full overflow-x-auto">
-          <table className={cn(SX.dataTable, "w-full min-w-[760px] table-fixed")}>
+          <table
+            className={cn(SX.dataTable, "w-full min-w-[760px] table-fixed")}
+          >
             <colgroup>
               <col className="w-[7%]" />
               <col className="w-[36%]" />
@@ -778,7 +841,9 @@ export function DocumentsStepPanel({
               {rows.map((r, idx) => {
                 const busy = savingKey === r.key;
                 const customLink = r.isCustom ? customDocLink(r.key) : "";
-                const docsSentAt = String(docsByKey.get(r.key)?.sentAt ?? "").trim();
+                const docsSentAt = String(
+                  docsByKey.get(r.key)?.sentAt ?? "",
+                ).trim();
                 const rowSentAt =
                   docsSentAt ||
                   (r.key === "brochure"
@@ -790,11 +855,19 @@ export function DocumentsStepPanel({
                         : "");
                 const sentMetaLabel = sentAtLabel(rowSentAt);
                 return (
-                  <tr key={r.key} className={idx % 2 === 0 ? "bg-sky-50/40" : "bg-white"}>
+                  <tr
+                    key={r.key}
+                    className={idx % 2 === 0 ? "bg-sky-50/40" : "bg-white"}
+                  >
                     <td className={SX.dataTd}>{idx + 1}</td>
                     <td className={cn(SX.dataTd, "font-medium text-slate-900")}>
                       {customLink && r.isSent ? (
-                        <a href={customLink} target="_blank" rel="noreferrer" className="underline text-primary">
+                        <a
+                          href={customLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-primary"
+                        >
                           {r.title}
                         </a>
                       ) : (
@@ -805,13 +878,23 @@ export function DocumentsStepPanel({
                           Sent: {sentMetaLabel}
                         </p>
                       ) : null}
+                      {r.key === "report" && lastReportEmailedHint ? (
+                        <p className="mt-1 text-[11px] text-slate-600">
+                          {lastReportEmailedHint}
+                        </p>
+                      ) : null}
+                      {r.key === "brochure" && lastBrochureEmailedHint ? (
+                        <p className="mt-1 text-[11px] text-slate-600">
+                          {lastBrochureEmailedHint}
+                        </p>
+                      ) : null}
                     </td>
                     <td className={SX.dataTd}>
                       {r.key === "report" ? (
                         <button
                           type="button"
                           className="font-semibold text-primary underline"
-                          onClick={() => setReportOpen(true)}
+                          onClick={() => setReportVersionsModalOpen(true)}
                         >
                           {r.countLabel}
                         </button>
@@ -867,7 +950,10 @@ export function DocumentsStepPanel({
                               href={customLink}
                               target="_blank"
                               rel="noreferrer"
-                              className={cn(SX.btnSecondary, "h-8 w-16 justify-center px-2 text-[12px]")}
+                              className={cn(
+                                SX.btnSecondary,
+                                "h-8 w-16 justify-center px-2 text-[12px]",
+                              )}
                             >
                               View
                             </a>
@@ -880,10 +966,12 @@ export function DocumentsStepPanel({
                             )}
                             disabled={busy}
                             onClick={() => {
-                              if (r.key === "brochure") setBrochureModalOpen(true);
+                              if (r.key === "brochure")
+                                setBrochureModalOpen(true);
                               else if (r.key === "bank") setBankModalOpen(true);
                               else if (r.key === "enrollment") sendEnrollment();
-                              else if (r.key === "courier") sendCourierAddressRequest();
+                              else if (r.key === "courier")
+                                sendCourierAddressRequest();
                               else markSentSimple(r);
                             }}
                           >
@@ -906,14 +994,25 @@ export function DocumentsStepPanel({
           className="fixed left-1/2 top-1/2 z-250 w-[min(100vw-1rem,660px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-slate-200 bg-white p-0 shadow-2xl backdrop:bg-slate-900/40"
         >
           <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-            <h3 className="text-[15px] font-semibold text-slate-900">Select brochure documents</h3>
-            <p className="mt-1 text-[12px] text-slate-600">Choose one or more brochures, then send in one email.</p>
+            <h3 className="text-[15px] font-semibold text-slate-900">
+              Select brochure documents
+            </h3>
+            <p className="mt-1 text-[12px] text-slate-600">
+              Choose one or more brochures, then send in one email.
+            </p>
+            {lastBrochureEmailedHint ? (
+              <p className="mt-2 text-[11px] text-slate-600">
+                {lastBrochureEmailedHint}
+              </p>
+            ) : null}
           </div>
           <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
             {brochureLoading ? (
               <p className="text-[13px] text-slate-600">Loading brochures...</p>
             ) : brochureOptions.length === 0 ? (
-              <p className="text-[13px] text-slate-600">No brochure documents available for this lead's exams.</p>
+              <p className="text-[13px] text-slate-600">
+                No brochure documents available for this lead's exams.
+              </p>
             ) : (
               <div className="space-y-2">
                 {brochureOptions.map((b) => (
@@ -927,7 +1026,9 @@ export function DocumentsStepPanel({
                       checked={selectedBrochureKeys.includes(b.key)}
                       onChange={(e) =>
                         setSelectedBrochureKeys((prev) =>
-                          e.target.checked ? [...prev, b.key] : prev.filter((k) => k !== b.key),
+                          e.target.checked
+                            ? [...prev, b.key]
+                            : prev.filter((k) => k !== b.key),
                         )
                       }
                     />
@@ -954,13 +1055,19 @@ export function DocumentsStepPanel({
             )}
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
-            <button type="button" className={SX.btnSecondary} onClick={() => setBrochureModalOpen(false)}>
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              onClick={() => setBrochureModalOpen(false)}
+            >
               Close
             </button>
             <button
               type="button"
               className={SX.btnPrimary}
-              disabled={savingKey === "brochure" || selectedBrochureKeys.length === 0}
+              disabled={
+                savingKey === "brochure" || selectedBrochureKeys.length === 0
+              }
               onClick={() => void sendBrochureSelection()}
             >
               {savingKey === "brochure" ? "Sending..." : "Send selected"}
@@ -975,18 +1082,31 @@ export function DocumentsStepPanel({
           className="fixed left-1/2 top-1/2 z-250 w-[min(100vw-1rem,620px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-slate-200 bg-white p-0 shadow-2xl backdrop:bg-slate-900/40"
         >
           <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-            <h3 className="text-[15px] font-semibold text-slate-900">Select bank account details</h3>
-            <p className="mt-1 text-[12px] text-slate-600">Pick one bank account. Fee email will include this account details.</p>
+            <h3 className="text-[15px] font-semibold text-slate-900">
+              Select bank account details
+            </h3>
+            <p className="mt-1 text-[12px] text-slate-600">
+              Pick one bank account. Fee email will include this account
+              details.
+            </p>
           </div>
           <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
             {bankLoading ? (
-              <p className="text-[13px] text-slate-600">Loading bank accounts...</p>
+              <p className="text-[13px] text-slate-600">
+                Loading bank accounts...
+              </p>
             ) : bankOptions.length === 0 ? (
-              <p className="text-[13px] text-slate-600">No active bank accounts found. Add them in Bank &amp; A/c Details.</p>
+              <p className="text-[13px] text-slate-600">
+                No active bank accounts found. Add them in Bank &amp; A/c
+                Details.
+              </p>
             ) : (
               <div className="space-y-2">
                 {bankOptions.map((a) => (
-                  <label key={a.id} className="flex items-start gap-2 rounded border border-slate-200 bg-white px-3 py-2">
+                  <label
+                    key={a.id}
+                    className="flex items-start gap-2 rounded border border-slate-200 bg-white px-3 py-2"
+                  >
                     <input
                       type="radio"
                       name="bank-select-doc-step"
@@ -995,7 +1115,9 @@ export function DocumentsStepPanel({
                       onChange={() => setSelectedBankId(a.id)}
                     />
                     <span className="min-w-0">
-                      <span className="block text-[13px] font-medium text-slate-900">{accountLabel(a)}</span>
+                      <span className="block text-[13px] font-medium text-slate-900">
+                        {accountLabel(a)}
+                      </span>
                       <span className="block text-[11px] text-slate-500">
                         A/C: {a.accountNumber} · IFSC: {a.ifsc}
                       </span>
@@ -1006,7 +1128,11 @@ export function DocumentsStepPanel({
             )}
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
-            <button type="button" className={SX.btnSecondary} onClick={() => setBankModalOpen(false)}>
+            <button
+              type="button"
+              className={SX.btnSecondary}
+              onClick={() => setBankModalOpen(false)}
+            >
               Close
             </button>
             <button
@@ -1027,7 +1153,9 @@ export function DocumentsStepPanel({
           className="fixed left-1/2 top-1/2 z-250 w-[min(100vw-1rem,620px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-slate-200 bg-white p-0 shadow-2xl backdrop:bg-slate-900/40"
         >
           <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-            <h3 className="text-[15px] font-semibold text-slate-900">Add document</h3>
+            <h3 className="text-[15px] font-semibold text-slate-900">
+              Add document
+            </h3>
             <p className="mt-1 text-[12px] text-slate-600">
               Enter document name and provide URL or upload file (any one).
             </p>
@@ -1044,7 +1172,9 @@ export function DocumentsStepPanel({
             </label>
 
             <div>
-              <p className="mb-1 text-[12px] font-medium text-slate-700">Document source</p>
+              <p className="mb-1 text-[12px] font-medium text-slate-700">
+                Document source
+              </p>
               <div className="inline-flex border border-slate-200 bg-white">
                 <button
                   type="button"
@@ -1084,7 +1214,12 @@ export function DocumentsStepPanel({
               </label>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
-                <label className={cn(SX.btnSecondary, "h-9 cursor-pointer px-3 text-[12px]")}>
+                <label
+                  className={cn(
+                    SX.btnSecondary,
+                    "h-9 cursor-pointer px-3 text-[12px]",
+                  )}
+                >
                   Choose file
                   <input
                     type="file"
@@ -1123,6 +1258,19 @@ export function DocumentsStepPanel({
         </dialog>
       ) : null}
 
+      <StudentReportVersionsModal
+        open={reportVersionsModalOpen}
+        onClose={() => setReportVersionsModalOpen(false)}
+        lead={lead}
+        onPatchLead={onPatchLead}
+        refreshLead={refreshLead}
+        onToast={pushToast}
+        onOpenGenerate={() => {
+          setReportVersionsModalOpen(false);
+          setReportOpen(true);
+        }}
+      />
+
       <StudentReportModal
         open={reportOpen}
         onClose={() => setReportOpen(false)}
@@ -1133,7 +1281,10 @@ export function DocumentsStepPanel({
       />
 
       {msgDlg.open ? (
-        <PipelineMessageDialog {...msgDlg} onClose={() => setMsgDlg({ open: false })} />
+        <PipelineMessageDialog
+          {...msgDlg}
+          onClose={() => setMsgDlg({ open: false })}
+        />
       ) : null}
 
       {toastMsg ? (

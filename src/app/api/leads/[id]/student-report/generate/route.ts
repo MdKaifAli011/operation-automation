@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { mkdir, readFile, unlink, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
@@ -10,36 +10,6 @@ import { computePipelineStepsFromMeta, mergePipelineMeta } from "@/lib/pipeline"
 import { serializeLead } from "@/lib/serializers";
 
 export const runtime = "nodejs";
-
-function uploadsPathForStudentReport(
-  publicUrl: string,
-  leadId: string,
-): string | null {
-  const prefix = `/uploads/student-reports/${leadId}/`;
-  if (!publicUrl.startsWith(prefix)) return null;
-  const rest = publicUrl.slice(prefix.length);
-  if (!rest || rest.includes("..") || rest.includes("/") || rest.includes("\\")) {
-    return null;
-  }
-  return path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    "student-reports",
-    leadId,
-    rest,
-  );
-}
-
-async function removeOldReportFile(publicUrl: string, leadId: string) {
-  const full = uploadsPathForStudentReport(publicUrl, leadId);
-  if (!full) return;
-  try {
-    await unlink(full);
-  } catch {
-    /* gone */
-  }
-}
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -165,13 +135,31 @@ export async function POST(req: Request, context: Ctx) {
     });
 
     const prevSr = meta?.studentReport as
-      | { pdfUrl?: string | null }
+      | {
+          pdfUrl?: string | null;
+          fileName?: string | null;
+          generatedAt?: string | null;
+          source?: string;
+          generatedForMeetRowId?: string | null;
+          versionHistory?: Array<Record<string, unknown>>;
+        }
       | undefined;
     const oldUrl =
       typeof prevSr?.pdfUrl === "string" ? prevSr.pdfUrl.trim() : "";
+    const priorHistory = Array.isArray(prevSr?.versionHistory)
+      ? [...prevSr!.versionHistory!]
+      : [];
     if (oldUrl) {
-      await removeOldReportFile(oldUrl, id);
+      priorHistory.push({
+        id: randomUUID(),
+        pdfUrl: oldUrl,
+        fileName: prevSr?.fileName ?? null,
+        generatedAt: prevSr?.generatedAt ?? null,
+        source: typeof prevSr?.source === "string" ? prevSr.source : "",
+        generatedForMeetRowId: prevSr?.generatedForMeetRowId ?? null,
+      });
     }
+    const versionHistory = priorHistory.slice(-40);
 
     const safeName = `${randomUUID()}.pdf`;
     const dir = path.join(process.cwd(), "public", "uploads", "student-reports", id);
@@ -199,6 +187,9 @@ export async function POST(req: Request, context: Ctx) {
         generatedForMeetRowId:
           usingManualFallback || !meetRowId ? null : meetRowId,
         sendConfirmedAt: null,
+        versionHistory,
+        activeSendPdfUrl: pdfUrl,
+        activeSendFileName: fileName,
       },
     });
     const pipelineSteps = computePipelineStepsFromMeta(merged);
