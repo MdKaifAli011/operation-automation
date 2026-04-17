@@ -42,8 +42,6 @@ type Props = {
   onPatchLead: (u: Partial<Lead>) => Promise<Lead>;
   refreshLead: () => Promise<void>;
   onToast?: (message: string) => void;
-  /** Opens main modal on create flow */
-  onOpenGenerate: () => void;
 };
 
 export function StudentReportVersionsModal({
@@ -53,7 +51,6 @@ export function StudentReportVersionsModal({
   onPatchLead,
   refreshLead,
   onToast,
-  onOpenGenerate,
 }: Props) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -166,7 +163,7 @@ export function StudentReportVersionsModal({
         onClose={onClose}
         aria-labelledby={`${id}-title`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
           <div className="min-w-0">
             <h3
               id={`${id}-title`}
@@ -178,16 +175,6 @@ export function StudentReportVersionsModal({
               Select files, send email, or add a new version.
             </p>
           </div>
-          <button
-            type="button"
-            className={cn(SX.btnSecondary, "shrink-0 px-3 py-1.5 text-[12px]")}
-            onClick={() => {
-              onClose();
-              onOpenGenerate();
-            }}
-          >
-            New report
-          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">

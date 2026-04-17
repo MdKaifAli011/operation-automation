@@ -87,7 +87,6 @@ export function StudentReportModal({
   const [uiMode, setUiMode] = useState<UiMode>("list");
   const [reportTab, setReportTab] = useState<ReportTab>("feedback");
   const [genError, setGenError] = useState<string | null>(null);
-  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [sendingBusy, setSendingBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedReportKey, setSelectedReportKey] = useState("");
@@ -116,7 +115,6 @@ export function StudentReportModal({
       return;
     }
     setGenError(null);
-    setLocalPreviewUrl(sr?.pdfUrl?.trim() ? sr.pdfUrl : null);
     setManualAttempted(
       sr?.manualQuestionsAttempted?.trim() || ATTEMPTED_OPTIONS[2] || "20",
     );
@@ -182,12 +180,6 @@ export function StudentReportModal({
     dlg.addEventListener("mousedown", onBackdrop);
     return () => dlg.removeEventListener("mousedown", onBackdrop);
   }, [open, onClose]);
-
-  const previewSrc =
-    localPreviewUrl?.trim() ||
-    (sr?.pdfUrl?.trim() ? sr.pdfUrl : null) ||
-    allFilesNewestFirst[0]?.pdfUrl ||
-    null;
 
   const reportItems = useMemo(
     () =>
@@ -266,7 +258,6 @@ export function StudentReportModal({
           pdfUrl?: string;
         };
         if (!res.ok) throw new Error(data.error || "Could not generate PDF");
-        if (data.pdfUrl) setLocalPreviewUrl(data.pdfUrl);
         await refreshLead();
         onToast?.("Report generated.");
         setUiMode("list");
@@ -317,7 +308,6 @@ export function StudentReportModal({
           pdfUrl?: string;
         };
         if (!res.ok) throw new Error(data.error || "Could not generate PDF");
-        if (data.pdfUrl) setLocalPreviewUrl(data.pdfUrl);
         await refreshLead();
         onToast?.("Report generated.");
         setUiMode("list");
@@ -391,7 +381,6 @@ export function StudentReportModal({
           "Custom student report uploaded from report modal.",
         ),
       });
-      setLocalPreviewUrl(pdfUrl);
       await refreshLead();
       onToast?.("Report uploaded.");
       setUiMode("list");
@@ -499,7 +488,7 @@ export function StudentReportModal({
             {hasReports && uiMode === "list" ? (
               <button
                 type="button"
-                className={cn(SX.btnSecondary, "px-3 py-1.5 text-[12px]")}
+                className={cn(SX.btnPrimary, "px-3 py-1.5 text-[12px]")}
                 onClick={() => setUiMode("create")}
               >
                 New report
@@ -559,21 +548,6 @@ export function StudentReportModal({
                   );
                 })}
               </ul>
-              {previewSrc ? (
-                <button
-                  type="button"
-                  className={cn(SX.btnSecondary, "mt-3 text-[12px]")}
-                  onClick={() =>
-                    window.open(
-                      selectedSendUrls[0] ?? previewSrc,
-                      "_blank",
-                      "noopener,noreferrer",
-                    )
-                  }
-                >
-                  Preview first selected
-                </button>
-              ) : null}
             </>
           ) : (
             <>

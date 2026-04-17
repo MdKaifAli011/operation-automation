@@ -1265,10 +1265,6 @@ export function DocumentsStepPanel({
         onPatchLead={onPatchLead}
         refreshLead={refreshLead}
         onToast={pushToast}
-        onOpenGenerate={() => {
-          setReportVersionsModalOpen(false);
-          setReportOpen(true);
-        }}
       />
 
       <StudentReportModal
