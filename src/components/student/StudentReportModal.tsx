@@ -495,7 +495,10 @@ export function StudentReportModal({
             {hasReports && uiMode === "list" ? (
               <button
                 type="button"
-                className={cn(SX.btnPrimary, "px-3 py-1.5 text-[12px]")}
+                className={cn(
+                  SX.btnSecondary,
+                  "border-sky-200 bg-sky-50 px-3 py-1.5 text-[12px] font-semibold text-sky-700 hover:bg-sky-100",
+                )}
                 onClick={() => setUiMode("create")}
               >
                 New report
