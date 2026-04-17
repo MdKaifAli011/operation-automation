@@ -107,8 +107,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   </ol>
 </div>
 <p style="margin:24px 0 0;font-size:14px;color:#475569;line-height:1.8;">We look forward to a wonderful session with {{studentName}}. Should you have any questions in the meantime, please do not hesitate to reach out — we are always here to help.</p>
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),
@@ -125,8 +124,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
       badge: "Report Ready",
       body: `{{demoStatusEmailBodyHtml}}
 {{demoStatusMeetSectionHtml}}
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),
@@ -156,8 +154,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
 {{brochureBundleHtml}}
 <p style="margin:14px 0 0;font-size:14px;color:#475569;line-height:1.8;">Our Course Counsellor is available to take you through any section of the brochure in detail and address any questions you may have. We want to ensure that you have all the information needed to make the best decision for {{studentName}}'s future.</p>
 <p style="margin:14px 0 0;font-size:14px;color:#475569;line-height:1.8;">For any clarifications or to schedule a call with our counsellor, please reach out to us — we are happy to assist.</p>
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),
@@ -197,8 +194,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   </ol>
 </div>
 <p style="margin:24px 0 0;font-size:14px;color:#475569;line-height:1.8;">Please reply to this email with your address details at the earliest so we can get everything ready for dispatch without delay.</p>
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),
@@ -233,8 +229,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   </ol>
 </div>
 <p style="margin:24px 0 0;font-size:14px;color:#475569;line-height:1.8;">For any assistance with the payment process, please contact us — we are here to make this as smooth as possible for you.</p>
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),
@@ -269,8 +264,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   <p style="font-size:13.5px;color:#7f1d1d;line-height:1.75;margin:0;">Payments made through an <strong>NRO account</strong> attract an additional 18% tax as per Indian regulations. Please plan accordingly.</p>
 </div>
 <p style="margin:24px 0 0;font-size:14px;color:#475569;line-height:1.8;">Should you have any questions about the fee structure, payment plans, or any other aspect of the programme, please reach out — we are always happy to help.</p>
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),
@@ -309,8 +303,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   </ol>
 </div>
 <p style="margin:24px 0 0;font-size:14px;color:#475569;line-height:1.8;">If you face any difficulty with the form or need assistance, please do not hesitate to contact us — we are happy to guide you through each step.</p>
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),
@@ -332,8 +325,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   <pre style="margin:0;font-family:inherit;white-space:pre-wrap;font-size:13.5px;line-height:1.75;color:#0f2a4a;">{{scheduleSummary}}</pre>
 </div>
 <p style="margin:20px 0 0;font-size:14px;color:#475569;line-height:1.8;">If you need any change in timings or have questions, please reply to this email and our counsellor will assist you.</p>
-<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-  <img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+<div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
 </div>`,
     }),

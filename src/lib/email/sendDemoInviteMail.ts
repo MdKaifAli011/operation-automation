@@ -70,8 +70,7 @@ function buildFacultyDemoInviteHtml(vars: Record<string, string>): string {
         <a href="${sessionLink}" style="display:inline-block;background:#0f2a4a;color:#ffffff !important;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:0.4px;padding:14px 44px;border-radius:8px;box-shadow:0 4px 14px rgba(15,42,74,0.22);">Join Session Now</a>
       </div>
       <p style="text-align:center;font-size:11.5px;color:#94a3b8;margin:9px 0 0;">Please join 5-10 minutes before session start.</p>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-        <img src="${logoUrl}" alt="Logo" style="height:22px;width:auto;display:block;opacity:.85;" />
+      <div style="margin-top:14px;">
         <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>
       </div>
     </div>
