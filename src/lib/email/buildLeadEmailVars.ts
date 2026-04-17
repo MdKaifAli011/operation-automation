@@ -114,19 +114,27 @@ function formatTime12hInZone(d: Date, timeZone: string): string {
 
 function scheduleText(meta: LeadPipelineMeta | Record<string, unknown>): string {
   const sched = meta.schedule as
-    | { classes?: Array<Record<string, unknown>> }
+    | {
+        classes?: Array<Record<string, unknown>>;
+        weeklySessionStructure?: Array<Record<string, unknown>>;
+      }
     | undefined;
   const classes = Array.isArray(sched?.classes) ? sched!.classes! : [];
-  if (classes.length === 0) return "—";
-  return classes
+  const weekly = Array.isArray(sched?.weeklySessionStructure)
+    ? sched!.weeklySessionStructure!
+    : [];
+  const source = classes.length > 0 ? classes : weekly;
+  if (source.length === 0) return "—";
+  return source
     .map((c) => {
       const day = str(c.day);
       const subj = str(c.subject);
       const ist = str(c.timeIST);
       const teach = str(c.teacher);
-      const dur = str(c.duration);
+      const dur = str(c.duration || c.sessionDuration);
+      const session = str(c.sessionLabel);
       const bits = [day, subj, ist && `IST ${ist}`, teach, dur].filter(Boolean);
-      return bits.join(" · ");
+      return [session, bits.join(" · ")].filter(Boolean).join(" — ");
     })
     .join("\n");
 }

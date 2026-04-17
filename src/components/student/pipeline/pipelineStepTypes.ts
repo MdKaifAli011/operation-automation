@@ -24,3 +24,9 @@ export type FeesStepPanelProps = PipelineStepPanelProps & {
   onPatchLead: (updates: Partial<Lead>) => Promise<Lead>;
   refreshLead: () => Promise<void>;
 };
+
+/** Schedule step: save student-specific plan, generate/send actions. */
+export type ScheduleStepPanelProps = PipelineStepPanelProps & {
+  onPatchLead: (updates: Partial<Lead>) => Promise<Lead>;
+  refreshLead: () => Promise<void>;
+};

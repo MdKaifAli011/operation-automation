@@ -119,6 +119,37 @@ export type LeadPipelineScheduleClass = {
   duration?: string;
 };
 
+export type LeadPipelineScheduleProgrammeOverview = {
+  commencementIsoDate?: string | null;
+  programmeName?: string;
+  startDateLabel?: string;
+  durationLabel?: string;
+  targetExamLabel?: string;
+};
+
+export type LeadPipelineWeeklySessionRow = {
+  id: string;
+  sessionLabel: string;
+  day: string;
+  timeIST: string;
+  subject: string;
+  sessionDuration: string;
+  sortOrder: number;
+};
+
+export type LeadPipelineMilestoneRow = {
+  id: string;
+  targetDateLabel: string;
+  milestone: string;
+  description: string;
+  sortOrder: number;
+};
+
+export type LeadPipelineScheduleGuidelines = {
+  generalGuidelines: string[];
+  mockTestsRevision: string[];
+};
+
 export type LeadPipelineSchedule = {
   view?: "table" | "calendar" | string;
   scheduleSentWhatsApp?: boolean;
@@ -130,6 +161,18 @@ export type LeadPipelineSchedule = {
   weekLabel?: string;
   /** Monday 00:00:00.000Z for the displayed week (stored as ISO string) */
   weekStartIso?: string | null;
+  /** Selected schedule template id (global admin template catalog). */
+  templateId?: string | null;
+  templateExamValue?: string | null;
+  templateProgrammeName?: string | null;
+  programmeOverview?: LeadPipelineScheduleProgrammeOverview;
+  weeklySessionStructure?: LeadPipelineWeeklySessionRow[];
+  milestones?: LeadPipelineMilestoneRow[];
+  guidelines?: LeadPipelineScheduleGuidelines;
+  /** Generated schedule PDF stored under /uploads/schedule-plans/{leadId}/... */
+  pdfUrl?: string | null;
+  pdfFileName?: string | null;
+  pdfGeneratedAt?: string | null;
 };
 
 /** One archived PDF kept when staff generates or uploads a newer report */

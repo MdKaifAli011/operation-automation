@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import path from "path";
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
@@ -50,7 +51,21 @@ type PostBody = {
     /** Public paths under this lead’s report folders (`student-reports` or `lead-documents` from the report modal). */
     studentReportPdfUrls?: string[];
   };
+  scheduleEmail?: {
+    attachSchedulePdf?: boolean;
+  };
 };
+
+function schedulePdfPathForLead(leadId: string, publicUrl: string): string | null {
+  const t = String(publicUrl ?? "").trim();
+  const prefix = `/uploads/schedule-plans/${leadId}/`;
+  if (!t.startsWith(prefix)) return null;
+  const rest = t.slice(prefix.length);
+  if (!rest || rest.includes("..") || rest.includes("/") || rest.includes("\\")) {
+    return null;
+  }
+  return path.join(process.cwd(), "public", "uploads", "schedule-plans", leadId, rest);
+}
 
 export async function POST(
   req: Request,
@@ -431,6 +446,33 @@ export async function POST(
       vars = await mergeFeeEmailVarsWithBankDetails(lead, vars);
     }
 
+    const scheduleAttachments: Array<{ filename?: string; path?: string; contentType?: string }> = [];
+    if (templateKey === "schedule" && body.scheduleEmail?.attachSchedulePdf === true) {
+      const meta = (lead.pipelineMeta ?? {}) as Record<string, unknown>;
+      const schedule = (meta.schedule ?? {}) as Record<string, unknown>;
+      const pdfUrl = String(schedule.pdfUrl ?? "").trim();
+      if (!pdfUrl) {
+        return NextResponse.json(
+          { error: "Schedule PDF is missing. Generate PDF in Step 4 first." },
+          { status: 400 },
+        );
+      }
+      const fullPath = schedulePdfPathForLead(id, pdfUrl);
+      if (!fullPath) {
+        return NextResponse.json(
+          { error: "Invalid schedule PDF path." },
+          { status: 400 },
+        );
+      }
+      const fileName =
+        String(schedule.pdfFileName ?? "").trim() || "Weekly session plan.pdf";
+      scheduleAttachments.push({
+        filename: fileName,
+        path: fullPath,
+        contentType: "application/pdf",
+      });
+    }
+
     let subject = renderTemplate(String(tmpl.subject), vars);
     let html = renderTemplate(String(tmpl.bodyHtml), vars);
 
@@ -507,7 +549,12 @@ ${vars.brochureBundleHtml ?? ""}
         await sendMail({ to: bcc, subject: subjectTeam, html: htmlTeam });
       }
     } else {
-      await sendMail({ to, subject, html });
+      await sendMail({
+        to,
+        subject,
+        html,
+        attachments: scheduleAttachments.length > 0 ? scheduleAttachments : undefined,
+      });
     }
 
     return NextResponse.json({ ok: true });

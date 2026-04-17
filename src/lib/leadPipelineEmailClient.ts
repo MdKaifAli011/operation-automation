@@ -15,6 +15,9 @@ export async function sendLeadPipelineEmail(
       includeStudentReportPdf: boolean;
       studentReportPdfUrls?: string[];
     };
+    scheduleEmail?: {
+      attachSchedulePdf?: boolean;
+    };
   },
 ): Promise<void> {
   const res = await fetch(`/api/leads/${encodeURIComponent(leadId)}/send-email`, {

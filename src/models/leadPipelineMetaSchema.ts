@@ -189,6 +189,49 @@ const ScheduleClassRowSchema = new Schema(
   { _id: false },
 );
 
+const ScheduleProgrammeOverviewSchema = new Schema(
+  {
+    commencementIsoDate: { type: String, default: null },
+    programmeName: { type: String, default: "" },
+    startDateLabel: { type: String, default: "" },
+    durationLabel: { type: String, default: "" },
+    targetExamLabel: { type: String, default: "" },
+  },
+  { _id: false },
+);
+
+const ScheduleWeeklySessionRowSchema = new Schema(
+  {
+    id: { type: String, default: "" },
+    sessionLabel: { type: String, default: "" },
+    day: { type: String, default: "" },
+    timeIST: { type: String, default: "" },
+    subject: { type: String, default: "" },
+    sessionDuration: { type: String, default: "" },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
+const ScheduleMilestoneRowSchema = new Schema(
+  {
+    id: { type: String, default: "" },
+    targetDateLabel: { type: String, default: "" },
+    milestone: { type: String, default: "" },
+    description: { type: String, default: "" },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
+const ScheduleGuidelinesSchema = new Schema(
+  {
+    generalGuidelines: { type: [String], default: [] },
+    mockTestsRevision: { type: [String], default: [] },
+  },
+  { _id: false },
+);
+
 const ScheduleBlockSchema = new Schema(
   {
     /** `"table"` | `"calendar"` */
@@ -203,6 +246,16 @@ const ScheduleBlockSchema = new Schema(
     weekLabel: { type: String, default: "" },
     /** Monday-based week anchor for calendar navigation (ISO string) */
     weekStartIso: { type: String, default: null },
+    templateId: { type: String, default: null },
+    templateExamValue: { type: String, default: null },
+    templateProgrammeName: { type: String, default: null },
+    programmeOverview: { type: ScheduleProgrammeOverviewSchema, default: () => ({}) },
+    weeklySessionStructure: { type: [ScheduleWeeklySessionRowSchema], default: [] },
+    milestones: { type: [ScheduleMilestoneRowSchema], default: [] },
+    guidelines: { type: ScheduleGuidelinesSchema, default: () => ({}) },
+    pdfUrl: { type: String, default: null },
+    pdfFileName: { type: String, default: null },
+    pdfGeneratedAt: { type: String, default: null },
   },
   { _id: false },
 );

@@ -1,8 +1,8 @@
 /**
  * Full MongoDB seed: target exams, lead sources, exam–subject catalog, faculties
  * (with structured assignments), meet links, institute profile, bank accounts,
- * exam fee defaults, course brochure templates (multiple URLs per exam), sample
- * leads, and fee records.
+ * exam fee defaults, schedule templates, course brochure templates (multiple URLs
+ * per exam), sample leads, and fee records.
  *
  * Usage:
  *   npm run seed
@@ -37,7 +37,9 @@ import ExamCourseFeeStructureModel from "../src/models/ExamCourseFeeStructure";
 import ExamBrochureTemplateModel from "../src/models/ExamBrochureTemplate";
 import InstituteProfileSettingsModel from "../src/models/InstituteProfileSettings";
 import BankProfileSettingsModel from "../src/models/BankProfileSettings";
+import ScheduleTemplateCatalogModel from "../src/models/ScheduleTemplateCatalog";
 import { ensureExamBrochureTemplateIndexes } from "../src/lib/examBrochureTemplateIndexes";
+import { normalizeScheduleTemplateEntries } from "../src/lib/scheduleTemplateTypes";
 import type { RowTone, SheetTabId } from "../src/lib/types";
 
 const SETTINGS_KEY = "default";
@@ -316,6 +318,112 @@ const EXAM_SETS = [
   ["Other"],
 ] as const;
 
+const SEEDED_SCHEDULE_TEMPLATES = normalizeScheduleTemplateEntries([
+  {
+    id: "seed-jee-training-2027",
+    examValue: "JEE",
+    programmeName: "JEE Training",
+    programmeDurationValue: 1,
+    programmeDurationUnit: "years",
+    targetExamLabel: "JEE Main / Advanced 2027",
+    sortOrder: 0,
+    isActive: true,
+    weeklySessionStructure: [
+      {
+        id: "seed-jee-weekly-1",
+        sessionLabel: "Session 1",
+        day: "Wednesday",
+        timeIST: "6:30 AM - 8:00 AM",
+        subject: "Chemistry",
+        sessionDuration: "90 Minutes",
+        sortOrder: 1,
+      },
+      {
+        id: "seed-jee-weekly-2",
+        sessionLabel: "Session 2",
+        day: "Saturday",
+        timeIST: "8:30 PM - 10:30 PM",
+        subject: "Mathematics",
+        sessionDuration: "90 Minutes",
+        sortOrder: 2,
+      },
+      {
+        id: "seed-jee-weekly-3",
+        sessionLabel: "Session 3",
+        day: "Sunday",
+        timeIST: "8:30 PM - 10:30 PM",
+        subject: "Physics",
+        sessionDuration: "90 Minutes",
+        sortOrder: 3,
+      },
+    ],
+    milestones: [
+      {
+        id: "seed-jee-m-1",
+        milestone: "Session Commencement",
+        description: "Training begins - 1 Year programme kicks off",
+        dateRule: { kind: "offset_days", days: 0 },
+        sortOrder: 1,
+      },
+      {
+        id: "seed-jee-m-2",
+        milestone: "JEE Application Form",
+        description: "Fill up application form for JEE 2027",
+        dateRule: { kind: "month_year", yearOffset: 0, month: 11 },
+        sortOrder: 2,
+      },
+      {
+        id: "seed-jee-m-3",
+        milestone: "JEE Main - 1st Attempt",
+        description: "First attempt at JEE Main examination",
+        dateRule: { kind: "month_week", yearOffset: 1, month: 1, weekLabel: "Week 1" },
+        sortOrder: 3,
+      },
+      {
+        id: "seed-jee-m-4",
+        milestone: "JEE Main - 2nd Attempt",
+        description: "Second attempt at JEE Main examination",
+        dateRule: { kind: "month_week", yearOffset: 1, month: 4, weekLabel: "Week 1" },
+        sortOrder: 4,
+      },
+      {
+        id: "seed-jee-m-5",
+        milestone: "JEE Advanced",
+        description: "JEE Advanced examination",
+        dateRule: { kind: "month_week", yearOffset: 1, month: 5, weekLabel: "Week 3" },
+        sortOrder: 5,
+      },
+      {
+        id: "seed-jee-m-6",
+        milestone: "Equivalence Certificate",
+        description: "Obtain Equivalence Certificate",
+        dateRule: { kind: "month_year", yearOffset: 1, month: 6 },
+        sortOrder: 6,
+      },
+      {
+        id: "seed-jee-m-7",
+        milestone: "DASA Application Opens",
+        description: "DASA Application for admissions starts",
+        dateRule: { kind: "exact_date", yearOffset: 1, month: 6, day: 1 },
+        sortOrder: 7,
+      },
+    ],
+    guidelines: {
+      generalGuidelines: [
+        "Attend all 3 sessions each week without fail - consistency is key to JEE success.",
+        "Revise each session's content within 24 hours to reinforce retention.",
+        "Solve a minimum of 20 practice problems per subject per week.",
+        "Maintain a dedicated error log book to track and revisit mistakes.",
+      ],
+      mockTestsRevision: [
+        "Monthly full-length mock tests to be conducted after Week 4, 8, 12, and so on.",
+        "Dedicated revision weeks to be planned before JEE Main 1st Attempt (January 2027).",
+        "Final sprint revision between JEE Main 2nd Attempt (April 2027) and JEE Advanced (May 2027).",
+      ],
+    },
+  },
+]);
+
 const COUNTRIES = [
   "India",
   "India",
@@ -531,6 +639,11 @@ function buildSeedPipelineMeta(i: number, exams: readonly string[]) {
       : []),
   ];
 
+  const scheduleTemplate = SEEDED_SCHEDULE_TEMPLATES[0];
+  const isJeeLead = exams.some((x) => String(x).toUpperCase() === "JEE");
+  const shouldSeedSchedule = isJeeLead && i % 4 === 0;
+  const seededCommencement = "2026-04-23";
+
   return {
     demo: {
       rows: baseDemoRows,
@@ -565,6 +678,101 @@ function buildSeedPipelineMeta(i: number, exams: readonly string[]) {
       feePlanEmailSentAt:
         i % 5 === 0 ? "2026-04-11T08:10:00.000Z" : null,
     },
+    ...(shouldSeedSchedule && scheduleTemplate
+      ? {
+          schedule: {
+            templateId: scheduleTemplate.id,
+            templateExamValue: scheduleTemplate.examValue,
+            templateProgrammeName: scheduleTemplate.programmeName,
+            programmeOverview: {
+              commencementIsoDate: seededCommencement,
+              programmeName: "JEE Training",
+              startDateLabel: "23 April 2026",
+              durationLabel: "1 Year",
+              targetExamLabel: "JEE Main / Advanced 2027",
+            },
+            weeklySessionStructure: scheduleTemplate.weeklySessionStructure.map(
+              (row) => ({
+                id: row.id,
+                sessionLabel: row.sessionLabel,
+                day: row.day,
+                timeIST: row.timeIST,
+                subject: row.subject,
+                sessionDuration: row.sessionDuration,
+                sortOrder: row.sortOrder,
+              }),
+            ),
+            milestones: [
+              {
+                id: "seed-jee-m-1",
+                targetDateLabel: "23 April 2026",
+                milestone: "Session Commencement",
+                description: "Training begins - 1 Year programme kicks off",
+                sortOrder: 1,
+              },
+              {
+                id: "seed-jee-m-2",
+                targetDateLabel: "November 2026",
+                milestone: "JEE Application Form",
+                description: "Fill up application form for JEE 2027",
+                sortOrder: 2,
+              },
+              {
+                id: "seed-jee-m-3",
+                targetDateLabel: "Jan 2027 (Week 1)",
+                milestone: "JEE Main - 1st Attempt",
+                description: "First attempt at JEE Main examination",
+                sortOrder: 3,
+              },
+              {
+                id: "seed-jee-m-4",
+                targetDateLabel: "Apr 2027 (Week 1)",
+                milestone: "JEE Main - 2nd Attempt",
+                description: "Second attempt at JEE Main examination",
+                sortOrder: 4,
+              },
+              {
+                id: "seed-jee-m-5",
+                targetDateLabel: "May 2027 (Week 3)",
+                milestone: "JEE Advanced",
+                description: "JEE Advanced examination",
+                sortOrder: 5,
+              },
+              {
+                id: "seed-jee-m-6",
+                targetDateLabel: "June 2027",
+                milestone: "Equivalence Certificate",
+                description: "Obtain Equivalence Certificate",
+                sortOrder: 6,
+              },
+              {
+                id: "seed-jee-m-7",
+                targetDateLabel: "1 June 2027",
+                milestone: "DASA Application Opens",
+                description: "DASA Application for admissions starts",
+                sortOrder: 7,
+              },
+            ],
+            guidelines: {
+              generalGuidelines: [...scheduleTemplate.guidelines.generalGuidelines],
+              mockTestsRevision: [...scheduleTemplate.guidelines.mockTestsRevision],
+            },
+            classes: scheduleTemplate.weeklySessionStructure.map((row) => ({
+              day: row.day,
+              subject: row.subject,
+              timeIST: row.timeIST,
+              duration: row.sessionDuration,
+            })),
+            scheduleSentEmail: false,
+            scheduleSentEmailAt: null,
+            scheduleSentWhatsApp: false,
+            scheduleSentWhatsAppAt: null,
+            pdfUrl: null,
+            pdfFileName: null,
+            pdfGeneratedAt: null,
+          },
+        }
+      : {}),
   };
 }
 
@@ -583,8 +791,9 @@ async function dropSeedCollections(force: boolean) {
   await ExamBrochureTemplateModel.deleteMany({});
   await InstituteProfileSettingsModel.deleteMany({});
   await BankProfileSettingsModel.deleteMany({});
+  await ScheduleTemplateCatalogModel.deleteMany({});
   console.log(
-    "Cleared leads, fees, faculties, meet links, exams, sources, subject/course catalogs, fee structures, brochures, institute, bank (FORCE_SEED=1).",
+    "Cleared leads, fees, faculties, meet links, exams, sources, subject/course catalogs, fee structures, schedule templates, brochures, institute, bank (FORCE_SEED=1).",
   );
 }
 
@@ -616,6 +825,15 @@ async function seedSettingsAndContent() {
     { upsert: true },
   );
   console.log(`Exam-course catalog: ${EXAM_COURSES.length} rows.`);
+
+  await ScheduleTemplateCatalogModel.findOneAndUpdate(
+    { key: SETTINGS_KEY },
+    { $set: { templates: SEEDED_SCHEDULE_TEMPLATES } },
+    { upsert: true },
+  );
+  console.log(
+    `Schedule templates: ${SEEDED_SCHEDULE_TEMPLATES.length} row seeded.`,
+  );
 
   await MeetLinkModel.insertMany(MEET_LINKS);
   console.log(`Meet links: ${MEET_LINKS.length} rows.`);

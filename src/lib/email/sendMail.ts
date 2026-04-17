@@ -152,6 +152,12 @@ export async function sendMail(opts: {
   html: string;
   cc?: string | string[];
   bcc?: string | string[];
+  attachments?: Array<{
+    filename?: string;
+    path?: string;
+    content?: string | Buffer;
+    contentType?: string;
+  }>;
 }): Promise<void> {
   const cfg = getMailConfig();
   if (!cfg) {
@@ -182,6 +188,9 @@ export async function sendMail(opts: {
     ...(replyTo ? { replyTo } : {}),
     ...(cc ? { cc } : {}),
     ...(bcc ? { bcc } : {}),
+    ...(Array.isArray(opts.attachments) && opts.attachments.length > 0
+      ? { attachments: opts.attachments }
+      : {}),
   });
   logSmtpDelivery(
     {
