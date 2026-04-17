@@ -51,7 +51,18 @@ type Props = {
   onToast?: (message: string) => void;
 };
 
-const ATTEMPTED_OPTIONS = ["10", "15", "20", "25", "30", "40", "50"] as const;
+const ATTEMPTED_OPTIONS = [
+  "5",
+  "10",
+  "15",
+  "20",
+  "25",
+  "30",
+  "35",
+  "40",
+  "45",
+  "50",
+] as const;
 const STUDENT_LEVEL_OPTIONS = [
   "Beginner",
   "Average",
@@ -91,9 +102,7 @@ export function StudentReportModal({
   const [uploading, setUploading] = useState(false);
   const [selectedReportKey, setSelectedReportKey] = useState("");
   const [generatingKey, setGeneratingKey] = useState<string | null>(null);
-  const [manualAttempted, setManualAttempted] = useState<string>(
-    ATTEMPTED_OPTIONS[2] ?? "20",
-  );
+  const [manualAttempted, setManualAttempted] = useState<string>("20");
   const [manualCorrect, setManualCorrect] = useState<string>("10");
   const [manualLevel, setManualLevel] = useState<string>(
     STUDENT_LEVEL_OPTIONS[1] ?? "Average",
@@ -115,9 +124,7 @@ export function StudentReportModal({
       return;
     }
     setGenError(null);
-    setManualAttempted(
-      sr?.manualQuestionsAttempted?.trim() || ATTEMPTED_OPTIONS[2] || "20",
-    );
+    setManualAttempted(sr?.manualQuestionsAttempted?.trim() || "20");
     setManualCorrect(sr?.manualCorrectAnswers?.trim() || "10");
     setManualLevel(
       sr?.manualStudentLevel?.trim() || STUDENT_LEVEL_OPTIONS[1] || "Average",
