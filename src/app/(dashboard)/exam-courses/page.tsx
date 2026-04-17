@@ -10,6 +10,7 @@ import {
   type TargetExamOption,
 } from "@/lib/targetExams";
 import {
+  formatExamCourseDuration,
   normalizeExamCourseEntries,
   type ExamCourseEntry,
 } from "@/lib/examCourseTypes";
@@ -119,6 +120,8 @@ export default function ExamCoursesPage() {
   const [draft, setDraft] = useState({
     examValue: "",
     name: "",
+    durationValue: 1,
+    durationUnit: "years" as "years" | "hours",
     sortOrder: 0,
     isActive: true,
   });
@@ -232,6 +235,8 @@ export default function ExamCoursesPage() {
     setDraft({
       examValue: first,
       name: "",
+      durationValue: 1,
+      durationUnit: "years",
       sortOrder: maxO + 1,
       isActive: true,
     });
@@ -247,6 +252,8 @@ export default function ExamCoursesPage() {
     setDraft({
       examValue: row.examValue,
       name: row.name,
+      durationValue: row.durationValue ?? 1,
+      durationUnit: row.durationUnit ?? "years",
       sortOrder: row.sortOrder,
       isActive: row.isActive !== false,
     });
@@ -264,6 +271,10 @@ export default function ExamCoursesPage() {
       setModalErr("Select an exam.");
       return;
     }
+    const durationValue = Number.isFinite(draft.durationValue)
+      ? Math.max(1, Math.min(999, Math.round(draft.durationValue)))
+      : 1;
+    const durationUnit = draft.durationUnit === "hours" ? "hours" : "years";
     let next: ExamCourseEntry[];
     if (modalMode === "add") {
       next = [
@@ -272,6 +283,8 @@ export default function ExamCoursesPage() {
           id: randomUuid(),
           examValue: draft.examValue,
           name,
+          durationValue,
+          durationUnit,
           sortOrder: draft.sortOrder,
           isActive: draft.isActive,
         },
@@ -284,6 +297,8 @@ export default function ExamCoursesPage() {
               ...c,
               examValue: draft.examValue,
               name,
+              durationValue,
+              durationUnit,
               sortOrder: draft.sortOrder,
               isActive: draft.isActive,
             }
@@ -373,6 +388,7 @@ export default function ExamCoursesPage() {
                   <th className={SX.dataTh}>Order</th>
                   <th className={SX.dataTh}>Exam</th>
                   <th className={SX.dataTh}>Course</th>
+                  <th className={SX.dataTh}>Duration</th>
                   <th className={SX.dataTh}>Status</th>
                   <th className={cn(SX.dataTh, "text-right")}>Actions</th>
                 </tr>
@@ -380,7 +396,7 @@ export default function ExamCoursesPage() {
               <tbody>
                 {coursesSorted.length === 0 ? (
                   <tr>
-                    <td className={SX.dataTd} colSpan={5}>
+                    <td className={SX.dataTd} colSpan={6}>
                       No courses yet. Add at least one course per exam you charge
                       or brochure for.
                     </td>
@@ -398,6 +414,9 @@ export default function ExamCoursesPage() {
                         {labelByValue.get(c.examValue) ?? c.examValue}
                       </td>
                       <td className={cn(SX.dataTd, "font-medium")}>{c.name}</td>
+                      <td className={SX.dataTd}>
+                        {formatExamCourseDuration(c) || "—"}
+                      </td>
                       <td className={SX.dataTd}>
                         <span
                           className={cn(
@@ -451,7 +470,7 @@ export default function ExamCoursesPage() {
 
       {modalOpen ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-100 flex items-center justify-center bg-black/40 p-4"
           role="presentation"
           onClick={() => !catalogBusy && setModalOpen(false)}
         >
@@ -516,6 +535,45 @@ export default function ExamCoursesPage() {
                   autoFocus
                 />
               </label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Duration value
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    className={cn(SX.input, "mt-1 w-full")}
+                    value={draft.durationValue}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        durationValue: Math.max(1, Number(e.target.value) || 1),
+                      }))
+                    }
+                    placeholder="e.g. 1 or 30"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Duration unit
+                  </span>
+                  <select
+                    className={cn(SX.select, "mt-1 w-full")}
+                    value={draft.durationUnit}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        durationUnit: e.target.value === "hours" ? "hours" : "years",
+                      }))
+                    }
+                  >
+                    <option value="years">Year(s)</option>
+                    <option value="hours">Hour(s)</option>
+                  </select>
+                </label>
+              </div>
               <label className="block">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Order
