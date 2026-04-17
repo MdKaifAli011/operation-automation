@@ -496,16 +496,14 @@ export function DemoStepPanel({
     setSaving(true);
     try {
       const meetRowId = editingMeetRowId ?? randomUuid();
+      let nextRows: DemoTableRowPersisted[];
       if (editingMeetRowId) {
         await fetch("/api/meet-links/bookings/release", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ leadId: lead.id, meetRowId }),
         }).catch(() => {});
-      }
 
-      let nextRows: DemoTableRowPersisted[];
-      if (editingMeetRowId) {
         nextRows = rows.map((r) =>
           String(r.meetRowId) === editingMeetRowId
             ? {
@@ -520,32 +518,13 @@ export function DemoStepPanel({
               }
             : r,
         );
+        await persistDemoRows(nextRows, {
+          kind: "demo",
+          message: `Demo updated: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
+        });
       } else {
-        nextRows = [
-          ...rows,
-          {
-            examValue: ex,
-            subject: subj,
-            teacher: teach,
-            studentTimeZone: studentTz,
-            status: "Scheduled",
-            isoDate,
-            timeHmIST,
-            meetRowId,
-            meetLinkUrl: "",
-            meetBookingId: "",
-            meetWindowStartIso: "",
-            meetWindowEndIso: "",
-          },
-        ];
+        nextRows = [...rows];
       }
-
-      await persistDemoRows(nextRows, {
-        kind: "demo",
-        message: editingMeetRowId
-          ? `Demo updated: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`
-          : `Demo scheduled: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
-      });
 
       const assignRes = await fetch("/api/meet-links/assign", {
         method: "POST",
@@ -589,6 +568,10 @@ export function DemoStepPanel({
           });
           return;
         }
+        if (!editingMeetRowId) {
+          // New schedule failed: do not leave a ghost row in the table.
+          await refreshLead();
+        }
         setSaving(false);
         setMsgDlg({
           open: true,
@@ -602,7 +585,27 @@ export function DemoStepPanel({
       }
 
       const link = String(assignData.meetLinkUrl ?? "").trim();
-      const patched = nextRows.map((r) =>
+      const baseRows =
+        editingMeetRowId
+          ? nextRows
+          : [
+              ...rows,
+              {
+                examValue: ex,
+                subject: subj,
+                teacher: teach,
+                studentTimeZone: studentTz,
+                status: "Scheduled",
+                isoDate,
+                timeHmIST,
+                meetRowId,
+                meetLinkUrl: "",
+                meetBookingId: "",
+                meetWindowStartIso: "",
+                meetWindowEndIso: "",
+              },
+            ];
+      const patched = baseRows.map((r) =>
         String(r.meetRowId) === meetRowId
           ? {
               ...r,
