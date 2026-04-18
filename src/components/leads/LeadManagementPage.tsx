@@ -492,9 +492,14 @@ export function LeadManagementPage() {
         </p>
       )}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-          Leads
-        </h1>
+        <div className="flex flex-col">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
+            Leads
+          </h1>
+          <span className="text-sm text-slate-500 font-normal">
+            {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric', year: 'numeric' })}
+          </span>
+        </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
           <button
             type="button"

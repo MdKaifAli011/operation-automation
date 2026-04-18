@@ -298,3 +298,39 @@ export function IconSettings({ className, title }: IconProps) {
     </svg>
   );
 }
+
+export function IconChevronDown({ className, title }: IconProps) {
+  return (
+    <svg
+      className={cn("h-[16px] w-[16px] shrink-0", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {title ? <title>{title}</title> : null}
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function IconChevronRight({ className, title }: IconProps) {
+  return (
+    <svg
+      className={cn("h-[16px] w-[16px] shrink-0", className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {title ? <title>{title}</title> : null}
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
