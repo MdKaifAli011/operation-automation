@@ -119,6 +119,7 @@ type Props = {
     interested?: boolean;
     notInterested?: boolean;
     followUp?: boolean;
+    enrolled?: boolean;
   };
 };
 
@@ -161,6 +162,7 @@ export function LeadSheetTable({
     useState<Lead | null>(null);
   const [interestedCourseLead, setInterestedCourseLead] =
     useState<Lead | null>(null);
+  const [enrolledConfirmLead, setEnrolledConfirmLead] = useState<Lead | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const dataTypeMenuRef = useRef<HTMLDivElement>(null);
@@ -240,6 +242,7 @@ export function LeadSheetTable({
   const hideInterested = actionMenuHideOptions?.interested === true;
   const hideNotInterested = actionMenuHideOptions?.notInterested === true;
   const hideFollowUp = actionMenuHideOptions?.followUp === true;
+  const hideEnrolled = actionMenuHideOptions?.enrolled === true;
 
   const dataTypeMenuLead = useMemo(
     () =>
@@ -898,6 +901,19 @@ export function LeadSheetTable({
                 Follow-up
               </button>
             ) : null}
+            {!hideEnrolled ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left font-medium text-emerald-700 transition-colors hover:bg-emerald-50"
+                onClick={() => {
+                  setActionMenu(null);
+                  setEnrolledConfirmLead(menuLead);
+                }}
+              >
+                Enrolled
+              </button>
+            ) : null}
           </div>,
           document.body,
         )}
@@ -931,6 +947,18 @@ export function LeadSheetTable({
           notInterestedRemark: null,
           targetExams: exams,
         });
+      }}
+    />
+    <EnrolledConfirmDialog
+      lead={enrolledConfirmLead}
+      onClose={() => setEnrolledConfirmLead(null)}
+      onConfirm={() => {
+        if (!enrolledConfirmLead) return;
+        onUpdateLead(enrolledConfirmLead.id, {
+          sheetTab: "converted",
+          followUpDate: null,
+        });
+        setEnrolledConfirmLead(null);
       }}
     />
     </>
@@ -1296,5 +1324,96 @@ function TargetExamsEditor({
         </button>
       </div>
     </div>
+  );
+}
+
+function EnrolledConfirmDialog({
+  lead,
+  onClose,
+  onConfirm,
+}: {
+  lead: Lead | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (lead) {
+      if (!d.open) d.showModal();
+    } else if (d.open) {
+      d.close();
+    }
+  }, [lead]);
+
+  useEffect(() => {
+    if (!lead) return;
+    const dlg = ref.current;
+    if (!dlg) return;
+    const onBackdrop = (e: MouseEvent) => {
+      if (e.target === dlg) onClose();
+    };
+    dlg.addEventListener("mousedown", onBackdrop);
+    return () => dlg.removeEventListener("mousedown", onBackdrop);
+  }, [lead, onClose]);
+
+  return (
+    <dialog
+      ref={ref}
+      className={cn(
+        "fixed left-1/2 top-1/2 z-[210] w-[min(100vw-1.5rem,24rem)] max-h-[min(90vh,420px)] -translate-x-1/2 -translate-y-1/2",
+        "overflow-hidden rounded-none border border-slate-200 bg-white p-0",
+        "shadow-2xl shadow-black/20 backdrop:bg-black/40 backdrop:backdrop-blur-[2px]",
+        "open:flex open:flex-col",
+      )}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      aria-labelledby="enrolled-confirm-title"
+    >
+      <div className="border-b border-slate-100 bg-slate-50/90 px-4 py-3">
+        <h2
+          id="enrolled-confirm-title"
+          className="text-[14px] font-bold tracking-tight text-slate-900"
+        >
+          Confirm Enrollment
+        </h2>
+        <p className="mt-1 text-[12px] leading-snug text-slate-600">
+          {lead ? (
+            <>
+              Mark{" "}
+              <span className="font-medium text-slate-800">
+                {lead.studentName}
+              </span>{" "}
+              as enrolled. This will move the student to the{" "}
+              <span className="font-medium">Enrolled</span> section.
+            </>
+          ) : null}
+        </p>
+      </div>
+      <div className="px-4 py-4">
+        <div className="rounded-md bg-emerald-50 p-3 text-[13px] text-emerald-800">
+          <p className="font-medium">Are you sure?</p>
+          <p className="mt-1 text-[12px] text-emerald-700">
+            The student will be moved from Ongoing to the Enrolled tab.
+          </p>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3">
+        <button type="button" className={SX.btnSecondary} onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={cn(SX.btnPrimary, "bg-emerald-600 hover:bg-emerald-700")}
+          onClick={onConfirm}
+        >
+          Yes, Enroll
+        </button>
+      </div>
+    </dialog>
   );
 }

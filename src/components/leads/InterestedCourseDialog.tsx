@@ -153,7 +153,7 @@ export function InterestedCourseDialog({ lead, onClose, onConfirm }: Props) {
           disabled={examValues.length === 0}
           onClick={submit}
         >
-          Continue to ongoing
+          Interested
         </button>
       </div>
     </dialog>

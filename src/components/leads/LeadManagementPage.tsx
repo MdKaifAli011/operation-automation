@@ -767,15 +767,15 @@ export function LeadManagementPage() {
           {tabBtn("ongoing", "Ongoing")}
           {tabBtn("not_interested", "Not Interested")}
           {tabBtn("followup", "Follow-ups")}
-          {tabBtn("converted", "Converted")}
+          {tabBtn("converted", "Enrolled")}
         </div>
 
         <div className={SX.leadSheetBody}>
           {mainTab === "ongoing" && (
             <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
-              <section aria-label="New and Daily leads">
+              <section aria-label="Today's leads">
                 <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>New &amp; Daily</h2>
+                  <h2 className={SX.leadSectionTitle}>Today&apos;s Lead</h2>
                 </div>
                 {newAndDailyLeads.length === 0 ? (
                   <div

@@ -1,12 +1,20 @@
 "use client";
 
+import Image from "next/image";
+
 export function Header() {
   return (
-    <header className="sticky top-0 z-20 flex h-[64px] shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 shadow-sm shadow-slate-900/[0.04] backdrop-blur-md">
-      <div className="flex items-center gap-2">
-        <span className="bg-gradient-to-r from-primary to-[#0d47a1] bg-clip-text text-xl font-semibold tracking-tight text-transparent">
-          Testprepkart
-        </span>
+    <header className="sticky top-0 z-20 flex h-[72px] shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 shadow-sm shadow-slate-900/[0.04] backdrop-blur-md">
+      <div className="flex items-center">
+        <Image
+          src="/logo.png"
+          alt="TPK Logo"
+          width={32}
+          height={32}
+          className="h-8 w-auto object-contain"
+          priority
+          unoptimized
+        />
       </div>
       <div className="flex items-center gap-3">
         <button
