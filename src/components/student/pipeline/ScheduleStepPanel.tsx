@@ -272,17 +272,12 @@ export function ScheduleStepPanel({
     excelMoveNextCell(e.currentTarget);
   };
 
-  const toggleSection = (section: ScheduleAccordionSection) => {
-    setExpandedSections((prev) => {
-      const isOpen = prev[section];
-      return {
-        programme: false,
-        weekly: false,
-        milestones: false,
-        guidelines: false,
-        [section]: !isOpen,
-      };
-    });
+  const toggleSection = (section: Exclude<ScheduleAccordionSection, "programme">) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      programme: true,
+      [section]: !prev[section],
+    }));
   };
 
   return (
@@ -359,52 +354,41 @@ export function ScheduleStepPanel({
 
             <div className="space-y-3 p-3 sm:p-4">
               <section className="overflow-hidden border border-[#cfd9e3]">
-                <button
-                  type="button"
-                  className={ACCORDION_HEADER}
-                  onClick={() => toggleSection("programme")}
-                >
-                  <span className={ACCORDION_TITLE}>
-                    1. Programme Overview
-                  </span>
-                  <span className={ACCORDION_ICON}>
-                    {expandedSections.programme ? "Collapse" : "Expand"}
-                  </span>
-                </button>
-                {expandedSections.programme ? (
-                  <div className="p-3">
-                    <div className="overflow-x-auto">
-                      <table className={cn(GRID_TABLE, "min-w-[720px]")}>
-                        <thead>
-                          <tr>
-                            <th className={GRID_HEAD}>Programme</th>
-                            <th className={GRID_HEAD}>Start Date</th>
-                            <th className={GRID_HEAD}>Duration</th>
-                            <th className={GRID_HEAD}>Target Exam</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="bg-[#edf1f5]">
-                            <td className={cn(GRID_CELL, "font-semibold")}>
-                              {programme?.programmeName ||
-                                schedule.templateProgrammeName ||
-                                "—"}
-                            </td>
-                            <td className={GRID_CELL}>
-                              {programme?.startDateLabel || "—"}
-                            </td>
-                            <td className={GRID_CELL}>
-                              {programme?.durationLabel || "—"}
-                            </td>
-                            <td className={GRID_CELL}>
-                              {programme?.targetExamLabel || "—"}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                <div className="flex w-full items-center justify-between bg-[#f5f8fb] px-3 py-2.5">
+                  <span className={ACCORDION_TITLE}>1. Programme Overview</span>
+                </div>
+                <div className="p-3">
+                  <div className="overflow-x-auto">
+                    <table className={cn(GRID_TABLE, "min-w-[720px]")}>
+                      <thead>
+                        <tr>
+                          <th className={GRID_HEAD}>Programme</th>
+                          <th className={GRID_HEAD}>Start Date</th>
+                          <th className={GRID_HEAD}>Duration</th>
+                          <th className={GRID_HEAD}>Target Exam</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="bg-[#edf1f5]">
+                          <td className={cn(GRID_CELL, "font-semibold")}>
+                            {programme?.programmeName ||
+                              schedule.templateProgrammeName ||
+                              "—"}
+                          </td>
+                          <td className={GRID_CELL}>
+                            {programme?.startDateLabel || "—"}
+                          </td>
+                          <td className={GRID_CELL}>
+                            {programme?.durationLabel || "—"}
+                          </td>
+                          <td className={GRID_CELL}>
+                            {programme?.targetExamLabel || "—"}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                ) : null}
+                </div>
               </section>
 
               <section className="overflow-hidden border border-[#cfd9e3]">
