@@ -406,6 +406,23 @@ export function LeadManagementPage() {
   const tabBtn = (id: LeadMainTab, label: string) => {
     const c = tabCounts[id];
     const active = mainTab === id;
+    
+    // Define background colors for each tab number
+    const getTabCountColor = () => {
+      switch (id) {
+        case "ongoing":
+          return "bg-emerald-100 text-emerald-700 border-emerald-200";
+        case "not_interested":
+          return "bg-rose-100 text-rose-700 border-rose-200";
+        case "followup":
+          return "bg-amber-100 text-amber-700 border-amber-200";
+        case "converted":
+          return "bg-emerald-100 text-emerald-700 border-emerald-200";
+        default:
+          return "bg-slate-100 text-slate-700 border-slate-200";
+      }
+    };
+    
     return (
       <button
         key={id}
@@ -419,8 +436,8 @@ export function LeadManagementPage() {
         <span className="truncate">{label}</span>
         <span
           className={cn(
-            SX.leadTabCount,
-            active ? SX.leadTabCountActive : SX.leadTabCountIdle,
+            "inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-semibold rounded-full border",
+            getTabCountColor(),
           )}
         >
           {c}
