@@ -982,6 +982,14 @@ export function LeadManagementPage() {
               rowTone: "followup_later",
               sheetTab: "followup",
               followUpDate: fu,
+              pipelineMeta: {
+                followUp: {
+                  date: fu,
+                  reminderTime: data.reminder || "07:00",
+                  reason: data.reason,
+                  notes: data.notes,
+                },
+              },
             });
           }
         }}

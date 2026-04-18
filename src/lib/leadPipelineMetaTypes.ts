@@ -247,4 +247,18 @@ export type LeadPipelineMeta = {
   documents?: LeadPipelineDocuments;
   fees?: LeadPipelineFees;
   schedule?: LeadPipelineSchedule;
+  /** Follow-up details for the lead */
+  followUp?: LeadPipelineFollowUp;
+};
+
+/** Follow-up details stored when lead is moved to follow-up tab */
+export type LeadPipelineFollowUp = {
+  /** Follow-up date (yyyy-MM-dd) - also stored in lead.followUpDate */
+  date?: string;
+  /** Reminder time (HH:mm) */
+  reminderTime?: string;
+  /** Reason for follow-up */
+  reason?: string;
+  /** Quick notes for next call */
+  notes?: string;
 };

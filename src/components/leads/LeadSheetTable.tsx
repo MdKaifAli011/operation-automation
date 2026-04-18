@@ -33,6 +33,7 @@ type ColKey =
   | "studentName"
   | "parentName"
   | "dataType"
+  | "instructions"
   | "grade"
   | "targetExams"
   | "country"
@@ -60,6 +61,7 @@ const COL_WIDTHS: Record<string, number> = {
   studentName: 168,
   parentName: 132,
   dataType: 92,
+  instructions: 140,
   grade: 72,
   targetExams: 140,
   country: 96,
@@ -317,6 +319,7 @@ export function LeadSheetTable({
             >
               Data type
             </SheetTh>
+            <SheetTh w={COL_WIDTHS.instructions}>Instructions</SheetTh>
             {showFollowUpColumn && (
               <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
             )}
@@ -712,8 +715,14 @@ export function LeadSheetTable({
                     onCancelEdit={() => setEditing(null)}
                     tone={tone}
                     sheetEditMode={sheetEditMode}
+                    leadSourceOptions={leadSourceOptions}
                   />
                 )}
+                <InstructionsCell
+                  lead={lead}
+                  width={COL_WIDTHS.instructions}
+                  tone={tone}
+                />
                 {showFollowUpColumn && (
                   <td
                     style={{ width: COL_WIDTHS.followUp }}
@@ -1185,6 +1194,7 @@ function TextCell({
   onCancelEdit,
   tone,
   sheetEditMode,
+  leadSourceOptions,
 }: {
   lead: Lead;
   field: TextColKey;
@@ -1197,6 +1207,7 @@ function TextCell({
   onCancelEdit: () => void;
   tone: string;
   sheetEditMode: boolean;
+  leadSourceOptions?: LeadSourceOption[];
 }) {
   const val = lead[field];
   const strVal = val == null ? "" : String(val);
@@ -1239,6 +1250,16 @@ function TextCell({
           title={strVal.trim() || undefined}
         >
           {strVal.trim() || "—"}
+        </span>
+      ) : field === "dataType" ? (
+        <span
+          className={cn(
+            "block truncate text-[12px]",
+            !strVal.trim() && "text-slate-400",
+          )}
+          title={strVal.trim() || undefined}
+        >
+          {dataTypeToShortLabel(strVal, leadSourceOptions) || "OL"}
         </span>
       ) : (
         val
@@ -1415,5 +1436,146 @@ function EnrolledConfirmDialog({
         </button>
       </div>
     </dialog>
+  );
+}
+
+function InstructionsCell({
+  lead,
+  width,
+  tone,
+}: {
+  lead: Lead;
+  width: number;
+  tone: string;
+}) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const cellRef = useRef<HTMLDivElement>(null);
+
+  // Get follow-up data from pipelineMeta
+  const followUpData = (lead.pipelineMeta as any)?.followUp;
+
+  // Check if lead has follow-up data
+  const hasFollowUpData = Boolean(
+    lead.followUpDate?.trim() || 
+    followUpData?.reason?.trim() || 
+    followUpData?.notes?.trim()
+  );
+
+  // Format follow-up date
+  const formattedDate = lead.followUpDate?.trim() 
+    ? format(parseISO(lead.followUpDate), "dd-MM-yyyy")
+    : null;
+
+  // Format reminder time
+  const reminderTime = followUpData?.reminderTime?.trim() || "7:00 AM";
+
+  useEffect(() => {
+    if (!showTooltip) return;
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tooltipRef.current?.contains(e.target as Node)) return;
+      if (cellRef.current?.contains(e.target as Node)) return;
+      setShowTooltip(false);
+    };
+
+    const handleScroll = () => setShowTooltip(false);
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowTooltip(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [showTooltip]);
+
+  // Update tooltip position when shown
+  useEffect(() => {
+    if (showTooltip && cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      setTooltipPosition({
+        top: rect.bottom + 4,
+        left: Math.min(rect.left, window.innerWidth - 320),
+      });
+    }
+  }, [showTooltip]);
+
+  if (!hasFollowUpData) {
+    return (
+      <td
+        style={{ width }}
+        className={cn("border border-slate-200/80 px-2 py-1.5 text-center", tone)}
+      >
+        <span className="text-slate-400">-</span>
+      </td>
+    );
+  }
+
+  return (
+    <td
+      style={{ width }}
+      className={cn("border border-slate-200/80 px-2 py-1.5", tone)}
+    >
+      <div className="relative" ref={cellRef}>
+        <button
+          type="button"
+          className="text-blue-600 hover:text-blue-800 hover:underline text-[12px] font-medium"
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+          onClick={() => setShowTooltip(!showTooltip)}
+        >
+          Instructions
+        </button>
+
+        {showTooltip && typeof document !== 'undefined' && createPortal(
+          <div
+            ref={tooltipRef}
+            className="fixed z-[250] rounded-none border border-slate-200 bg-white p-3 shadow-lg shadow-slate-900/15 max-w-xs"
+            style={{
+              top: tooltipPosition.top,
+              left: tooltipPosition.left,
+            }}
+          >
+            <div className="space-y-2 text-[12px]">
+              {formattedDate && (
+                <div>
+                  <span className="font-semibold text-slate-700">Follow-up date:</span>
+                  <div className="text-slate-600">{formattedDate}</div>
+                </div>
+              )}
+              
+              {followUpData?.reminderTime?.trim() && (
+                <div>
+                  <span className="font-semibold text-slate-700">Reminder time:</span>
+                  <div className="text-slate-600">{reminderTime}</div>
+                </div>
+              )}
+
+              {followUpData?.reason?.trim() && (
+                <div>
+                  <span className="font-semibold text-slate-700">Follow-up reason:</span>
+                  <div className="text-slate-600">{followUpData.reason.trim()}</div>
+                </div>
+              )}
+
+              {followUpData?.notes?.trim() && (
+                <div>
+                  <span className="font-semibold text-slate-700">Quick notes:</span>
+                  <div className="text-slate-600 whitespace-pre-wrap">{followUpData.notes.trim()}</div>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
+      </div>
+    </td>
   );
 }
