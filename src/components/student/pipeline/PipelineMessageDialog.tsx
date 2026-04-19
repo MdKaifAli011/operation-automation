@@ -22,16 +22,26 @@ export type PipelineMessageDialogProps =
   | (Base & {
       mode: "alert";
       okLabel?: string;
+      description: string;
+      highlight?: string;
+      meta?: string;
+      onConfirm: () => void;
     })
   | (Base & {
       mode: "confirm";
-      confirmLabel: string;
+      title: string;
+      description: string;
+      highlight?: string;
+      meta?: string;
+      confirmLabel?: string;
       cancelLabel?: string;
       onConfirm: () => void;
+      loading?: boolean;
     });
 
 export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
-  const { open, onClose, variant, title, description, highlight, meta } = props;
+  const { open, onClose, variant, title, description, highlight, meta, mode } = props;
+  const { confirmLabel, cancelLabel, onConfirm, loading } = props as any;
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -131,8 +141,35 @@ export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
                 props.onConfirm();
                 onClose();
               }}
+              disabled={loading}
             >
-              {props.confirmLabel}
+              {loading ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4 mr-2"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018 8 0 018 8 0 01-4.58 4.58l-1.46 1.46a2 2 0 012.84 2.84 012.84 2.84 014.58-4.58L18 16l-4.58-4.58a2 2 0 01-2.84-2.84 012.84-2.84 014.58 2.84L6 8l4.58 4.58a2 2 0 012.84-2.84 012.84 2.84 014.58-2.84L18 16z"
+                    />
+                  </svg>
+                  Processing...
+                </>
+              ) : (
+                props.confirmLabel
+              )}
             </button>
           </>
         )}

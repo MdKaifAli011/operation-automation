@@ -202,6 +202,19 @@ function demoInviteHighlight(row: DemoTableRowPersisted): string {
   return `${row.subject || "Demo"} · ${row.teacher || "—"} · ${line}`;
 }
 
+function demoDetailsFormat(row: DemoTableRowPersisted, lead: Lead): string {
+  if (!row.isoDate || !row.timeHmIST) {
+    return `Student Name: ${lead.studentName}\nExam:               —\nClass:               —\nSubject:            —\nDemo Time:     —\nFaculty:            —\nDemo Link:      —`;
+  }
+  const ist = istWhenLines(row.isoDate, row.timeHmIST);
+  const line = ist ? `${ist.date} · ${ist.time}` : "—";
+  
+  // Get exam from lead's targetExams
+  const exam = lead.targetExams?.[0] || "—";
+  
+  return `Student Name: ${lead.studentName}\nExam:               ${exam}\nClass:               ${lead.grade}\nSubject:            ${row.subject}\nDemo Time:     ${row.isoDate} - ${row.timeHmIST}\nFaculty:            ${row.teacher}\nDemo Link:      Attached`;
+}
+
 function leadContactMeta(lead: Lead): string {
   const name = lead.studentName?.trim() || "Student";
   const phone = lead.phone?.trim() || "—";
@@ -623,7 +636,7 @@ export function DemoStepPanel({
         open: true,
         mode: "alert",
         variant: "default",
-        title: editingMeetRowId ? "Demo updated" : "Demo scheduled",
+        title: editingMeetRowId ? "Demo updated" : "Demo Details",
         description:
           "The trial class was saved and the Google Meet link is attached to this lead.",
         highlight: `${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
@@ -656,7 +669,7 @@ export function DemoStepPanel({
       meta: leadContactMeta(lead),
       confirmLabel: isResend
         ? "Confirm Demo & Send Link"
-        : "Confirm Demo & Send Link",
+        : "Confirm Demo Details",
       cancelLabel: "Cancel",
       onConfirm: () => {
         void (async () => {
@@ -1580,6 +1593,7 @@ export function DemoStepPanel({
           highlight={msgDlg.highlight}
           meta={msgDlg.meta}
           okLabel={msgDlg.okLabel}
+          onConfirm={closeMsgDlg}
         />
       ) : null}
       {msgDlg.open && msgDlg.mode === "confirm" ? (
@@ -1594,6 +1608,7 @@ export function DemoStepPanel({
           meta={msgDlg.meta}
           confirmLabel={msgDlg.confirmLabel}
           cancelLabel={msgDlg.cancelLabel}
+          loading={saving}
           onConfirm={msgDlg.onConfirm}
         />
       ) : null}
