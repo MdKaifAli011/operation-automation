@@ -285,8 +285,8 @@ export function DemoStepPanel({
         variant: "default" | "error";
         title: string;
         description: string;
-        highlight?: string;
-        meta?: string;
+        highlight?: string | Record<string, string>;
+        meta?: string | Record<string, string>;
         okLabel?: string;
       }
     | {
@@ -295,8 +295,8 @@ export function DemoStepPanel({
         variant: "default" | "error";
         title: string;
         description: string;
-        highlight?: string;
-        meta?: string;
+        highlight?: string | Record<string, string>;
+        meta?: string | Record<string, string>;
         confirmLabel: string;
         cancelLabel?: string;
         onConfirm: () => void;
@@ -629,9 +629,27 @@ export function DemoStepPanel({
             }
           : r,
       );
-      await persistDemoRows(patched);
+      await persistDemoRows(patched, {
+        kind: "demo",
+        message: `Demo scheduled: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
+      });
       setScheduleFormOpen(false);
       await refreshLead();
+      
+      // Format demo details as structured object
+      const ist = istWhenLines(isoDate, timeHmIST);
+      const formattedDate = ist ? ist.date : "—";
+      const formattedTime = ist ? ist.time : "—";
+      const demoDetails = {
+        "Student Name": lead.studentName,
+        "Exam": ex,
+        "Class": lead.grade,
+        "Subject": subj,
+        "Demo Time": `${formattedDate} - ${formattedTime}`,
+        "Faculty": teach,
+        "Demo Link": "Attached"
+      };
+      
       setMsgDlg({
         open: true,
         mode: "alert",
@@ -639,7 +657,8 @@ export function DemoStepPanel({
         title: editingMeetRowId ? "Demo updated" : "Demo Details",
         description:
           "The trial class was saved and the Google Meet link is attached to this lead.",
-        highlight: `${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
+        highlight: demoDetails,
+        okLabel: "Confirm Demo Details",
       });
     } catch (e) {
       setMsgDlg({
@@ -657,6 +676,29 @@ export function DemoStepPanel({
   const sendDemoInviteEmail = (row: DemoTableRowPersisted, isResend: boolean) => {
     const meetRowId = String(row.meetRowId ?? "");
     if (!meetRowId) return;
+    
+    // Format demo details as structured object
+    const ist = row.isoDate && row.timeHmIST ? istWhenLines(row.isoDate, row.timeHmIST) : null;
+    const formattedDate = ist ? ist.date : "—";
+    const formattedTime = ist ? ist.time : "—";
+    const exam = lead.targetExams?.[0] || "—";
+    
+    const demoDetails = {
+      "Student Name": lead.studentName,
+      "Exam": exam,
+      "Class": lead.grade,
+      "Subject": row.subject,
+      "Demo Time": `${formattedDate} - ${formattedTime}`,
+      "Faculty": row.teacher,
+      "Demo Link": "Attached"
+    };
+    
+    const studentDetails = {
+      "Name": lead.studentName,
+      "Phone": lead.phone || "—",
+      "Email": (lead.parentEmail || lead.email || "—").toUpperCase()
+    };
+    
     setMsgDlg({
       open: true,
       mode: "confirm",
@@ -665,8 +707,8 @@ export function DemoStepPanel({
       description: isResend
         ? "Send the demo join link to parent/student again. Faculty will be notified through a separate flow."
         : "Send the demo join link to parent/student. Faculty will be notified through a separate flow.",
-      highlight: demoInviteHighlight(row),
-      meta: leadContactMeta(lead),
+      highlight: demoDetails,
+      meta: studentDetails,
       confirmLabel: isResend
         ? "Confirm Demo & Send Link"
         : "Confirm Demo Details",
@@ -688,6 +730,7 @@ export function DemoStepPanel({
               throw new Error(data.error || "Could not send demo invite.");
             }
             await refreshLead();
+            closeMsgDlg();
           } catch (e) {
             setMsgDlg({
               open: true,
@@ -705,6 +748,42 @@ export function DemoStepPanel({
   };
 
   const sendTeacherFeedback = (meetRowId: string, isResend: boolean) => {
+    // Find the demo row to check status and time
+    const row = rows.find((r) => String(r.meetRowId) === meetRowId);
+    if (!row) return;
+    
+    // Check if demo is Cancelled or Rescheduled
+    if (row.status === "Cancelled" || row.status === "Rescheduled") {
+      setMsgDlg({
+        open: true,
+        mode: "alert",
+        variant: "error",
+        title: "Cannot send feedback",
+        description: "Faculty feedback cannot be sent for cancelled or rescheduled demos.",
+      });
+      return;
+    }
+    
+    // Check if 45 minutes have passed since the demo session time
+    if (row.isoDate && row.timeHmIST) {
+      const demoDateTime = new Date(`${row.isoDate}T${row.timeHmIST}:00+05:30`);
+      const currentTime = new Date();
+      const timeDiff = currentTime.getTime() - demoDateTime.getTime();
+      const fortyFiveMinutes = 45 * 60 * 1000; // 45 minutes in milliseconds
+      
+      if (timeDiff < fortyFiveMinutes) {
+        const remainingMinutes = Math.ceil((fortyFiveMinutes - timeDiff) / (60 * 1000));
+        setMsgDlg({
+          open: true,
+          mode: "alert",
+          variant: "error",
+          title: "Cannot send feedback yet",
+          description: `Faculty feedback can only be sent 45 minutes after the session time. Please wait ${remainingMinutes} more minutes.`,
+        });
+        return;
+      }
+    }
+    
     setMsgDlg({
       open: true,
       mode: "confirm",
@@ -1310,26 +1389,53 @@ export function DemoStepPanel({
                         </td>
                         <td className={cn(DEMO_TABLE_TD, "min-w-0")}>
                           {meetUrl ? (
-                            <button
-                              type="button"
-                              className="max-w-full cursor-pointer break-all text-left font-semibold text-current underline decoration-2 underline-offset-2 hover:opacity-90"
-                              disabled={rowBusy}
-                              title="Click to copy Meet link"
-                              onClick={() =>
-                                void navigator.clipboard.writeText(meetUrl).catch(() => {
-                                  setMsgDlg({
-                                    open: true,
-                                    mode: "alert",
-                                    variant: "error",
-                                    title: "Copy failed",
-                                    description:
-                                      "Your browser did not allow copying. Try again or copy the link from the address bar after opening it in a new tab.",
-                                  });
-                                })
-                              }
-                            >
-                              class link
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={meetUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(
+                                  "max-w-full cursor-pointer break-all text-left font-semibold text-emerald-600 hover:text-emerald-700 underline decoration-1 underline-offset-2",
+                                  rowBusy && "pointer-events-none opacity-50"
+                                )}
+                                title="Click to open Meet link in new tab"
+                              >
+                                class link
+                              </a>
+                              <button
+                                type="button"
+                                className="shrink-0 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={rowBusy}
+                                title="Copy Meet link"
+                                onClick={() =>
+                                  void navigator.clipboard.writeText(meetUrl).catch(() => {
+                                    setMsgDlg({
+                                      open: true,
+                                      mode: "alert",
+                                      variant: "error",
+                                      title: "Copy failed",
+                                      description:
+                                        "Your browser did not allow copying. Try again or copy the link from the address bar after opening it in a new tab.",
+                                    });
+                                  })
+                                }
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  strokeWidth={1.5}
+                                  stroke="currentColor"
+                                  className="w-4 h-4"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
                           ) : (
                             <span className="opacity-70">—</span>
                           )}

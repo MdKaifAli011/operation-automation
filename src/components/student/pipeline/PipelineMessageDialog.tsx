@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 
@@ -12,10 +12,10 @@ type Base = {
   title: string;
   /** Primary copy under the title */
   description: string;
-  /** Muted box (e.g. class summary) */
-  highlight?: string;
-  /** Smaller lines below highlight (e.g. contact) */
-  meta?: string;
+  /** Muted box (e.g. class summary) - can be string or structured object */
+  highlight?: string | Record<string, string>;
+  /** Smaller lines below highlight (e.g. contact) - can be string or structured object */
+  meta?: string | Record<string, string>;
 };
 
 export type PipelineMessageDialogProps =
@@ -23,16 +23,16 @@ export type PipelineMessageDialogProps =
       mode: "alert";
       okLabel?: string;
       description: string;
-      highlight?: string;
-      meta?: string;
+      highlight?: string | Record<string, string>;
+      meta?: string | Record<string, string>;
       onConfirm: () => void;
     })
   | (Base & {
       mode: "confirm";
       title: string;
       description: string;
-      highlight?: string;
-      meta?: string;
+      highlight?: string | Record<string, string>;
+      meta?: string | Record<string, string>;
       confirmLabel?: string;
       cancelLabel?: string;
       onConfirm: () => void;
@@ -43,6 +43,22 @@ export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
   const { open, onClose, variant, title, description, highlight, meta, mode } = props;
   const { confirmLabel, cancelLabel, onConfirm, loading } = props as any;
   const ref = useRef<HTMLDialogElement>(null);
+
+  // Helper to render structured data in grid layout
+  const renderStructuredData = (data: Record<string, string>) => {
+    return (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+        {Object.entries(data).map(([label, value]) => (
+          <React.Fragment key={label}>
+            <div className="text-[12px] text-slate-500 font-medium">{label}</div>
+            <div className="text-[13px] font-medium text-slate-800 break-all">
+              {value || "—"}
+            </div>
+          </React.Fragment>
+        ))}
+      </div>
+    );
+  };
 
   useEffect(() => {
     const d = ref.current;
@@ -114,39 +130,58 @@ export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
           {description}
         </p>
         {highlight ? (
-          <div className="mt-4 border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] font-medium text-slate-800">
-            {highlight}
-          </div>
+          typeof highlight === 'string' ? (
+            <div className="mt-4 border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] font-medium text-slate-800">
+              {highlight}
+            </div>
+          ) : (
+            <div className="mt-4 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3">
+              {renderStructuredData(highlight)}
+            </div>
+          )
         ) : null}
         {meta ? (
-          <p className="mt-3 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600">
-            {meta}
-          </p>
+          typeof meta === 'string' ? (
+            <p className="mt-3 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600">
+              {meta}
+            </p>
+          ) : (
+            <div className="mt-4 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3">
+              {renderStructuredData(meta)}
+            </div>
+          )
         ) : null}
       </div>
-      <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/90 px-4 py-3">
+      <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50/90 px-4 py-3">
         {props.mode === "alert" ? (
-          <button type="button" className={SX.leadBtnGreen} onClick={close}>
+          <button
+            type="button"
+            className="px-4 py-2 text-[13px] font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+            onClick={close}
+          >
             {props.okLabel ?? "OK"}
           </button>
         ) : (
           <>
-            <button type="button" className={SX.btnSecondary} onClick={close}>
+            <button
+              type="button"
+              className="px-4 py-2 text-[13px] font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              onClick={close}
+            >
               {props.cancelLabel ?? "Cancel"}
             </button>
             <button
               type="button"
-              className={SX.leadBtnGreen}
+              className="px-4 py-2 text-[13px] font-medium text-white bg-emerald-600 border border-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               onClick={() => {
                 props.onConfirm();
-                onClose();
               }}
               disabled={loading}
             >
               {loading ? (
                 <>
                   <svg
-                    className="animate-spin h-4 w-4 mr-2"
+                    className="animate-spin h-4 w-4"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
