@@ -71,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Admin Settings",
     Icon: IconSettings,
     items: [
+      { href: "/settings/users", label: "User Accounts", Icon: IconSettings },
       { href: "/email-templates", label: "Email Templates", Icon: IconMail },
       { href: "/meet-links", label: "Demo Links", Icon: IconLink },
       { href: "/time-zones", label: "Time Zone Management", Icon: IconGlobe },

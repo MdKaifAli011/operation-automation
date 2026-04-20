@@ -3,6 +3,15 @@
 import Image from "next/image";
 
 export function Header() {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
+
   return (
     <header className="sticky top-0 z-20 flex h-[72px] shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 shadow-sm shadow-slate-900/[0.04] backdrop-blur-md">
       <div className="flex items-center">
@@ -35,6 +44,12 @@ export function Header() {
             A
           </span>
           <span className="text-sm font-medium text-slate-800">Admin</span>
+          <button
+            onClick={handleLogout}
+            className="ml-2 px-3 py-1 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+          >
+            Logout
+          </button>
         </div>
       </div>
     </header>
