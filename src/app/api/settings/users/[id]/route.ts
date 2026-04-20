@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { User } from "@/models/User";
 import { requireAdmin } from "@/lib/auth";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is authenticated and is admin
     const authResult = await requireAdmin(req);
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Connect to database
     if (mongoose.connection.readyState !== 1) {
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is authenticated and is admin
     const authResult = await requireAdmin(req);
@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const { name, role, isActive, password } = await req.json();
 
     // Connect to database
@@ -142,7 +142,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is authenticated and is admin
     const authResult = await requireAdmin(req);
@@ -153,7 +153,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Connect to database
     if (mongoose.connection.readyState !== 1) {

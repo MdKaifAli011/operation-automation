@@ -78,7 +78,7 @@ userSchema.virtual("isLocked").get(function() {
 });
 
 // Pre-save middleware to hash password
-userSchema.pre("save", async function(next) {
+userSchema.pre("save", async function(next: any) {
   // Only hash the password if it has been modified (or is new)
   if (!this.isModified("password")) return next();
   
@@ -128,7 +128,7 @@ userSchema.methods.resetLoginAttempts = async function(): Promise<void> {
 // Ensure virtuals are included in JSON
 userSchema.set("toJSON", {
   virtuals: true,
-  transform: function(doc, ret) {
+  transform: function(doc, ret: any) {
     delete ret.password;
     delete ret.loginAttempts;
     delete ret.lockUntil;
