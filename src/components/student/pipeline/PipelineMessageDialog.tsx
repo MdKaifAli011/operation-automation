@@ -40,8 +40,12 @@ export type PipelineMessageDialogProps =
     });
 
 export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
-  const { open, onClose, variant, title, description, highlight, meta, mode } = props;
-  const { confirmLabel, cancelLabel, onConfirm, loading } = props as any;
+  const { open, onClose, variant, title, description, highlight, meta } = props;
+  const isConfirm = props.mode === "confirm";
+  const confirmLabel = isConfirm ? (props as Extract<PipelineMessageDialogProps, { mode: "confirm" }>).confirmLabel : undefined;
+  const cancelLabel = isConfirm ? (props as Extract<PipelineMessageDialogProps, { mode: "confirm" }>).cancelLabel : undefined;
+  const onConfirm = isConfirm ? (props as Extract<PipelineMessageDialogProps, { mode: "confirm" }>).onConfirm : undefined;
+  const loading = isConfirm ? (props as Extract<PipelineMessageDialogProps, { mode: "confirm" }>).loading : false;
   const ref = useRef<HTMLDialogElement>(null);
 
   // Helper to render structured data in grid layout
@@ -156,7 +160,7 @@ export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
         {props.mode === "alert" ? (
           <button
             type="button"
-            className="px-4 py-2 text-[13px] font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+            className={SX.btnSecondary}
             onClick={close}
           >
             {props.okLabel ?? "OK"}
@@ -165,14 +169,14 @@ export function PipelineMessageDialog(props: PipelineMessageDialogProps) {
           <>
             <button
               type="button"
-              className="px-4 py-2 text-[13px] font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              className={SX.btnSecondary}
               onClick={close}
             >
               {props.cancelLabel ?? "Cancel"}
             </button>
             <button
               type="button"
-              className="px-4 py-2 text-[13px] font-medium text-white bg-emerald-600 border border-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className={cn(SX.btnPrimary, "disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2")}
               onClick={() => {
                 props.onConfirm();
               }}

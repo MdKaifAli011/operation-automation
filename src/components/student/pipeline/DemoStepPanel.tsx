@@ -1687,7 +1687,7 @@ export function DemoStepPanel({
               </button>
               <button
                 type="button"
-                className={cn(SX.leadBtnGreen, "bg-rose-700 hover:bg-rose-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2")}
+                className={cn(SX.btnPrimary, "bg-rose-700 border-rose-700 hover:bg-rose-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2")}
                 onClick={confirmCancelDemo}
                 disabled={cancelDemoDialog.loading}
               >
