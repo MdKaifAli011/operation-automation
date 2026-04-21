@@ -300,6 +300,7 @@ export function DemoStepPanel({
         confirmLabel: string;
         cancelLabel?: string;
         onConfirm: () => void;
+        loading?: boolean;
       };
   const [msgDlg, setMsgDlg] = useState<DemoMessageDialogState>({ open: false });
   const closeMsgDlg = () => setMsgDlg({ open: false });
@@ -308,11 +309,13 @@ export function DemoStepPanel({
     row: DemoTableRowPersisted | null;
     notifyParent: boolean;
     notifyFaculty: boolean;
+    loading: boolean;
   }>({
     open: false,
     row: null,
     notifyParent: true,
     notifyFaculty: true,
+    loading: false,
   });
 
   const [examDraft, setExamDraft] = useState("");
@@ -575,8 +578,10 @@ export function DemoStepPanel({
             highlight: `${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
             confirmLabel: "Share & continue",
             cancelLabel: "Cancel",
-            onConfirm: () => {
-              void submitModal(true);
+            loading: false,
+            onConfirm: async () => {
+              setMsgDlg((prev) => ({ ...prev, loading: true }));
+              await submitModal(true);
             },
           });
           return;
@@ -713,36 +718,33 @@ export function DemoStepPanel({
         ? "Confirm Demo & Send Link"
         : "Confirm Demo Details",
       cancelLabel: "Cancel",
-      onConfirm: () => {
-        void (async () => {
-          setSaving(true);
-          try {
-            const res = await fetch(
-              `/api/leads/${encodeURIComponent(lead.id)}/send-email`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ templateKey: "demo_invite", meetRowId }),
-              },
-            );
-            const data = (await res.json().catch(() => ({}))) as { error?: string };
-            if (!res.ok) {
-              throw new Error(data.error || "Could not send demo invite.");
-            }
-            await refreshLead();
-            closeMsgDlg();
-          } catch (e) {
-            setMsgDlg({
-              open: true,
-              mode: "alert",
-              variant: "error",
-              title: "Could not send invite",
-              description: e instanceof Error ? e.message : "Something went wrong.",
-            });
-          } finally {
-            setSaving(false);
+      loading: false,
+      onConfirm: async () => {
+        setMsgDlg((prev) => ({ ...prev, loading: true }));
+        try {
+          const res = await fetch(
+            `/api/leads/${encodeURIComponent(lead.id)}/send-email`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ templateKey: "demo_invite", meetRowId }),
+            },
+          );
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          if (!res.ok) {
+            throw new Error(data.error || "Could not send demo invite.");
           }
-        })();
+          await refreshLead();
+          closeMsgDlg();
+        } catch (e) {
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "error",
+            title: "Could not send invite",
+            description: e instanceof Error ? e.message : "Something went wrong.",
+          });
+        }
       },
     });
   };
@@ -794,49 +796,46 @@ export function DemoStepPanel({
         : "Send a one-time feedback link to the teacher? The link stops working after they submit once.",
       confirmLabel: isResend ? "Resend email" : "Send email",
       cancelLabel: "Cancel",
-      onConfirm: () => {
-        void (async () => {
-          setSaving(true);
-          try {
-            const res = await fetch(
-              `/api/leads/${encodeURIComponent(lead.id)}/demo-feedback`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ meetRowId, sendEmail: true }),
-              },
-            );
-            const data = (await res.json().catch(() => ({}))) as {
-              error?: string;
-              feedbackUrl?: string;
-            };
-            if (!res.ok) {
-              throw new Error(data.error || "Could not send feedback invite.");
-            }
-            if (data.feedbackUrl) {
-              await navigator.clipboard.writeText(data.feedbackUrl).catch(() => {});
-            }
-            await refreshLead();
-            setMsgDlg({
-              open: true,
-              mode: "alert",
-              variant: "default",
-              title: "Feedback email sent",
-              description:
-                "The teacher was emailed when their address is on file. The link was also copied to your clipboard when available.",
-            });
-          } catch (e) {
-            setMsgDlg({
-              open: true,
-              mode: "alert",
-              variant: "error",
-              title: "Could not send",
-              description: e instanceof Error ? e.message : "Something went wrong.",
-            });
-          } finally {
-            setSaving(false);
+      loading: false,
+      onConfirm: async () => {
+        setMsgDlg((prev) => ({ ...prev, loading: true }));
+        try {
+          const res = await fetch(
+            `/api/leads/${encodeURIComponent(lead.id)}/demo-feedback`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ meetRowId, sendEmail: true }),
+            },
+          );
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            feedbackUrl?: string;
+          };
+          if (!res.ok) {
+            throw new Error(data.error || "Could not send feedback invite.");
           }
-        })();
+          if (data.feedbackUrl) {
+            await navigator.clipboard.writeText(data.feedbackUrl).catch(() => {});
+          }
+          await refreshLead();
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "default",
+            title: "Feedback email sent",
+            description:
+              "The teacher was emailed when their address is on file. The link was also copied to your clipboard when available.",
+          });
+        } catch (e) {
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "error",
+            title: "Could not send",
+            description: e instanceof Error ? e.message : "Something went wrong.",
+          });
+        }
       },
     });
   };
@@ -865,6 +864,7 @@ export function DemoStepPanel({
         row,
         notifyParent: true,
         notifyFaculty: true,
+        loading: false,
       });
       return;
     }
@@ -894,11 +894,14 @@ export function DemoStepPanel({
       confirmLabel:
         nextStatus === "Completed" ? "Confirm Conducted" : "Confirm Scheduled",
       cancelLabel: "Cancel",
-      onConfirm: () => {
-        void updateRowStatus(meetRowId, nextStatus, {
+      loading: false,
+      onConfirm: async () => {
+        setMsgDlg((prev) => ({ ...prev, loading: true }));
+        await updateRowStatus(meetRowId, nextStatus, {
           notifyParent: true,
           notifyFaculty: false,
         });
+        closeMsgDlg();
       },
     });
   };
@@ -909,21 +912,26 @@ export function DemoStepPanel({
       row: null,
       notifyParent: true,
       notifyFaculty: true,
+      loading: false,
     });
 
-  const confirmCancelDemo = () => {
+  const confirmCancelDemo = async () => {
     const row = cancelDemoDialog.row;
     if (!row) {
       closeCancelDemoDialog();
       return;
     }
     const meetRowId = String(row.meetRowId ?? "").trim();
-    closeCancelDemoDialog();
-    if (!meetRowId) return;
-    void updateRowStatus(meetRowId, "Cancelled", {
+    if (!meetRowId) {
+      closeCancelDemoDialog();
+      return;
+    }
+    setCancelDemoDialog((prev) => ({ ...prev, loading: true }));
+    await updateRowStatus(meetRowId, "Cancelled", {
       notifyParent: cancelDemoDialog.notifyParent,
       notifyFaculty: cancelDemoDialog.notifyFaculty,
     });
+    closeCancelDemoDialog();
   };
 
   useEffect(() => {
@@ -1673,15 +1681,43 @@ export function DemoStepPanel({
                 type="button"
                 className={SX.btnSecondary}
                 onClick={closeCancelDemoDialog}
+                disabled={cancelDemoDialog.loading}
               >
                 Close
               </button>
               <button
                 type="button"
-                className={cn(SX.leadBtnGreen, "bg-rose-700 hover:bg-rose-800")}
+                className={cn(SX.leadBtnGreen, "bg-rose-700 hover:bg-rose-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2")}
                 onClick={confirmCancelDemo}
+                disabled={cancelDemoDialog.loading}
               >
-                Cancel Demo
+                {cancelDemoDialog.loading ? (
+                  <>
+                    <svg
+                      className="animate-spin h-4 w-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018 8 0 018 8 0 01-4.58 4.58l-1.46 1.46a2 2 0 012.84 2.84 012.84 2.84 014.58-4.58L18 16l-4.58-4.58a2 2 0 01-2.84-2.84 012.84-2.84 014.58 2.84L6 8l4.58 4.58a2 2 0 012.84-2.84 012.84 2.84 014.58-2.84L18 16z"
+                      />
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  "Cancel Demo"
+                )}
               </button>
             </div>
           </div>
@@ -1714,7 +1750,7 @@ export function DemoStepPanel({
           meta={msgDlg.meta}
           confirmLabel={msgDlg.confirmLabel}
           cancelLabel={msgDlg.cancelLabel}
-          loading={saving}
+          loading={msgDlg.loading}
           onConfirm={msgDlg.onConfirm}
         />
       ) : null}
