@@ -12,13 +12,13 @@ async function seedAdmin() {
     console.log("Connected to MongoDB");
 
     // Get admin credentials from environment
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const adminPassword = process.env.ADMIN_PASSWORD;
+    const adminEmail = process.env.INITIAL_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
     const adminName = process.env.ADMIN_NAME || "Administrator";
 
     if (!adminEmail || !adminPassword) {
       console.error("Missing required environment variables:");
-      console.error("ADMIN_EMAIL and ADMIN_PASSWORD must be set");
+      console.error("INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD (or ADMIN_EMAIL and ADMIN_PASSWORD) must be set");
       process.exit(1);
     }
 

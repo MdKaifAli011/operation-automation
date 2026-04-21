@@ -15,7 +15,7 @@ export interface IUser extends Document {
   comparePassword(candidatePassword: string): Promise<boolean>;
   incLoginAttempts(): Promise<void>;
   resetLoginAttempts(): Promise<void>;
-  isLocked(): boolean;
+  isLocked: boolean; // Virtual getter, not a method
 }
 
 const userSchema = new Schema<IUser>(
@@ -80,20 +80,28 @@ userSchema.virtual("isLocked").get(function() {
 // Pre-save middleware to hash password
 userSchema.pre("save", async function(next: any) {
   // Only hash the password if it has been modified (or is new)
-  if (!this.isModified("password")) return next();
-  
+  if (!this.isModified("password")) {
+    if (typeof next === "function") return next();
+    return;
+  }
+
   try {
     // Hash password with cost of 12
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
-    next();
+    if (typeof next === "function") next();
   } catch (error) {
-    next(error as Error);
+    if (typeof next === "function") next(error as Error);
+    else throw error;
   }
 });
 
 // Instance method to compare password
 userSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
+  // Validate both arguments before calling bcrypt.compare
+  if (!candidatePassword || !this.password) {
+    return false;
+  }
   return bcrypt.compare(candidatePassword, this.password);
 };
 

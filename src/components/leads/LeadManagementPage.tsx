@@ -14,7 +14,7 @@ import {
 import { LeadSheetTable } from "./LeadSheetTable";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
-import { isLeadConvertedInCurrentMonth } from "@/lib/leadConversionMonth";
+import { isLeadConvertedInCurrentMonth, getLeadConversionReferenceIso } from "@/lib/leadConversionMonth";
 import {
   isLeadInOngoingPipeline,
   isLeadInNewDailyView,
@@ -107,6 +107,11 @@ export function LeadManagementPage() {
   const [sheetEditMode, setSheetEditMode] = useState(false);
   const [leadDraft, setLeadDraft] = useState<Record<string, Partial<Lead>>>({});
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [convertedMonthFilter, setConvertedMonthFilter] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [convertedNameSearch, setConvertedNameSearch] = useState("");
   const importExcelRef = useRef<ImportExcelControlHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const leadSources = useLeadSources();
@@ -332,7 +337,33 @@ export function LeadManagementPage() {
     [filtered],
   );
 
-  /** Converted tab + stat: current calendar month only. */
+  /** Converted tab: filtered by selected month/year and optional name search. */
+  const convertedLeadsFiltered = useMemo(() => {
+    let list = convertedLeadsFullPipeline;
+    // Month/year filter
+    if (convertedMonthFilter) {
+      const [year, month] = convertedMonthFilter.split("-").map(Number);
+      list = list.filter((l) => {
+        const refIso = getLeadConversionReferenceIso(l);
+        if (!refIso) return false;
+        const d = new Date(refIso);
+        if (Number.isNaN(d.getTime())) return false;
+        return d.getFullYear() === year && d.getMonth() + 1 === month;
+      });
+    }
+    // Name search
+    const q = convertedNameSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((l) =>
+        l.studentName.toLowerCase().includes(q) ||
+        (l.email ?? "").toLowerCase().includes(q) ||
+        l.phone.includes(q),
+      );
+    }
+    return list;
+  }, [convertedLeadsFullPipeline, convertedMonthFilter, convertedNameSearch]);
+
+  /** Stat count: current calendar month only. */
   const convertedLeadsThisMonth = useMemo(
     () =>
       convertedLeadsFullPipeline.filter((l) =>
@@ -833,7 +864,7 @@ export function LeadManagementPage() {
             <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
               <section aria-label="Today's leads">
                 <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>Today&apos;s Lead</h2>
+                  <h2 className={SX.leadSectionTitle}>Today&apos;s Leads</h2>
                 </div>
                 {newAndDailyLeads.length === 0 ? (
                   <div
@@ -924,6 +955,8 @@ export function LeadManagementPage() {
               <LeadSheetTable
                 showFollowUpColumn
                 showPipelineColumn
+                pickDataTypeOnClick
+                leadSourceOptions={leadSources}
                 actionMenuHideOptions={{ followUp: true }}
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(followUpLeads)}
@@ -952,6 +985,7 @@ export function LeadManagementPage() {
                 showFollowUpColumn={false}
                 showPipelineColumn
                 showNotInterestedRemark
+                interestedLabel="Mark as Interested"
                 actionMenuHideOptions={{ notInterested: true }}
                 className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
                 leads={applyDraftToList(notInterestedLeads)}
@@ -966,44 +1000,73 @@ export function LeadManagementPage() {
           {mainTab === "converted" && (
             <section
               className="px-3 py-4 md:px-4 md:py-5"
-              aria-label="Converted leads"
+              aria-label="Enrolled leads"
             >
               <div className={SX.leadSectionHead}>
                 <div className="flex min-w-0 flex-wrap items-baseline gap-2 gap-y-1">
-                  <h2 className={SX.leadSectionTitle}>Converted</h2>
-                  <span className="rounded-none border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
-                    Current month
-                  </span>
+                  <h2 className={SX.leadSectionTitle}>Enrolled</h2>
                 </div>
                 <p className={SX.leadSectionMeta}>
-                  {convertedLeadsThisMonth.length} lead
-                  {convertedLeadsThisMonth.length === 1 ? "" : "s"} who finished
-                  onboarding this calendar month · Status shows completed
-                  pipeline steps
+                  {convertedLeadsFiltered.length} enrolled lead
+                  {convertedLeadsFiltered.length === 1 ? "" : "s"} · filtered by month · Status shows completed pipeline steps
                 </p>
               </div>
-              {convertedLeadsThisMonth.length === 0 ? (
+
+              {/* Month/year filter + name search */}
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-b border-slate-200/90 bg-white px-1 pb-3">
+                <label className="flex items-center gap-1.5 text-[12px] text-slate-700">
+                  <span className="font-medium">Month:</span>
+                  <input
+                    type="month"
+                    className={cn(SX.input, "w-40 text-[12px]")}
+                    value={convertedMonthFilter}
+                    onChange={(e) => setConvertedMonthFilter(e.target.value)}
+                  />
+                </label>
+                <input
+                  type="search"
+                  placeholder="Search name, phone, email…"
+                  className={cn(SX.leadSearch, "max-w-[220px] text-[12px]")}
+                  value={convertedNameSearch}
+                  onChange={(e) => setConvertedNameSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Exam tiles (like /enroll-student page) */}
+              {convertedLeadsFullPipeline.length > 0 && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <div className="rounded-none border border-slate-200/90 bg-slate-50/50 px-3 py-2 text-center shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total enrolled</p>
+                    <p className="mt-0.5 text-lg font-bold tabular-nums text-primary">
+                      {convertedLeadsFullPipeline.length}
+                    </p>
+                  </div>
+                  <div className="rounded-none border border-emerald-200/90 bg-emerald-50/50 px-3 py-2 text-center shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">This month</p>
+                    <p className="mt-0.5 text-lg font-bold tabular-nums text-emerald-600">
+                      {convertedLeadsThisMonth.length}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {convertedLeadsFiltered.length === 0 ? (
                 <div
                   className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
                   role="status"
                 >
-                  No converted leads in{" "}
-                  <span className="font-medium text-slate-800">
-                    {format(new Date(), "MMMM yyyy")}
-                  </span>
-                  . Conversions are counted using the schedule completion time
-                  when set, otherwise the last update time on the lead.
+                  No enrolled leads in the selected month. Try a different month or clear the name filter.
                 </div>
               ) : (
                 <LeadSheetTable
                   showFollowUpColumn={false}
                   showPipelineColumn
                   className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                  leads={applyDraftToList(convertedLeadsThisMonth)}
+                  leads={applyDraftToList(convertedLeadsFiltered)}
                   sheetEditMode={sheetEditMode}
                   onDraftPatch={onDraftPatch}
                   onUpdateLead={onUpdateLead}
-                  visibleIds={convertedLeadsThisMonth.map((l) => l.id)}
+                  visibleIds={convertedLeadsFiltered.map((l) => l.id)}
                 />
               )}
             </section>

@@ -1,27 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { User } from "@/models/User";
-import { verifyRecaptcha } from "@/lib/recaptcha";
+import { verifyTurnstile, isCaptchaEnabled } from "@/lib/captcha";
 
 // Rate limiting middleware for Next.js API routes
+// Module-level store so it persists across requests in the same process
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT_MAX_ATTEMPTS = 5;
+
 async function applyRateLimit(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
   
-  // Simple in-memory store for rate limiting
-  const store = new Map<string, { count: number; resetTime: number }>();
-  const windowMs = 15 * 60 * 1000; // 15 minutes
-  const maxAttempts = 5;
-  
   const now = Date.now();
   const key = `login:${ip}`;
-  const record = store.get(key);
+  const record = rateLimitStore.get(key);
   
   if (!record || now > record.resetTime) {
-    store.set(key, { count: 1, resetTime: now + windowMs });
+    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
     return null;
   }
   
-  if (record.count >= maxAttempts) {
+  if (record.count >= RATE_LIMIT_MAX_ATTEMPTS) {
     return NextResponse.json(
       { error: "Too many login attempts. Please try again later." },
       { status: 429 }
@@ -58,20 +58,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify CAPTCHA token
-    if (!captchaToken) {
-      return NextResponse.json(
-        { error: "CAPTCHA verification is required" },
-        { status: 400 }
-      );
-    }
+    // Verify CAPTCHA token (only when enabled)
+    if (isCaptchaEnabled()) {
+      if (!captchaToken) {
+        return NextResponse.json(
+          { error: "CAPTCHA verification is required" },
+          { status: 400 }
+        );
+      }
 
-    const isCaptchaValid = await verifyRecaptcha(captchaToken);
-    if (!isCaptchaValid) {
-      return NextResponse.json(
-        { error: "CAPTCHA verification failed" },
-        { status: 400 }
-      );
+      const isCaptchaValid = await verifyTurnstile(captchaToken);
+      if (!isCaptchaValid) {
+        return NextResponse.json(
+          { error: "CAPTCHA verification failed" },
+          { status: 400 }
+        );
+      }
     }
 
     // Connect to database
@@ -97,10 +99,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if account is locked due to too many failed attempts
-    if (user.isLocked()) {
+    if (user.isLocked) {
       const lockTimeRemaining = Math.ceil((user.lockUntil!.getTime() - Date.now()) / (1000 * 60));
       return NextResponse.json(
-        { 
+        {
           error: `Account is locked due to too many failed attempts. Try again in ${lockTimeRemaining} minutes.` 
         },
         { status: 423 }

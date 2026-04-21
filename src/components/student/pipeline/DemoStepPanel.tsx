@@ -13,6 +13,7 @@ import { mergePipelineMeta, appendActivity } from "@/lib/pipeline";
 import { parseIstSlot, getMeetHoldDurationMinutes } from "@/lib/meetLinks/window";
 import { suggestNextFutureIstSlot } from "@/lib/demoSchedule/suggestNextFutureIstSlot";
 import { defaultTimeZoneForCountry } from "@/lib/timezones/countryDefaultTimeZone";
+import { LEAD_COUNTRY_OPTIONS } from "@/lib/country-phone";
 import {
   getGroupedTimeZoneSelectOptions,
   ensureSelectedTimeZoneOption,
@@ -323,6 +324,7 @@ export function DemoStepPanel({
   const [teacherDraft, setTeacherDraft] = useState("");
   const [isoDate, setIsoDate] = useState(() => suggestNextFutureIstSlot().isoDate);
   const [timeHmIST, setTimeHmIST] = useState(() => suggestNextFutureIstSlot().timeHmIST);
+  const [studentCountry, setStudentCountry] = useState(() => lead.country ?? "");
   const [studentTz, setStudentTz] = useState(() =>
     defaultTimeZoneForCountry(lead.country ?? ""),
   );
@@ -381,17 +383,21 @@ export function DemoStepPanel({
     setTeacherDraft(firstTeacher);
     setIsoDate(slot.isoDate);
     setTimeHmIST(slot.timeHmIST);
+    setStudentCountry(lead.country ?? "");
     setStudentTz(defaultTimeZoneForCountry(lead.country ?? ""));
     setScheduleFormOpen(true);
   };
 
   const openEdit = (row: DemoTableRowPersisted) => {
     setEditingMeetRowId(row.meetRowId ?? "");
-    setExamDraft(row.examValue?.trim() || examChoices[0] || "");
+    // Prioritize student's actual target exams as fallback, not examChoices[0] which might be 'Other'
+    const studentFirstExam = lead.targetExams?.[0]?.trim() || "";
+    setExamDraft(row.examValue?.trim() || studentFirstExam || examChoices[0] || "");
     setSubjectDraft(row.subject ?? "");
     setTeacherDraft(row.teacher ?? "");
     setIsoDate(row.isoDate || format(new Date(), "yyyy-MM-dd"));
     setTimeHmIST(row.timeHmIST || "10:00");
+    setStudentCountry(lead.country ?? "");
     setStudentTz(
       row.studentTimeZone?.trim() ||
         defaultTimeZoneForCountry(lead.country ?? ""),
@@ -1180,65 +1186,91 @@ export function DemoStepPanel({
                   <div className="flex items-center bg-slate-100 px-3 py-3 text-[10px] font-bold uppercase tracking-wide text-slate-700 sm:border-r sm:border-slate-200">
                     When
                   </div>
-                  <div className="grid gap-4 p-3 sm:grid-cols-2 sm:p-4">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                        India (IST)
-                      </span>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <input
-                          type="date"
-                          className={cn(SX.input, "w-full max-w-44")}
-                          value={isoDate}
-                          min={!editingMeetRowId ? minDemoIsoDate || undefined : undefined}
+                  <div className="p-3 sm:p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="date"
+                        className={cn(SX.input, "w-full max-w-44")}
+                        value={isoDate}
+                        min={!editingMeetRowId ? minDemoIsoDate || undefined : undefined}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!editingMeetRowId && minDemoIsoDate && next < minDemoIsoDate) {
+                            setIsoDate(minDemoIsoDate);
+                            return;
+                          }
+                          setIsoDate(next);
+                        }}
+                      />
+                      <span className="text-[11px] text-slate-500">at</span>
+                      <input
+                        type="time"
+                        className={cn(SX.input, "w-26")}
+                        value={timeHmIST}
+                        onChange={(e) => setTimeHmIST(e.target.value)}
+                      />
+                      <span className="text-[11px] font-semibold text-slate-700">IST</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(120px,160px)_1fr]">
+                  <div className="flex items-center bg-slate-100 px-3 py-3 text-[10px] font-bold uppercase tracking-wide text-slate-700 sm:border-r sm:border-slate-200">
+                    Student timezone
+                  </div>
+                  <div className="space-y-3 p-3 sm:p-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          Country
+                        </span>
+                        <select
+                          className={cn(SX.select, "mt-1 w-full text-[12px]")}
+                          value={studentCountry}
                           onChange={(e) => {
-                            const next = e.target.value;
-                            if (!editingMeetRowId && minDemoIsoDate && next < minDemoIsoDate) {
-                              setIsoDate(minDemoIsoDate);
-                              return;
-                            }
-                            setIsoDate(next);
+                            const c = e.target.value;
+                            setStudentCountry(c);
+                            const tz = defaultTimeZoneForCountry(c);
+                            setStudentTz(tz);
                           }}
-                        />
-                        <span className="text-[11px] text-slate-500">at</span>
-                        <input
-                          type="time"
-                          className={cn(SX.input, "w-26")}
-                          value={timeHmIST}
-                          onChange={(e) => setTimeHmIST(e.target.value)}
-                        />
+                        >
+                          <option value="">Select country</option>
+                          {LEAD_COUNTRY_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.value}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <p className="mt-1 text-[10px] text-slate-500">IST</p>
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          Timezone
+                        </span>
+                        <select
+                          className={cn(SX.select, "mt-1 w-full text-[12px]")}
+                          value={studentTz}
+                          onChange={(e) => setStudentTz(e.target.value)}
+                        >
+                          {timeZoneGroups.map((group) => (
+                            <optgroup key={group} label={group}>
+                              {timeZoneOptions
+                                .filter((o) => o.group === group)
+                                .map((o) => (
+                                  <option key={o.value} value={o.value}>
+                                    {o.label}
+                                  </option>
+                                ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                        Student timezone
-                      </span>
-                      <select
-                        className={cn(SX.select, "mt-1 w-full text-[12px]")}
-                        value={studentTz}
-                        onChange={(e) => setStudentTz(e.target.value)}
-                      >
-                        {timeZoneGroups.map((group) => (
-                          <optgroup key={group} label={group}>
-                            {timeZoneOptions
-                              .filter((o) => o.group === group)
-                              .map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-800">
-                        Preview: {previewStudent || "—"}
-                      </p>
-                      <p className="mt-1 text-[10px] leading-snug text-slate-500">
-                        You can schedule for any local time. The slot must still be in the
-                        future (checked in IST and the student timezone above).
-                      </p>
-                    </div>
+                    <p className="text-[11px] font-semibold text-slate-800">
+                      Preview: {previewStudent || "—"}
+                    </p>
+                    <p className="text-[10px] leading-snug text-slate-500">
+                      You can schedule for any local time. The slot must still be in the
+                      future (checked in IST and the student timezone above).
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1452,21 +1484,50 @@ export function DemoStepPanel({
                           {(() => {
                             const canFbActions =
                               String(r.status ?? "").trim() !== "Cancelled" && !fbDone;
-                            const feedbackLabel = fbDone
-                              ? "Received Response"
-                              : String(r.status ?? "").trim() === "Completed"
-                                ? "Awaiting Response"
-                                : "Not Yet Received";
+                            const demoStart = r.isoDate && r.timeHmIST
+                              ? parseIstSlot(r.isoDate, r.timeHmIST)
+                              : null;
+                            const nowMs = Date.now();
+                            const demoStartMs = demoStart ? demoStart.getTime() : 0;
+                            const minutesSinceDemo = demoStart ? (nowMs - demoStartMs) / 60000 : -1;
+                            const isCancelled = String(r.status ?? "").trim() === "Cancelled";
+
+                            let feedbackLabel: string;
+                            let feedbackStyle: string;
+
+                            if (fbDone) {
+                              feedbackLabel = "Received Response";
+                              feedbackStyle = "bg-emerald-100 text-emerald-900 ring-emerald-200";
+                            } else if (isCancelled) {
+                              feedbackLabel = "Cancelled";
+                              feedbackStyle = "bg-red-50 text-red-700 ring-red-200";
+                            } else if (!demoStart) {
+                              feedbackLabel = "Not Scheduled";
+                              feedbackStyle = "bg-slate-50 text-slate-600 ring-slate-200";
+                            } else if (minutesSinceDemo < 0) {
+                              // Before session time
+                              feedbackLabel = "Demo not started";
+                              feedbackStyle = "bg-slate-50 text-slate-600 ring-slate-200";
+                            } else if (minutesSinceDemo < 50) {
+                              // During session (0-50 min)
+                              feedbackLabel = "Demo in process";
+                              feedbackStyle = "bg-blue-50 text-blue-800 ring-blue-200";
+                            } else if (minutesSinceDemo < 120) {
+                              // 50 min - 2 hours: awaiting response
+                              feedbackLabel = "Awaiting Faculty Response";
+                              feedbackStyle = "bg-amber-50 text-amber-900 ring-amber-200";
+                            } else {
+                              // After 2 hours without response
+                              feedbackLabel = "Not Received Yet";
+                              feedbackStyle = "bg-rose-50 text-rose-800 ring-rose-200";
+                            }
+
                             return (
                               <div className="flex flex-col gap-1">
                                 <span
                                   className={cn(
                                     "inline-flex w-max max-w-full rounded-none px-1.5 py-0.5 text-[10px] font-medium ring-1",
-                                    fbDone
-                                      ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
-                                      : String(r.status ?? "").trim() === "Completed"
-                                        ? "bg-amber-50 text-amber-900 ring-amber-200"
-                                        : "bg-slate-50 text-slate-600 ring-slate-200",
+                                    feedbackStyle,
                                   )}
                                 >
                                   {feedbackLabel}

@@ -123,6 +123,8 @@ type Props = {
     followUp?: boolean;
     enrolled?: boolean;
   };
+  /** Override the "Interested" menu label (e.g. "Mark as Interested" on the Not Interested tab). */
+  interestedLabel?: string;
 };
 
 export function LeadSheetTable({
@@ -146,6 +148,7 @@ export function LeadSheetTable({
   targetExamsColumnTitle = "Target (exams)",
   formatTargetExamsDisplay,
   actionMenuHideOptions,
+  interestedLabel = "Interested",
 }: Props) {
   const baseId = useId();
   const [selectedCell, setSelectedCell] = useState<{
@@ -871,13 +874,18 @@ export function LeadSheetTable({
               <button
                 type="button"
                 role="menuitem"
-                className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
+                className={cn(
+                  "block w-full px-3 py-2 text-left transition-colors",
+                  interestedLabel === "Mark as Interested"
+                    ? "font-medium text-emerald-700 hover:bg-emerald-50"
+                    : "text-slate-700 hover:bg-slate-50",
+                )}
                 onClick={() => {
                   setInterestedCourseLead(menuLead);
                   setActionMenu(null);
                 }}
               >
-                Interested
+                {interestedLabel}
               </button>
             ) : null}
             {!hideNotInterested ? (

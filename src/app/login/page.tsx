@@ -13,10 +13,17 @@ export default function LoginPage() {
   const [captchaToken, setCaptchaToken] = useState<string>("");
   const router = useRouter();
 
-  // Load reCAPTCHA script
+  // Check if CAPTCHA is enabled
+  const isCaptchaEnabled = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED !== "0" &&
+                           process.env.NEXT_PUBLIC_TURNSTILE_ENABLED !== "false" &&
+                           process.env.NEXT_PUBLIC_TURNSTILE_ENABLED !== "FALSE";
+
+  // Load Turnstile script only when enabled
   useEffect(() => {
+    if (!isCaptchaEnabled) return;
+
     const script = document.createElement("script");
-    script.src = "https://www.google.com/recaptcha/api.js";
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
     script.async = true;
     script.defer = true;
     document.body.appendChild(script);
@@ -24,7 +31,7 @@ export default function LoginPage() {
     return () => {
       document.body.removeChild(script);
     };
-  }, []);
+  }, [isCaptchaEnabled]);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@testprepkart\.com$/;
@@ -34,7 +41,7 @@ export default function LoginPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error for this field when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: "" }));
@@ -56,7 +63,8 @@ export default function LoginPage() {
       newErrors.password = "Password must be at least 6 characters";
     }
 
-    if (!captchaToken) {
+    // Only require CAPTCHA when enabled
+    if (isCaptchaEnabled && !captchaToken) {
       newErrors.captcha = "Please complete the CAPTCHA verification";
     }
 
@@ -95,16 +103,16 @@ export default function LoginPage() {
       } else {
         setErrors({ general: data.error || "Login failed" });
         // Reset CAPTCHA on error
-        if (window.grecaptcha) {
-          window.grecaptcha.reset();
+        if ((window as unknown as { turnstile?: { reset: () => void } }).turnstile) {
+          (window as unknown as { turnstile: { reset: () => void } }).turnstile.reset();
           setCaptchaToken("");
         }
       }
     } catch {
       setErrors({ general: "Network error. Please try again." });
       // Reset CAPTCHA on error
-      if (window.grecaptcha) {
-        window.grecaptcha.reset();
+      if ((window as unknown as { turnstile?: { reset: () => void } }).turnstile) {
+        (window as unknown as { turnstile: { reset: () => void } }).turnstile.reset();
         setCaptchaToken("");
       }
     } finally {
@@ -112,22 +120,22 @@ export default function LoginPage() {
     }
   };
 
-  // Callback for reCAPTCHA
+  // Callback for Turnstile
   useEffect(() => {
-    (window as { onRecaptchaSuccess?: (token: string) => void }).onRecaptchaSuccess = (token: string) => {
+    (window as { onTurnstileSuccess?: (token: string) => void }).onTurnstileSuccess = (token: string) => {
       setCaptchaToken(token);
       if (errors.captcha) {
         setErrors(prev => ({ ...prev, captcha: "" }));
       }
     };
 
-    (window as { onRecaptchaExpired?: () => void }).onRecaptchaExpired = () => {
+    (window as { onTurnstileError?: () => void }).onTurnstileError = () => {
       setCaptchaToken("");
     };
 
     return () => {
-      delete (window as { onRecaptchaSuccess?: (token: string) => void }).onRecaptchaSuccess;
-      delete (window as { onRecaptchaExpired?: () => void }).onRecaptchaExpired;
+      delete (window as { onTurnstileSuccess?: (token: string) => void }).onTurnstileSuccess;
+      delete (window as { onTurnstileError?: () => void }).onTurnstileError;
     };
   }, [errors.captcha]);
 
@@ -194,17 +202,19 @@ export default function LoginPage() {
               )}
             </div>
 
-            <div>
-              <div 
-                className="g-recaptcha" 
-                data-sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
-                data-callback="onRecaptchaSuccess"
-                data-expired-callback="onRecaptchaExpired"
-              ></div>
-              {errors.captcha && (
-                <p className="mt-1 text-sm text-red-600">{errors.captcha}</p>
-              )}
-            </div>
+            {isCaptchaEnabled && (
+              <div>
+                <div
+                  className="cf-turnstile"
+                  data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+                  data-callback="onTurnstileSuccess"
+                  data-error-callback="onTurnstileError"
+                ></div>
+                {errors.captcha && (
+                  <p className="mt-1 text-sm text-red-600">{errors.captcha}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {errors.general && (

@@ -32,6 +32,7 @@ type NavGroup = {
   label: string;
   Icon: React.FC<{ title?: string }>;
   items: NavItem[];
+  sublabel?: string;
 };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -40,6 +41,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Lead Dashboard",
     Icon: IconClipboard,
     items: [{ href: "/", label: "Leads", Icon: IconClipboard }],
+    sublabel: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
   },
   {
     id: "exam",
@@ -194,9 +196,12 @@ export function Sidebar() {
                 >
                   <GroupIcon title={group.label} />
                 </span>
-                <span className="hidden min-w-0 flex-1 truncate whitespace-nowrap text-left group-hover/sidebar:inline max-md:hidden">
-                  {group.label}
-                </span>
+                <div className="hidden min-w-0 flex-1 flex-col text-left group-hover/sidebar:inline max-md:hidden">
+                  <span className="truncate whitespace-nowrap">{group.label}</span>
+                  {group.sublabel && (
+                    <span className="text-[10px] text-slate-500 font-normal">{group.sublabel}</span>
+                  )}
+                </div>
                 <span className="hidden text-slate-400 group-hover/sidebar:inline max-md:hidden ml-auto">
                   {isExpanded ? (
                     <IconChevronDown className="h-4 w-4" />
