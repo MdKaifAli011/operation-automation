@@ -436,35 +436,33 @@ export function DocumentsStepPanel({
       description: `Mark "${row.title}" as sent in this lead's Step 2 table.`,
       confirmLabel: "Mark sent",
       cancelLabel: "Cancel",
-      onConfirm: () => {
-        void (async () => {
-          setSavingKey(row.key);
-          try {
-            const now = new Date().toISOString();
-            await patchDocsItem(
-              row.key,
-              {
-                key: row.key,
-                title: row.title,
-                countLabel: row.countLabel,
-                sentAt: now,
-              },
-              `Document sent: ${row.title}`,
-            );
-            await refreshLead();
-            pushToast(`${row.title} marked as sent.`);
-          } catch (e) {
-            setMsgDlg({
-              open: true,
-              mode: "alert",
-              variant: "error",
-              title: "Could not mark sent",
-              description: e instanceof Error ? e.message : "Please try again.",
-            });
-          } finally {
-            setSavingKey(null);
-          }
-        })();
+      loading: false,
+      onConfirm: async () => {
+        setMsgDlg((prev) => ({ ...prev, loading: true }));
+        try {
+          const now = new Date().toISOString();
+          await patchDocsItem(
+            row.key,
+            {
+              key: row.key,
+              title: row.title,
+              countLabel: row.countLabel,
+              sentAt: now,
+            },
+            `Document sent: ${row.title}`,
+          );
+          await refreshLead();
+          pushToast(`${row.title} marked as sent.`);
+          closeMsgDlg();
+        } catch (e) {
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "error",
+            title: "Could not mark sent",
+            description: e instanceof Error ? e.message : "Please try again.",
+          });
+        }
       },
     });
   };
