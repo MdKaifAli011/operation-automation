@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["test-lead.testprepkart.com"],
   async rewrites() {
     return [
       {
