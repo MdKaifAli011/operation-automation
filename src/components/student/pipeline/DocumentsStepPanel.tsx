@@ -1276,7 +1276,7 @@ export function DocumentsStepPanel({
         <PipelineMessageDialog
           {...msgDlg}
           onClose={() => setMsgDlg({ open: false })}
-          onConfirm={() => setMsgDlg({ open: false })}
+          onConfirm={msgDlg.mode === "confirm" && msgDlg.onConfirm ? msgDlg.onConfirm : () => setMsgDlg({ open: false })}
         />
       ) : null}
 
