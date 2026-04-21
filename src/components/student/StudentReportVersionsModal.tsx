@@ -141,6 +141,7 @@ export function StudentReportVersionsModal({
       });
       await refreshLead();
       onToast?.("Email sent.");
+      setConfirmOpen(false);
       onClose();
     } catch (e) {
       setSendError(e instanceof Error ? e.message : "Send failed.");

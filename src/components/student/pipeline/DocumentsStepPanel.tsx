@@ -63,6 +63,7 @@ type MessageDialogState =
       confirmLabel: string;
       cancelLabel?: string;
       onConfirm: () => void;
+      loading?: boolean;
     };
 
 function norm(s: string): string {
@@ -114,6 +115,7 @@ export function DocumentsStepPanel({
   const [newUrl, setNewUrl] = useState("");
   const [newFile, setNewFile] = useState<File | null>(null);
   const [msgDlg, setMsgDlg] = useState<MessageDialogState>({ open: false });
+  const closeMsgDlg = () => setMsgDlg({ open: false });
 
   const [brochureOptions, setBrochureOptions] = useState<BrochureOption[]>([]);
   const [brochureLoading, setBrochureLoading] = useState(false);
@@ -478,37 +480,35 @@ export function DocumentsStepPanel({
       description: `Send "${row.title}" to the lead email now.`,
       confirmLabel: row.isSent ? "Send again" : "Send now",
       cancelLabel: "Cancel",
-      onConfirm: () => {
-        void (async () => {
-          setSavingKey(row.key);
-          try {
-            const now = new Date().toISOString();
-            await sendLeadPipelineEmail(lead.id, { templateKey: "enrollment" });
-            await patchDocsItem(
-              "enrollment",
-              {
-                key: "enrollment",
-                title: row.title,
-                countLabel: row.countLabel,
-                sentAt: now,
-              },
-              "Enrollment form link sent from Step 2.",
-              { fees: { enrollmentSent: true, enrollmentSentAt: now } },
-            );
-            await refreshLead();
-            pushToast("Enrollment form sent.");
-          } catch (e) {
-            setMsgDlg({
-              open: true,
-              mode: "alert",
-              variant: "error",
-              title: "Send failed",
-              description: e instanceof Error ? e.message : "Please try again.",
-            });
-          } finally {
-            setSavingKey(null);
-          }
-        })();
+      loading: false,
+      onConfirm: async () => {
+        setMsgDlg((prev) => ({ ...prev, loading: true }));
+        try {
+          const now = new Date().toISOString();
+          await sendLeadPipelineEmail(lead.id, { templateKey: "enrollment" });
+          await patchDocsItem(
+            "enrollment",
+            {
+              key: "enrollment",
+              title: row.title,
+              countLabel: row.countLabel,
+              sentAt: now,
+            },
+            "Enrollment form link sent from Step 2.",
+            { fees: { enrollmentSent: true, enrollmentSentAt: now } },
+          );
+          await refreshLead();
+          pushToast("Enrollment form sent.");
+          closeMsgDlg();
+        } catch (e) {
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "error",
+            title: "Send failed",
+            description: e instanceof Error ? e.message : "Please try again.",
+          });
+        }
       },
     });
   };
@@ -525,38 +525,36 @@ export function DocumentsStepPanel({
         "Email the family to collect complete courier address details for document dispatch.",
       confirmLabel: row.isSent ? "Send again" : "Send now",
       cancelLabel: "Cancel",
-      onConfirm: () => {
-        void (async () => {
-          setSavingKey(row.key);
-          try {
-            const now = new Date().toISOString();
-            await sendLeadPipelineEmail(lead.id, {
-              templateKey: "courier_address",
-            });
-            await patchDocsItem(
-              "courier",
-              {
-                key: "courier",
-                title: row.title,
-                countLabel: row.countLabel,
-                sentAt: now,
-              },
-              "Courier address request emailed from Step 2.",
-            );
-            await refreshLead();
-            pushToast("Courier address request sent.");
-          } catch (e) {
-            setMsgDlg({
-              open: true,
-              mode: "alert",
-              variant: "error",
-              title: "Send failed",
-              description: e instanceof Error ? e.message : "Please try again.",
-            });
-          } finally {
-            setSavingKey(null);
-          }
-        })();
+      loading: false,
+      onConfirm: async () => {
+        setMsgDlg((prev) => ({ ...prev, loading: true }));
+        try {
+          const now = new Date().toISOString();
+          await sendLeadPipelineEmail(lead.id, {
+            templateKey: "courier_address",
+          });
+          await patchDocsItem(
+            "courier",
+            {
+              key: "courier",
+              title: row.title,
+              countLabel: row.countLabel,
+              sentAt: now,
+            },
+            "Courier address request emailed from Step 2.",
+          );
+          await refreshLead();
+          pushToast("Courier address request sent.");
+          closeMsgDlg();
+        } catch (e) {
+          setMsgDlg({
+            open: true,
+            mode: "alert",
+            variant: "error",
+            title: "Send failed",
+            description: e instanceof Error ? e.message : "Please try again.",
+          });
+        }
       },
     });
   };

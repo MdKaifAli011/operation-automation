@@ -424,6 +424,7 @@ export function StudentReportModal({
       });
       await refreshLead();
       onToast?.("Email sent.");
+      setConfirmSendOpen(false);
       onClose();
     } catch (e) {
       setGenError(e instanceof Error ? e.message : "Could not send report.");
