@@ -161,6 +161,16 @@ export function ScheduleStepPanel({
     setSavingEdit(true);
     setSheetError(null);
     try {
+      // Validate that all required fields are filled
+      const invalidRow = weeklyDraft.find(
+        (r) => !r.sessionLabel.trim() || !r.day.trim() || !r.timeIST.trim() || !r.subject.trim() || !r.sessionDuration.trim()
+      );
+      if (invalidRow) {
+        setSheetError("Please fill in all required fields (Session Label, Day, Time, Subject, Duration) for all rows before saving.");
+        setSavingEdit(false);
+        return;
+      }
+
       await patchSchedule(
         {
           weeklySessionStructure: weeklyDraft.map((r, idx) => ({
@@ -188,6 +198,16 @@ export function ScheduleStepPanel({
     setSavingEdit(true);
     setSheetError(null);
     try {
+      // Validate that all required fields are filled
+      const invalidRow = milestoneDraft.find(
+        (r) => !r.targetDateLabel.trim() || !r.milestone.trim() || !r.description.trim()
+      );
+      if (invalidRow) {
+        setSheetError("Please fill in all required fields (Target Date, Milestone, Description) for all rows before saving.");
+        setSavingEdit(false);
+        return;
+      }
+
       await patchSchedule(
         {
           milestones: milestoneDraft.map((r, idx) => ({ ...r, sortOrder: idx + 1 })),
