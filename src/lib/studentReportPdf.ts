@@ -29,10 +29,15 @@ const COLORS = {
 } as const;
 
 const TYPE = {
-  title: 16,
-  section: 11,
-  body: 9,
-  small: 8,
+  title: 18,
+  section: 13,
+  body: 11,
+  small: 10,
+} as const;
+
+const LEADING = {
+  body: 15,
+  small: 14,
 } as const;
 
 // ============== UTILITY FUNCTIONS ==============
@@ -236,7 +241,7 @@ export async function buildStudentReportPdfBytes(opts: {
     items: Array<{ label: string; value: string }>,
   ) => {
     const colW = (w - GRID_GAP) / 2;
-    const rowH = 22;
+    const rowH = 30;
     const rows = Math.ceil(items.length / 2);
     const h = rows * rowH + PAD * 2;
     drawCard(x, yTop, w, h, COLORS.lightBg);
@@ -248,15 +253,19 @@ export async function buildStudentReportPdfBytes(opts: {
       const y0 = yTop - PAD - row * rowH;
       page.drawText(safeText(it.label).toUpperCase(), {
         x: x0,
-        y: y0 - 10,
-        size: 7,
+        y: y0 - 12,
+        size: 9,
         font,
         color: COLORS.muted,
       });
-      page.drawText(safeText(it.value) || "-", {
+      const v = safeText(it.value) || "-";
+      const vMaxW = colW - PAD;
+      const vLines = wrapToWidthLocal(v, fontBold, 11, vMaxW);
+      const vFirst = vLines[0] || "-";
+      page.drawText(vFirst, {
         x: x0,
-        y: y0 - 20,
-        size: 9,
+        y: y0 - 27,
+        size: 11,
         font: fontBold,
         color: COLORS.text,
       });
@@ -295,8 +304,8 @@ export async function buildStudentReportPdfBytes(opts: {
     interpretation: string;
     tone?: "good" | "warn";
   }>) => {
-    const headerH = 18;
-    const rowH = 20;
+    const headerH = 22;
+    const rowH = 26;
     const tableH = headerH + rows.length * rowH;
     ensureSpace(tableH + 10);
 
@@ -317,8 +326,8 @@ export async function buildStudentReportPdfBytes(opts: {
     const head = (t: string, x: number) =>
       page.drawText(t.toUpperCase(), {
         x,
-        y: y - 13,
-        size: 7,
+        y: y - 16,
+        size: 9,
         font: fontBold,
         color: rgb(0.8, 0.84, 0.9),
       });
@@ -343,23 +352,27 @@ export async function buildStudentReportPdfBytes(opts: {
       const tone = r.tone === "warn" ? COLORS.orange : COLORS.green;
       page.drawText(safeText(r.parameter), {
         x: cols.p,
-        y: yRowTop - 14,
-        size: 8,
+        y: yRowTop - 18,
+        size: 10,
         font,
         color: COLORS.text,
       });
-      ratingDots(Math.max(0, Math.min(5, r.rating)), cols.r, yRowTop - 16);
+      ratingDots(Math.max(0, Math.min(5, r.rating)), cols.r, yRowTop - 18);
       page.drawText(safeText(r.scoreLabel), {
         x: cols.s,
-        y: yRowTop - 14,
-        size: 8,
+        y: yRowTop - 18,
+        size: 10,
         font: fontBold,
         color: tone,
       });
-      page.drawText(safeText(r.interpretation), {
-        x: cols.i,
-        y: yRowTop - 14,
-        size: 7.5,
+      // interpretation: wrap to remaining width
+      const interpX = cols.i;
+      const interpMaxW = MARGIN_X + BODY_W - PAD - interpX;
+      const interpLines = wrapToWidthLocal(r.interpretation, font, 9, interpMaxW);
+      page.drawText(interpLines[0] || "", {
+        x: interpX,
+        y: yRowTop - 18,
+        size: 9,
         font,
         color: COLORS.muted,
       });
@@ -416,7 +429,7 @@ export async function buildStudentReportPdfBytes(opts: {
   page.drawText(meta, {
     x: MARGIN_X,
     y,
-    size: 7.5,
+    size: TYPE.small,
     font,
     color: COLORS.muted,
   });
@@ -449,7 +462,7 @@ export async function buildStudentReportPdfBytes(opts: {
   page.drawText("OVERALL ASSESSMENT", {
     x: MARGIN_X + 10,
     y: assessTop - 16,
-    size: 8,
+    size: TYPE.small,
     font: fontBold,
     color: COLORS.white,
   });
@@ -457,18 +470,25 @@ export async function buildStudentReportPdfBytes(opts: {
   page.drawText(level.toUpperCase(), {
     x: MARGIN_X + 10,
     y: assessTop - 30,
-    size: 10,
+    size: 12,
     font: fontBold,
     color: COLORS.white,
   });
   drawCard(MARGIN_X + leftW, assessTop, rightW, 44, COLORS.white, COLORS.border);
-  page.drawText("Promising - small gaps to address", {
-    x: MARGIN_X + leftW + 10,
-    y: assessTop - 24,
-    size: 9,
-    font: fontBold,
-    color: COLORS.text,
-  });
+  {
+    const ySave0 = y;
+    y = assessTop - 22;
+    drawParagraph(
+      "Promising - small gaps to address",
+      MARGIN_X + leftW + 10,
+      rightW - 20,
+      TYPE.body,
+      true,
+      COLORS.text,
+      LEADING.body,
+    );
+    y = ySave0;
+  }
   y = assessTop - 56;
 
   // optional assessment details (Attempted/Correct/Level)
@@ -482,7 +502,7 @@ export async function buildStudentReportPdfBytes(opts: {
     page.drawText(details, {
       x: MARGIN_X,
       y,
-      size: 8,
+      size: TYPE.small,
       font,
       color: COLORS.muted,
     });
@@ -491,40 +511,64 @@ export async function buildStudentReportPdfBytes(opts: {
 
   // ============== CLASS SUMMARY ==============
   drawSectionHeader("Class Summary", COLORS.sectionBlue);
-  ensureSpace(58);
-  const sumTop = y;
-  const sumH = 44;
-  drawCard(MARGIN_X, sumTop, BODY_W, sumH, COLORS.lightBg);
-  const topics = firstRow?.teacherFeedbackNotes || "";
-  page.drawText("TOPICS COVERED", {
-    x: MARGIN_X + 10,
-    y: sumTop - 14,
-    size: 7,
-    font: fontBold,
-    color: COLORS.muted,
-  });
-  page.drawText(safeText(firstRow?.subject) || "-", {
-    x: MARGIN_X + 120,
-    y: sumTop - 14,
-    size: 8,
-    font,
-    color: COLORS.text,
-  });
-  page.drawText("SESSION PACE", {
-    x: MARGIN_X + 10,
-    y: sumTop - 32,
-    size: 7,
-    font: fontBold,
-    color: COLORS.muted,
-  });
-  page.drawText(safeText(topics) || "-", {
-    x: MARGIN_X + 120,
-    y: sumTop - 32,
-    size: 8,
-    font,
-    color: COLORS.text,
-  });
-  y = sumTop - sumH - 14;
+  {
+    const sumTop = y;
+    const labelW = 110;
+    const textMaxW = BODY_W - PAD * 2 - labelW;
+    const topicsCovered = safeText(firstRow?.subject) || "-";
+    const sessionPace = safeText(firstRow?.teacherFeedbackNotes) || "-";
+    const h1 = measureParagraphH(topicsCovered, textMaxW, TYPE.small, false, LEADING.small);
+    const h2 = measureParagraphH(sessionPace, textMaxW, TYPE.small, false, LEADING.small);
+    const rowGap = 6;
+    const contentH = h1 + h2 + rowGap + PAD * 2;
+    const minH = 70;
+    const sumH = Math.max(minH, contentH);
+    ensureSpace(sumH + 14);
+    drawCard(MARGIN_X, sumTop, BODY_W, sumH, COLORS.lightBg);
+
+    // row 1
+    page.drawText("TOPICS COVERED", {
+      x: MARGIN_X + PAD,
+      y: sumTop - PAD - 12,
+      size: TYPE.small,
+      font: fontBold,
+      color: COLORS.muted,
+    });
+    const ySaveRow = y;
+    y = sumTop - PAD - 12;
+    drawParagraph(
+      topicsCovered,
+      MARGIN_X + PAD + labelW,
+      textMaxW,
+      TYPE.small,
+      false,
+      COLORS.text,
+      LEADING.small,
+    );
+    const yAfter1 = y;
+    y = sumTop - PAD - 12 - h1 - rowGap;
+
+    // row 2
+    page.drawText("SESSION PACE", {
+      x: MARGIN_X + PAD,
+      y: sumTop - PAD - 12 - h1 - rowGap,
+      size: TYPE.small,
+      font: fontBold,
+      color: COLORS.muted,
+    });
+    drawParagraph(
+      sessionPace,
+      MARGIN_X + PAD + labelW,
+      textMaxW,
+      TYPE.small,
+      false,
+      COLORS.text,
+      LEADING.small,
+    );
+    const yAfter2 = y;
+    y = ySaveRow;
+    y = Math.min(yAfter1, yAfter2) - 12;
+  }
 
   // ============== PERFORMANCE SCORES (TABLE) ==============
   drawSectionHeader("Performance Scores", COLORS.sectionBlue);
@@ -578,17 +622,31 @@ export async function buildStudentReportPdfBytes(opts: {
   page.drawText("STRENGTHS", {
     x: MARGIN_X + 10,
     y: leftTop - 13,
-    size: 9,
+    size: TYPE.body,
     font: fontBold,
     color: COLORS.white,
   });
   const strengthsText = safeText(firstRow?.teacherFeedbackStrengths) || "-";
-  const strengthsH = measureParagraphH(strengthsText, colW - PAD * 2, 8.5, false, 11);
-  const blockH = Math.max(72, strengthsH + 26);
+  const strengthsH = measureParagraphH(
+    strengthsText,
+    colW - PAD * 2,
+    TYPE.small,
+    false,
+    LEADING.small,
+  );
+  const blockH = Math.max(90, strengthsH + 26);
   drawCard(MARGIN_X, leftTop - 18, colW, blockH, COLORS.white);
   const ySave = y;
   y = leftTop - 34;
-  drawParagraph(strengthsText, MARGIN_X + PAD, colW - PAD * 2, 8.5, false, COLORS.text, 11);
+  drawParagraph(
+    strengthsText,
+    MARGIN_X + PAD,
+    colW - PAD * 2,
+    TYPE.small,
+    false,
+    COLORS.text,
+    LEADING.small,
+  );
   const yAfterStrength = y;
   y = ySave;
 
@@ -604,18 +662,32 @@ export async function buildStudentReportPdfBytes(opts: {
   page.drawText("AREAS TO IMPROVE", {
     x: xR + 10,
     y: rightTop - 13,
-    size: 9,
+    size: TYPE.body,
     font: fontBold,
     color: COLORS.white,
   });
   const improveText = safeText(firstRow?.teacherFeedbackImprovements) || "-";
-  const improveH = measureParagraphH(improveText, colW - PAD * 2, 8.5, false, 11);
-  const blockHR = Math.max(72, improveH + 26);
+  const improveH = measureParagraphH(
+    improveText,
+    colW - PAD * 2,
+    TYPE.small,
+    false,
+    LEADING.small,
+  );
+  const blockHR = Math.max(90, improveH + 26);
   const blockMaxH = Math.max(blockH, blockHR);
   drawCard(xR, rightTop - 18, colW, blockMaxH, COLORS.white);
   const ySave2 = y;
   y = rightTop - 34;
-  drawParagraph(improveText, xR + PAD, colW - PAD * 2, 8.5, false, COLORS.text, 11);
+  drawParagraph(
+    improveText,
+    xR + PAD,
+    colW - PAD * 2,
+    TYPE.small,
+    false,
+    COLORS.text,
+    LEADING.small,
+  );
   const yAfterImprove = y;
   y = ySave2;
 
@@ -624,7 +696,7 @@ export async function buildStudentReportPdfBytes(opts: {
   // ============== PARENT STATUS + HOMEWORK (SIDE BY SIDE) ==============
   ensureSpace(90);
   const phTop = y;
-  const phH = 72;
+  // dynamic heights based on text + list
   const parentX = MARGIN_X;
   const homeX = MARGIN_X + colW + GRID_GAP;
   page.drawRectangle({ x: parentX, y: phTop - 18, width: colW, height: 18, color: COLORS.orange });
@@ -635,11 +707,22 @@ export async function buildStudentReportPdfBytes(opts: {
     font: fontBold,
     color: COLORS.white,
   });
-  drawCard(parentX, phTop - 18, colW, phH, COLORS.white);
   const parentText = "Partly - parent joined for the last 15 minutes";
+  const parentBodyH = measureParagraphH(parentText, colW - PAD * 2, TYPE.small, false, LEADING.small);
+  const hwTextRaw = safeText(firstRow?.teacherFeedbackRecommendedNext) || "-";
+  const hwLines = hwTextRaw ? hwTextRaw.split(/\s*\n\s*/).filter(Boolean) : [];
+  const maxItems = 3;
+  const hwForMeasure = (hwLines.length ? hwLines : ["-"]).slice(0, maxItems);
+  const hwBodyH = hwForMeasure.reduce((acc, t) => {
+    const h = measureParagraphH(t, colW - PAD * 2 - 14, TYPE.small, false, LEADING.small) + 2;
+    return acc + h;
+  }, 0);
+  const phH = Math.max(98, 26 + Math.max(parentBodyH, hwBodyH));
+
+  drawCard(parentX, phTop - 18, colW, phH, COLORS.white);
   const ySave3 = y;
   y = phTop - 34;
-  drawParagraph(parentText, parentX + PAD, colW - PAD * 2, 8.5, false, COLORS.text, 11);
+  drawParagraph(parentText, parentX + PAD, colW - PAD * 2, TYPE.small, false, COLORS.text, LEADING.small);
   const parentAfter = y;
   y = ySave3;
 
@@ -652,23 +735,26 @@ export async function buildStudentReportPdfBytes(opts: {
     color: COLORS.white,
   });
   drawCard(homeX, phTop - 18, colW, phH, COLORS.white);
-  const hwTextRaw = safeText(firstRow?.teacherFeedbackRecommendedNext) || "-";
-  const hwLines = hwTextRaw
-    ? hwTextRaw.split(/\s*\n\s*/).filter(Boolean)
-    : [];
   const ySave4 = y;
   y = phTop - 34;
-  const maxItems = 3;
-  for (let i = 0; i < Math.min(maxItems, hwLines.length || 1); i++) {
-    const t = hwLines.length ? hwLines[i]! : "-";
+  for (let i = 0; i < hwForMeasure.length; i++) {
+    const t = hwForMeasure[i] || "-";
     page.drawText(`${i + 1}.`, {
       x: homeX + PAD,
       y,
-      size: 8.5,
+      size: 9,
       font: fontBold,
       color: COLORS.text,
     });
-    drawParagraph(t, homeX + PAD + 14, colW - PAD * 2 - 14, 8.5, false, COLORS.text, 11);
+    drawParagraph(
+      t,
+      homeX + PAD + 14,
+      colW - PAD * 2 - 14,
+      TYPE.small,
+      false,
+      COLORS.text,
+      LEADING.small,
+    );
     y -= 2;
   }
   const hwAfter = y;
@@ -677,9 +763,13 @@ export async function buildStudentReportPdfBytes(opts: {
 
   // ============== OFFICE ACTION PLAN ==============
   drawSectionHeader("Office Action Plan", COLORS.sectionBlue);
-  ensureSpace(70);
   const officeTop = y;
-  drawCard(MARGIN_X, officeTop, BODY_W, 54, COLORS.white);
+  const officeBody =
+    "Call within 24 hours. Warm, encouraging tone - student is genuinely capable but parent needs more conviction.";
+  const officeBodyH = measureParagraphH(officeBody, BODY_W - PAD * 2, TYPE.small, false, LEADING.small);
+  const officeH = Math.max(74, 26 + officeBodyH + PAD);
+  ensureSpace(officeH + 10);
+  drawCard(MARGIN_X, officeTop, BODY_W, officeH, COLORS.white);
   page.drawRectangle({
     x: MARGIN_X,
     y: officeTop - 18,
@@ -692,27 +782,27 @@ export async function buildStudentReportPdfBytes(opts: {
   page.drawText("FOLLOW UP - Call within 24 hrs, warm encouraging tone", {
     x: MARGIN_X + 10,
     y: officeTop - 13,
-    size: 8.5,
+    size: TYPE.small,
     font: fontBold,
     color: COLORS.orange,
   });
-  const officeBody =
-    "Call within 24 hours. Warm, encouraging tone - student is genuinely capable but parent needs more conviction.";
   const ySave5 = y;
   y = officeTop - 34;
-  drawParagraph(officeBody, MARGIN_X + 10, BODY_W - 20, 8.2, false, COLORS.text, 11);
+  drawParagraph(officeBody, MARGIN_X + 10, BODY_W - 20, TYPE.small, false, COLORS.text, LEADING.small);
   y = Math.min(ySave5, y) - 10;
 
   // ============== INTERNAL NOTE ==============
   if (safeText(opts.additionalNotes)) {
     drawSectionHeader("Internal Note - Not Shared With Family", COLORS.purple);
-    ensureSpace(60);
     const noteTop = y;
-    drawCard(MARGIN_X, noteTop, BODY_W, 44, COLORS.white, COLORS.purple);
     const noteText = safeText(opts.additionalNotes);
+    const noteHText = measureParagraphH(noteText, BODY_W - PAD * 2, TYPE.small, false, LEADING.small);
+    const noteH = Math.max(70, PAD + noteHText + PAD);
+    ensureSpace(noteH + 10);
+    drawCard(MARGIN_X, noteTop, BODY_W, noteH, COLORS.white, COLORS.purple);
     const ySave6 = y;
-    y = noteTop - 16;
-    drawParagraph(noteText, MARGIN_X + 10, BODY_W - 20, 8, false, COLORS.purple, 10);
+    y = noteTop - PAD - 2;
+    drawParagraph(noteText, MARGIN_X + PAD, BODY_W - PAD * 2, TYPE.small, false, COLORS.purple, LEADING.small);
     y = Math.min(ySave6, y) - 8;
   }
 
@@ -723,28 +813,28 @@ export async function buildStudentReportPdfBytes(opts: {
   page.drawText("Generated by Institute CRM", {
     x: MARGIN_X,
     y: footerY,
-    size: 7.5,
+    size: TYPE.small,
     font,
     color: COLORS.muted,
   });
   page.drawText(`Report ID: ${reportId}`, {
     x: MARGIN_X,
     y: footerY - 10,
-    size: 7.5,
+    size: TYPE.small,
     font,
     color: COLORS.muted,
   });
   page.drawText(`Teacher: ${safeText(firstRow?.teacher) || "-"}`, {
     x: MARGIN_X + BODY_W - 170,
     y: footerY,
-    size: 7.5,
+    size: TYPE.small,
     font,
     color: COLORS.muted,
   });
   page.drawText(`Date: ${fmtDate(opts.generatedAtIso)}`, {
     x: MARGIN_X + BODY_W - 170,
     y: footerY - 10,
-    size: 7.5,
+    size: TYPE.small,
     font,
     color: COLORS.muted,
   });

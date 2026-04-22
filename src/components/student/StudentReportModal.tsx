@@ -107,6 +107,8 @@ export function StudentReportModal({
   const [manualLevel, setManualLevel] = useState<string>(
     STUDENT_LEVEL_OPTIONS[1] ?? "Average",
   );
+  const [feedbackIncludeAssessment, setFeedbackIncludeAssessment] =
+    useState<boolean>(false);
   const [feedbackAttempted, setFeedbackAttempted] = useState<string>("20");
   const [feedbackCorrect, setFeedbackCorrect] = useState<string>("10");
   const [feedbackLevel, setFeedbackLevel] = useState<string>(
@@ -259,9 +261,13 @@ export function StudentReportModal({
               additionalNotes: "",
               recommendations: "",
               meetRowId,
-              manualQuestionsAttempted: feedbackAttempted,
-              manualCorrectAnswers: feedbackCorrect,
-              manualStudentLevel: feedbackLevel,
+              manualQuestionsAttempted: feedbackIncludeAssessment
+                ? feedbackAttempted
+                : "",
+              manualCorrectAnswers: feedbackIncludeAssessment
+                ? feedbackCorrect
+                : "",
+              manualStudentLevel: feedbackIncludeAssessment ? feedbackLevel : "",
             }),
           },
         );
@@ -647,53 +653,72 @@ export function StudentReportModal({
                   ) : null}
 
                   <section className="mb-4 border border-slate-200 bg-slate-50/60 px-3 py-2.5">
-                    <p className="mb-2 text-[11px] font-semibold text-slate-700">
-                      Add assessment details (optional):
-                    </p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <label className="text-[12px] font-medium text-slate-700">
-                        Attempted
-                        <select
-                          className={cn(SX.select, "mt-1 w-full")}
-                          value={feedbackAttempted}
-                          onChange={(e) => setFeedbackAttempted(e.target.value)}
-                        >
-                          {ATTEMPTED_OPTIONS.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="text-[12px] font-medium text-slate-700">
-                        Correct
-                        <select
-                          className={cn(SX.select, "mt-1 w-full")}
-                          value={feedbackCorrect}
-                          onChange={(e) => setFeedbackCorrect(e.target.value)}
-                        >
-                          {correctOptions.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="text-[12px] font-medium text-slate-700">
-                        Level
-                        <select
-                          className={cn(SX.select, "mt-1 w-full")}
-                          value={feedbackLevel}
-                          onChange={(e) => setFeedbackLevel(e.target.value)}
-                        >
-                          {STUDENT_LEVEL_OPTIONS.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-semibold text-slate-700">
+                        Add assessment details (optional)
+                      </p>
+                      <button
+                        type="button"
+                        className={cn(
+                          "rounded-none border px-2 py-1 text-[11px] font-semibold",
+                          feedbackIncludeAssessment
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-slate-200 bg-white text-slate-700",
+                        )}
+                        onClick={() =>
+                          setFeedbackIncludeAssessment((prev) => !prev)
+                        }
+                      >
+                        {feedbackIncludeAssessment ? "Enabled" : "Enable"}
+                      </button>
                     </div>
+
+                    {feedbackIncludeAssessment ? (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <label className="text-[12px] font-medium text-slate-700">
+                          Attempted
+                          <select
+                            className={cn(SX.select, "mt-1 w-full")}
+                            value={feedbackAttempted}
+                            onChange={(e) => setFeedbackAttempted(e.target.value)}
+                          >
+                            {ATTEMPTED_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-[12px] font-medium text-slate-700">
+                          Correct
+                          <select
+                            className={cn(SX.select, "mt-1 w-full")}
+                            value={feedbackCorrect}
+                            onChange={(e) => setFeedbackCorrect(e.target.value)}
+                          >
+                            {correctOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-[12px] font-medium text-slate-700">
+                          Level
+                          <select
+                            className={cn(SX.select, "mt-1 w-full")}
+                            value={feedbackLevel}
+                            onChange={(e) => setFeedbackLevel(e.target.value)}
+                          >
+                            {STUDENT_LEVEL_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    ) : null}
                   </section>
 
                   <div className="mb-4">
