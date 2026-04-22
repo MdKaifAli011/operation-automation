@@ -292,7 +292,7 @@ export async function sendDemoInviteMail(opts: {
     ? await resolveTeacherEmailFromFacultyName(teacherName)
     : "";
   if (teacherEmail) {
-    const facultySubject = `Faculty demo assigned - ${vars.studentName || "Student"} - ${vars.subject || "Demo"}`;
+    const facultySubject = `Demo Session Confirmation For ${vars.studentName || "Student"}`;
     const facultyHtml = buildFacultyDemoInviteHtml(vars);
     await sendMail({
       to: teacherEmail,

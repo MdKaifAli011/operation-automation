@@ -76,7 +76,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     name: "Demo invite",
     description: "Share link for a scheduled trial class.",
     sortOrder: 10,
-    subject: "Session confirmation - {{studentName}}",
+    subject: "Analysis Session Scheduled For {{studentName}} for {{targetExams}}",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Session Confirmation",
       badge: "Session Confirmed",
@@ -118,7 +118,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     description:
       "Automatic family email when a trial is scheduled, completed, or canceled — premium layout; link only when scheduled.",
     sortOrder: 15,
-    subject: "{{demoStatusEmailSubject}}",
+    subject: "{{studentName}} Analysis Session Reporte For {{targetExams}} - TestprepKart",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Session Analysis Report",
       badge: "Report Ready",
@@ -134,7 +134,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     name: "Brochure & documents",
     description: "Step 2 · catalog brochures and optional progress report PDF.",
     sortOrder: 20,
-    subject: "Course brochure - {{studentName}}",
+    subject: "{{targetExams}} Course Brochure ( {{studentName}} )",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Course Information",
       badge: "Course Brochure",
@@ -165,7 +165,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     description:
       "Request shipping details so documents can be delivered to the student.",
     sortOrder: 25,
-    subject: "Courier address required - {{studentName}}",
+    subject: "Courier Address Details For {{targetExams}} Study Material",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Shipping Details",
       badge: "Address Required",
@@ -204,7 +204,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     name: "Bank details only",
     description: "Share selected bank details without fee summary.",
     sortOrder: 28,
-    subject: "Bank details - {{studentName}}",
+    subject: "Bank & Account Details For {{targetExams}} Course - TestprepKart",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Payment Information",
       badge: "Payment Details",
@@ -239,7 +239,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     name: "Fee structure",
     description: "Fee, installments, and bank details for payment.",
     sortOrder: 30,
-    subject: "Course fee - {{studentName}}",
+    subject: "Course Fee Details For {{targetExams}} For {{studentName}}",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Fee Structure",
       badge: "Fee Details",
@@ -274,7 +274,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     name: "Enrollment form",
     description: "Link to complete enrollment.",
     sortOrder: 40,
-    subject: "Enrollment form - {{studentName}}",
+    subject: "Enrollment Form Link For {{targetExams}} Course",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Enrolment Form",
       badge: "Action Required",
