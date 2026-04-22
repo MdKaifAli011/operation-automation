@@ -280,37 +280,41 @@ export function LeadManagementPage() {
   const ongoingInterestedLeads = useMemo(
     () => {
       const interestedLeads = ongoingSheetLeads.filter((l) => l.rowTone === "interested");
-      
+
       // Custom sorting with priority:
-      // 1. Recently moved students (top)
-      // 2. Students yet to be scheduled for demo (middle)
-      // 3. Students in order of status/pipeline steps (bottom)
+      // 1. Recently moved to Ongoing/Interested (top) - based on date when status changed
+      // 2. Students yet to be scheduled for demo (middle) - no demo with status "Scheduled"
+      // 3. Students in order of pipeline steps (bottom) - 4 steps total
       return interestedLeads.sort((a, b) => {
-        // Priority 1: Recently moved students (check updatedAt)
         const aUpdated = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
         const bUpdated = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
         const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-        
+
+        // Priority 1: Recently moved students (within last 24 hours)
         const aRecentlyMoved = aUpdated > oneDayAgo;
         const bRecentlyMoved = bUpdated > oneDayAgo;
-        
+
         if (aRecentlyMoved && !bRecentlyMoved) return -1;
         if (!aRecentlyMoved && bRecentlyMoved) return 1;
-        if (aRecentlyMoved && bRecentlyMoved) return bUpdated - aUpdated; // Most recent first
-        
+        if (aRecentlyMoved && bRecentlyMoved) return bUpdated - aUpdated;
+
         // Priority 2: Students yet to be scheduled for demo
-        const aHasDemo = (a.pipelineMeta as any)?.demo?.rows?.length > 0;
-        const bHasDemo = (b.pipelineMeta as any)?.demo?.rows?.length > 0;
-        
-        if (!aHasDemo && bHasDemo) return -1; // a has no demo, goes first
-        if (aHasDemo && !bHasDemo) return 1;  // b has no demo, goes first
-        
-        // Priority 3: Students in order of status (pipeline steps)
-        // Lower pipelineSteps = less progress = higher priority
+        // Check if there's any demo with status "Scheduled"
+        const aDemoRows = (a.pipelineMeta as any)?.demo?.rows ?? [];
+        const bDemoRows = (b.pipelineMeta as any)?.demo?.rows ?? [];
+
+        const aHasScheduledDemo = aDemoRows.some((r: any) => r.status === "Scheduled");
+        const bHasScheduledDemo = bDemoRows.some((r: any) => r.status === "Scheduled");
+
+        if (!aHasScheduledDemo && bHasScheduledDemo) return -1;
+        if (aHasScheduledDemo && !bHasScheduledDemo) return 1;
+
+        // Priority 3: Students in order of pipeline steps (0-4)
+        // Lower steps = less progress = higher priority
         if (a.pipelineSteps !== b.pipelineSteps) {
           return a.pipelineSteps - b.pipelineSteps;
         }
-        
+
         // Final tie-breaker: most recently updated
         return bUpdated - aUpdated;
       });
