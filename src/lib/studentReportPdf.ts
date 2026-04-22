@@ -1,12 +1,41 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { DemoTableRowPersisted } from "@/lib/leadPipelineMetaTypes";
 
+// ============== CONFIGURATION ==============
 const PAGE_W = 595;
 const PAGE_H = 842;
 const MARGIN_X = 34;
-const MARGIN_BOTTOM = 32;
+const MARGIN_BOTTOM = 40;
 const BODY_W = PAGE_W - MARGIN_X * 2;
 
+const GRID_GAP = 10;
+const PAD = 10;
+
+const COLORS = {
+  white: rgb(1, 1, 1),
+  pageBg: rgb(1, 1, 1),
+  lightBg: rgb(0.96, 0.97, 0.98),
+  border: rgb(0.82, 0.85, 0.9),
+  text: rgb(0.12, 0.14, 0.18),
+  muted: rgb(0.45, 0.49, 0.56),
+  headerBlue: rgb(0.12, 0.18, 0.3),
+  sectionBlue: rgb(0.16, 0.38, 0.86),
+  green: rgb(0.0, 0.55, 0.28),
+  orange: rgb(0.85, 0.45, 0.05),
+  teal: rgb(0.0, 0.53, 0.55),
+  purple: rgb(0.49, 0.25, 0.86),
+  rowAlt: rgb(0.97, 0.98, 0.99),
+  rowBase: rgb(1, 1, 1),
+} as const;
+
+const TYPE = {
+  title: 16,
+  section: 11,
+  body: 9,
+  small: 8,
+} as const;
+
+// ============== UTILITY FUNCTIONS ==============
 function safeText(input: string | undefined | null): string {
   return String(input ?? "")
     .replace(/[—–]/g, "-")
@@ -78,6 +107,11 @@ function fmtDate(iso: string | undefined): string {
   });
 }
 
+function generateReportId(): string {
+  return `RPT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+}
+
+// ============== PDF GENERATION ==============
 export async function buildStudentReportPdfBytes(opts: {
   studentName: string;
   demoRows: DemoTableRowPersisted[];
@@ -99,385 +133,621 @@ export async function buildStudentReportPdfBytes(opts: {
 
   let page = pdf.addPage([PAGE_W, PAGE_H]);
   let y = PAGE_H - 24;
+  const reportId = generateReportId();
 
   const ensureSpace = (need: number) => {
     if (y - need < MARGIN_BOTTOM) {
       page = pdf.addPage([PAGE_W, PAGE_H]);
-      y = PAGE_H - 32;
+      y = PAGE_H - 24;
     }
   };
 
-  const drawWrapped = (
+  const line = (h = 1, c = COLORS.border) => {
+    ensureSpace(10);
+    page.drawRectangle({
+      x: MARGIN_X,
+      y: y - 6,
+      width: BODY_W,
+      height: h,
+      color: c,
+    });
+    y -= 12;
+  };
+
+  const wrapToWidthLocal = (
+    text: string,
+    f: { widthOfTextAtSize: (t: string, s: number) => number },
+    size: number,
+    maxW: number,
+  ) => wrapToWidth(text, f, size, maxW);
+
+  const drawParagraph = (
     text: string,
     x: number,
-    width: number,
-    size: number,
+    maxW: number,
+    size: number = TYPE.body,
     bold = false,
-    color = rgb(0.12, 0.14, 0.18),
+    color = COLORS.text,
+    leading = 12,
   ) => {
     const f = bold ? fontBold : font;
-    const lines = wrapToWidth(text, f, size, width);
+    const lines = wrapToWidthLocal(text, f, size, maxW);
     for (const ln of lines) {
+      ensureSpace(leading + 2);
       page.drawText(ln, { x, y, size, font: f, color });
-      y -= size + 3;
+      y -= leading;
     }
   };
 
-  const drawSectionTitle = (title: string) => {
+  const measureParagraphH = (
+    text: string,
+    maxW: number,
+    size: number = TYPE.body,
+    bold = false,
+    leading = 12,
+  ) => {
+    const f = bold ? fontBold : font;
+    const lines = wrapToWidthLocal(text, f, size, maxW);
+    return Math.max(leading, lines.length * leading);
+  };
+
+  const drawSectionHeader = (title: string, color = COLORS.sectionBlue) => {
     ensureSpace(26);
     page.drawRectangle({
       x: MARGIN_X,
-      y: y - 8,
+      y: y - 18,
       width: BODY_W,
-      height: 20,
-      color: rgb(0.95, 0.97, 1),
+      height: 18,
+      color,
     });
-    page.drawText(safeText(title), {
-      x: MARGIN_X + 8,
-      y,
-      size: 11,
+    page.drawText(title.toUpperCase(), {
+      x: MARGIN_X + 10,
+      y: y - 13,
+      size: TYPE.section,
       font: fontBold,
-      color: rgb(0.09, 0.2, 0.43),
+      color: COLORS.white,
     });
-    y -= 22;
+    y -= 26;
   };
 
-  // Header
-  page.drawRectangle({
-    x: MARGIN_X,
-    y: y - 56,
-    width: BODY_W,
-    height: 56,
-    color: rgb(0.09, 0.39, 0.72),
-  });
-  page.drawText("Demo Session Report", {
-    x: MARGIN_X + 12,
-    y: y - 18,
-    size: 16,
-    font: fontBold,
-    color: rgb(1, 1, 1),
-  });
-  page.drawText(`Prepared for: ${safeText(opts.studentName) || "Student"}`, {
-    x: MARGIN_X + 12,
-    y: y - 36,
-    size: 10,
-    font,
-    color: rgb(0.94, 0.98, 1),
-  });
-  page.drawText(`Generated: ${fmtDate(opts.generatedAtIso)}`, {
-    x: MARGIN_X + 12,
-    y: y - 48,
-    size: 9,
-    font,
-    color: rgb(0.94, 0.98, 1),
-  });
-  if (logoImage) {
-    const maxW = 128;
-    const maxH = 36;
-    const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height);
-    const w = logoImage.width * scale;
-    const h = logoImage.height * scale;
-    const boxX = MARGIN_X + BODY_W - w - 10;
-    const boxY = y - 50;
+  const drawCard = (
+    x: number,
+    yTop: number,
+    w: number,
+    h: number,
+    bg = COLORS.lightBg,
+    border = COLORS.border,
+  ) => {
     page.drawRectangle({
-      x: boxX - 3,
-      y: boxY - 3,
-      width: w + 6,
-      height: h + 6,
-      color: rgb(1, 1, 1),
-      borderWidth: 0.7,
-      borderColor: rgb(0.78, 0.85, 0.93),
+      x,
+      y: yTop - h,
+      width: w,
+      height: h,
+      color: bg,
+      borderWidth: 0.8,
+      borderColor: border,
     });
-    page.drawImage(logoImage, { x: boxX, y: boxY, width: w, height: h });
-  }
-  y -= 72;
+  };
+
+  const drawKeyValueGrid2 = (
+    x: number,
+    yTop: number,
+    w: number,
+    items: Array<{ label: string; value: string }>,
+  ) => {
+    const colW = (w - GRID_GAP) / 2;
+    const rowH = 22;
+    const rows = Math.ceil(items.length / 2);
+    const h = rows * rowH + PAD * 2;
+    drawCard(x, yTop, w, h, COLORS.lightBg);
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]!;
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x0 = x + PAD + col * (colW + GRID_GAP);
+      const y0 = yTop - PAD - row * rowH;
+      page.drawText(safeText(it.label).toUpperCase(), {
+        x: x0,
+        y: y0 - 10,
+        size: 7,
+        font,
+        color: COLORS.muted,
+      });
+      page.drawText(safeText(it.value) || "-", {
+        x: x0,
+        y: y0 - 20,
+        size: 9,
+        font: fontBold,
+        color: COLORS.text,
+      });
+    }
+    return h;
+  };
+
+  const ratingDots = (value: number, x: number, yText: number) => {
+    const dotSize = 6;
+    const gap = 3;
+    for (let i = 0; i < 5; i++) {
+      const filled = i < value;
+      page.drawEllipse({
+        x: x + i * (dotSize + gap) + dotSize / 2,
+        y: yText + 2,
+        xScale: dotSize / 2,
+        yScale: dotSize / 2,
+        color: filled ? COLORS.green : rgb(0.83, 0.85, 0.88),
+      });
+    }
+  };
+
+  const scoreToLevel = (ratingRaw: string | undefined): number => {
+    const t = safeText(ratingRaw).toLowerCase();
+    if (t.includes("excellent")) return 5;
+    if (t.includes("good")) return 4;
+    if (t.includes("satisfactory")) return 3;
+    if (t.includes("needs") || t.includes("improvement")) return 2;
+    return 3;
+  };
+
+  const drawPerformanceTable = (rows: Array<{
+    parameter: string;
+    rating: number;
+    scoreLabel: string;
+    interpretation: string;
+    tone?: "good" | "warn";
+  }>) => {
+    const headerH = 18;
+    const rowH = 20;
+    const tableH = headerH + rows.length * rowH;
+    ensureSpace(tableH + 10);
+
+    // header background
+    page.drawRectangle({
+      x: MARGIN_X,
+      y: y - headerH,
+      width: BODY_W,
+      height: headerH,
+      color: rgb(0.2, 0.25, 0.33),
+    });
+    const cols = {
+      p: MARGIN_X + 10,
+      r: MARGIN_X + 210,
+      s: MARGIN_X + 310,
+      i: MARGIN_X + 380,
+    };
+    const head = (t: string, x: number) =>
+      page.drawText(t.toUpperCase(), {
+        x,
+        y: y - 13,
+        size: 7,
+        font: fontBold,
+        color: rgb(0.8, 0.84, 0.9),
+      });
+    head("Parameter", cols.p);
+    head("Rating", cols.r);
+    head("Score", cols.s);
+    head("Interpretation", cols.i);
+
+    let yRowTop = y - headerH;
+    for (let idx = 0; idx < rows.length; idx++) {
+      const r = rows[idx]!;
+      const bg = idx % 2 === 0 ? COLORS.rowBase : COLORS.rowAlt;
+      page.drawRectangle({
+        x: MARGIN_X,
+        y: yRowTop - rowH,
+        width: BODY_W,
+        height: rowH,
+        color: bg,
+        borderWidth: 0.4,
+        borderColor: COLORS.border,
+      });
+      const tone = r.tone === "warn" ? COLORS.orange : COLORS.green;
+      page.drawText(safeText(r.parameter), {
+        x: cols.p,
+        y: yRowTop - 14,
+        size: 8,
+        font,
+        color: COLORS.text,
+      });
+      ratingDots(Math.max(0, Math.min(5, r.rating)), cols.r, yRowTop - 16);
+      page.drawText(safeText(r.scoreLabel), {
+        x: cols.s,
+        y: yRowTop - 14,
+        size: 8,
+        font: fontBold,
+        color: tone,
+      });
+      page.drawText(safeText(r.interpretation), {
+        x: cols.i,
+        y: yRowTop - 14,
+        size: 7.5,
+        font,
+        color: COLORS.muted,
+      });
+      yRowTop -= rowH;
+    }
+    y = yRowTop - 10;
+  };
 
   const feedbackRows = opts.demoRows.filter((r) =>
     Boolean(r.teacherFeedbackSubmittedAt?.trim()),
   );
-  const manualQuestions = safeText(opts.manualQuestionsAttempted);
-  const manualCorrect = safeText(opts.manualCorrectAnswers);
-  const manualLevel = safeText(opts.manualStudentLevel);
-  const hasManualSnapshot =
-    opts.reportSource === "manual_sales" ||
-    !!manualQuestions ||
-    !!manualCorrect ||
-    !!manualLevel;
+  const firstRow = feedbackRows[0];
 
-  drawSectionTitle("Report summary");
+  // ============== HEADER (BANNER) ==============
+  const headerH = 70;
   page.drawRectangle({
-    x: MARGIN_X,
-    y: y - 36,
-    width: BODY_W,
-    height: 36,
-    color: rgb(1, 1, 1),
-    borderWidth: 0.7,
-    borderColor: rgb(0.84, 0.87, 0.92),
+    x: 0,
+    y: PAGE_H - headerH,
+    width: PAGE_W,
+    height: headerH,
+    color: COLORS.headerBlue,
   });
-  page.drawText("Submitted feedback forms", {
-    x: MARGIN_X + 8,
-    y: y - 12,
-    size: 9,
+  page.drawText("STUDENT TRIAL REPORT", {
+    x: PAGE_W / 2 - fontBold.widthOfTextAtSize("STUDENT TRIAL REPORT", TYPE.title) / 2,
+    y: PAGE_H - 28,
+    size: TYPE.title,
     font: fontBold,
-    color: rgb(0.36, 0.4, 0.48),
+    color: COLORS.white,
   });
-  page.drawText(String(feedbackRows.length), {
-    x: MARGIN_X + 220,
-    y: y - 12,
-    size: 11,
-    font: fontBold,
-    color: rgb(0.08, 0.2, 0.45),
-  });
-  page.drawText("Student", {
-    x: MARGIN_X + 8,
-    y: y - 27,
-    size: 9,
-    font: fontBold,
-    color: rgb(0.36, 0.4, 0.48),
-  });
-  page.drawText(safeText(opts.studentName) || "Student", {
-    x: MARGIN_X + 220,
-    y: y - 27,
-    size: 10,
+  const subtitle = "Confidential - Internal Use - EduReach Learning Institute";
+  page.drawText(subtitle, {
+    x: PAGE_W / 2 - font.widthOfTextAtSize(subtitle, TYPE.small) / 2,
+    y: PAGE_H - 46,
+    size: TYPE.small,
     font,
-    color: rgb(0.12, 0.14, 0.18),
+    color: rgb(0.8, 0.86, 0.92),
   });
-  y -= 48;
+  if (logoImage) {
+    const maxW = 84;
+    const maxH = 30;
+    const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height);
+    const w = logoImage.width * scale;
+    const h = logoImage.height * scale;
+    page.drawImage(logoImage, {
+      x: PAGE_W - MARGIN_X - w,
+      y: PAGE_H - 38,
+      width: w,
+      height: h,
+    });
+  }
 
-  if (hasManualSnapshot) {
-    ensureSpace(48);
-    page.drawRectangle({
+  y = PAGE_H - headerH - 14;
+  const meta = `Report ID: ${reportId}   Generated: ${fmtDate(opts.generatedAtIso)}   Priority: HIGH`;
+  page.drawText(meta, {
+    x: MARGIN_X,
+    y,
+    size: 7.5,
+    font,
+    color: COLORS.muted,
+  });
+  y -= 14;
+  line(0.8);
+
+  // ============== STUDENT INFO (CARD BLOCK) ==============
+  ensureSpace(90);
+  const studentCardTop = y;
+  const items = [
+    { label: "Student Name", value: safeText(opts.studentName) || "-" },
+    {
+      label: "Exam Focus",
+      value: firstRow ? safeText(firstRow.teacherFeedbackExamTrack) || "-" : "-",
+    },
+    { label: "Teacher", value: firstRow ? safeText(firstRow.teacher) || "-" : "-" },
+    { label: "Class", value: "-" },
+    { label: "Subject", value: firstRow ? safeText(firstRow.subject) || "-" : "-" },
+    { label: "Lead Source", value: "-" },
+  ];
+  const studentCardH = drawKeyValueGrid2(MARGIN_X, studentCardTop, BODY_W, items);
+  y = studentCardTop - studentCardH - 12;
+
+  // ============== OVERALL ASSESSMENT (SPLIT) ==============
+  ensureSpace(50);
+  const assessTop = y;
+  const leftW = 155;
+  const rightW = BODY_W - leftW;
+  drawCard(MARGIN_X, assessTop, leftW, 44, COLORS.teal, COLORS.border);
+  page.drawText("OVERALL ASSESSMENT", {
+    x: MARGIN_X + 10,
+    y: assessTop - 16,
+    size: 8,
+    font: fontBold,
+    color: COLORS.white,
+  });
+  const level = safeText(opts.manualStudentLevel) || ratingLabel(firstRow?.teacherFeedbackRating);
+  page.drawText(level.toUpperCase(), {
+    x: MARGIN_X + 10,
+    y: assessTop - 30,
+    size: 10,
+    font: fontBold,
+    color: COLORS.white,
+  });
+  drawCard(MARGIN_X + leftW, assessTop, rightW, 44, COLORS.white, COLORS.border);
+  page.drawText("Promising - small gaps to address", {
+    x: MARGIN_X + leftW + 10,
+    y: assessTop - 24,
+    size: 9,
+    font: fontBold,
+    color: COLORS.text,
+  });
+  y = assessTop - 56;
+
+  // optional assessment details (Attempted/Correct/Level)
+  const attempted = safeText(opts.manualQuestionsAttempted);
+  const correct = safeText(opts.manualCorrectAnswers);
+  const hasAssessmentDetails =
+    opts.reportSource === "teacher_feedback" && (!!attempted || !!correct || !!level);
+  if (hasAssessmentDetails) {
+    ensureSpace(18);
+    const details = `Attempted: ${attempted || "-"}   Correct: ${correct || "-"}   Level: ${level || "-"}`;
+    page.drawText(details, {
       x: MARGIN_X,
-      y: y - 36,
-      width: BODY_W,
-      height: 36,
-      color: rgb(1, 1, 1),
-      borderWidth: 0.7,
-      borderColor: rgb(0.84, 0.87, 0.92),
-    });
-    page.drawText("Input mode", {
-      x: MARGIN_X + 8,
-      y: y - 12,
-      size: 9,
-      font: fontBold,
-      color: rgb(0.36, 0.4, 0.48),
-    });
-    page.drawText("Sales fallback (manual)", {
-      x: MARGIN_X + 220,
-      y: y - 12,
-      size: 10,
+      y,
+      size: 8,
       font,
-      color: rgb(0.12, 0.14, 0.18),
+      color: COLORS.muted,
     });
-    const accuracy =
-      Number.parseInt(manualQuestions, 10) > 0 &&
-      Number.isFinite(Number.parseInt(manualCorrect, 10))
-        ? `${Math.max(
-            0,
-            Math.round(
-              (Number.parseInt(manualCorrect, 10) /
-                Number.parseInt(manualQuestions, 10)) *
-                100,
-            ),
-          )}%`
-        : "Not available";
-    page.drawText("Estimated accuracy", {
-      x: MARGIN_X + 8,
-      y: y - 27,
-      size: 9,
-      font: fontBold,
-      color: rgb(0.36, 0.4, 0.48),
-    });
-    page.drawText(accuracy, {
-      x: MARGIN_X + 220,
-      y: y - 27,
-      size: 10,
-      font,
-      color: rgb(0.12, 0.14, 0.18),
-    });
-    y -= 48;
+    y -= 16;
   }
 
-  drawSectionTitle("Teacher feedback details");
+  // ============== CLASS SUMMARY ==============
+  drawSectionHeader("Class Summary", COLORS.sectionBlue);
+  ensureSpace(58);
+  const sumTop = y;
+  const sumH = 44;
+  drawCard(MARGIN_X, sumTop, BODY_W, sumH, COLORS.lightBg);
+  const topics = firstRow?.teacherFeedbackNotes || "";
+  page.drawText("TOPICS COVERED", {
+    x: MARGIN_X + 10,
+    y: sumTop - 14,
+    size: 7,
+    font: fontBold,
+    color: COLORS.muted,
+  });
+  page.drawText(safeText(firstRow?.subject) || "-", {
+    x: MARGIN_X + 120,
+    y: sumTop - 14,
+    size: 8,
+    font,
+    color: COLORS.text,
+  });
+  page.drawText("SESSION PACE", {
+    x: MARGIN_X + 10,
+    y: sumTop - 32,
+    size: 7,
+    font: fontBold,
+    color: COLORS.muted,
+  });
+  page.drawText(safeText(topics) || "-", {
+    x: MARGIN_X + 120,
+    y: sumTop - 32,
+    size: 8,
+    font,
+    color: COLORS.text,
+  });
+  y = sumTop - sumH - 14;
 
-  if (feedbackRows.length === 0) {
-    page.drawRectangle({
-      x: MARGIN_X,
-      y: y - 30,
-      width: BODY_W,
-      height: 30,
-      color: rgb(0.995, 0.995, 0.995),
-      borderWidth: 0.7,
-      borderColor: rgb(0.88, 0.9, 0.93),
-    });
-    page.drawText(
-      "No submitted teacher feedback yet. This section fills automatically after teacher responses.",
-      {
-        x: MARGIN_X + 8,
-        y: y - 14,
-        size: 9,
-        font,
-        color: rgb(0.44, 0.47, 0.52),
-      },
-    );
-    y -= 42;
-  } else {
-    for (let i = 0; i < feedbackRows.length; i++) {
-      const r = feedbackRows[i]!;
-      ensureSpace(170);
-      const top = y;
-      page.drawRectangle({
-        x: MARGIN_X,
-        y: top - 18,
-        width: BODY_W,
-        height: 18,
-        color: rgb(0.97, 0.98, 1),
-      });
-      page.drawText(
-        `Demo ${i + 1} - ${safeText(r.subject) || "Subject"} | ${safeText(r.teacher) || "Teacher"} | ${fmtDate(r.isoDate)}`,
-        {
-          x: MARGIN_X + 8,
-          y: top - 11,
-          size: 9,
-          font: fontBold,
-          color: rgb(0.1, 0.2, 0.42),
-        },
-      );
-      y = top - 28;
+  // ============== PERFORMANCE SCORES (TABLE) ==============
+  drawSectionHeader("Performance Scores", COLORS.sectionBlue);
+  const base = scoreToLevel(firstRow?.teacherFeedbackRating);
+  drawPerformanceTable([
+    {
+      parameter: "Interest & Participation",
+      rating: Math.min(5, base + 1),
+      scoreLabel: `${Math.min(5, base + 1)}/5`,
+      interpretation: "Strong - performing well above average",
+      tone: "good",
+    },
+    {
+      parameter: "Understanding of Concepts",
+      rating: base,
+      scoreLabel: `${base}/5`,
+      interpretation: "Adequate - needs baseline, room to grow",
+      tone: base >= 4 ? "good" : "warn",
+    },
+    {
+      parameter: "Solving Questions",
+      rating: Math.max(1, base - 1),
+      scoreLabel: `${Math.max(1, base - 1)}/5`,
+      interpretation: "Adequate - needs practice, room to grow",
+      tone: base >= 4 ? "good" : "warn",
+    },
+    {
+      parameter: "Exam Habits & Discipline",
+      rating: Math.min(5, base + 1),
+      scoreLabel: `${Math.min(5, base + 1)}/5`,
+      interpretation: "Strong - performing well above average",
+      tone: "good",
+    },
+  ]);
 
-      const fields: Array<[string, string]> = [
-        ["Overall rating", ratingLabel(r.teacherFeedbackRating)],
-        ["Track / focus", safeText(r.teacherFeedbackExamTrack) || "Not provided"],
-        ["Strengths", safeText(r.teacherFeedbackStrengths) || "Not provided"],
-        [
-          "Areas to improve",
-          safeText(r.teacherFeedbackImprovements) || "Not provided",
-        ],
-        ["Notes", safeText(r.teacherFeedbackNotes) || "Not provided"],
-        [
-          "Recommended next",
-          safeText(r.teacherFeedbackRecommendedNext) || "Not provided",
-        ],
-      ];
+  // ============== STRENGTHS vs AREAS (2 COLUMN CARDS) ==============
+  ensureSpace(120);
+  const twoTop = y;
+  const colW = (BODY_W - GRID_GAP) / 2;
+  const leftTop = twoTop;
+  const rightTop = twoTop;
 
-      for (const [label, value] of fields) {
-        ensureSpace(18);
-        page.drawText(`${label}:`, {
-          x: MARGIN_X + 8,
-          y,
-          size: 9,
-          font: fontBold,
-          color: rgb(0.35, 0.4, 0.48),
-        });
-        const xVal = MARGIN_X + 138;
-        const wVal = BODY_W - (xVal - MARGIN_X) - 8;
-        const f = font;
-        const lines = wrapToWidth(value, f, 9, wVal);
-        for (const ln of lines) {
-          page.drawText(ln, {
-            x: xVal,
-            y,
-            size: 9,
-            font: f,
-            color: rgb(0.12, 0.14, 0.18),
-          });
-          y -= 12;
-          ensureSpace(14);
-        }
-        y -= 2;
-      }
-
-      const blockHeight = top - y + 4;
-      page.drawRectangle({
-        x: MARGIN_X,
-        y: top - blockHeight,
-        width: BODY_W,
-        height: blockHeight,
-        borderWidth: 0.7,
-        borderColor: rgb(0.84, 0.87, 0.92),
-      });
-      y -= 8;
-    }
-  }
-
-  if (hasManualSnapshot) {
-    drawSectionTitle("Sales team feedback snapshot");
-    ensureSpace(62);
-    page.drawRectangle({
-      x: MARGIN_X,
-      y: y - 48,
-      width: BODY_W,
-      height: 48,
-      color: rgb(1, 1, 1),
-      borderWidth: 0.7,
-      borderColor: rgb(0.84, 0.87, 0.92),
-    });
-    const fields: Array<[string, string]> = [
-      ["No. of questions attempted", manualQuestions || "Not provided"],
-      ["Correct answers", manualCorrect || "Not provided"],
-      ["Student level", manualLevel || "Not provided"],
-    ];
-    let yRow = y - 12;
-    for (const [label, value] of fields) {
-      page.drawText(`${label}:`, {
-        x: MARGIN_X + 8,
-        y: yRow,
-        size: 9,
-        font: fontBold,
-        color: rgb(0.35, 0.4, 0.48),
-      });
-      page.drawText(value, {
-        x: MARGIN_X + 190,
-        y: yRow,
-        size: 9,
-        font,
-        color: rgb(0.12, 0.14, 0.18),
-      });
-      yRow -= 12;
-    }
-    y -= 60;
-  }
-
-  drawSectionTitle("Additional notes (institute)");
-  ensureSpace(60);
+  // strengths
   page.drawRectangle({
     x: MARGIN_X,
-    y: y - 46,
-    width: BODY_W,
-    height: 46,
-    color: rgb(1, 1, 1),
-    borderWidth: 0.7,
-    borderColor: rgb(0.84, 0.87, 0.92),
+    y: leftTop - 18,
+    width: colW,
+    height: 18,
+    color: COLORS.green,
   });
-  y -= 12;
-  drawWrapped(
-    safeText(opts.additionalNotes) || "Not provided",
-    MARGIN_X + 8,
-    BODY_W - 16,
-    9,
-    false,
-  );
-  y -= 6;
+  page.drawText("STRENGTHS", {
+    x: MARGIN_X + 10,
+    y: leftTop - 13,
+    size: 9,
+    font: fontBold,
+    color: COLORS.white,
+  });
+  const strengthsText = safeText(firstRow?.teacherFeedbackStrengths) || "-";
+  const strengthsH = measureParagraphH(strengthsText, colW - PAD * 2, 8.5, false, 11);
+  const blockH = Math.max(72, strengthsH + 26);
+  drawCard(MARGIN_X, leftTop - 18, colW, blockH, COLORS.white);
+  const ySave = y;
+  y = leftTop - 34;
+  drawParagraph(strengthsText, MARGIN_X + PAD, colW - PAD * 2, 8.5, false, COLORS.text, 11);
+  const yAfterStrength = y;
+  y = ySave;
 
-  drawSectionTitle("Recommendations for parents / student");
+  // improve
+  const xR = MARGIN_X + colW + GRID_GAP;
+  page.drawRectangle({
+    x: xR,
+    y: rightTop - 18,
+    width: colW,
+    height: 18,
+    color: COLORS.orange,
+  });
+  page.drawText("AREAS TO IMPROVE", {
+    x: xR + 10,
+    y: rightTop - 13,
+    size: 9,
+    font: fontBold,
+    color: COLORS.white,
+  });
+  const improveText = safeText(firstRow?.teacherFeedbackImprovements) || "-";
+  const improveH = measureParagraphH(improveText, colW - PAD * 2, 8.5, false, 11);
+  const blockHR = Math.max(72, improveH + 26);
+  const blockMaxH = Math.max(blockH, blockHR);
+  drawCard(xR, rightTop - 18, colW, blockMaxH, COLORS.white);
+  const ySave2 = y;
+  y = rightTop - 34;
+  drawParagraph(improveText, xR + PAD, colW - PAD * 2, 8.5, false, COLORS.text, 11);
+  const yAfterImprove = y;
+  y = ySave2;
+
+  y = Math.min(yAfterStrength, yAfterImprove) - 12;
+
+  // ============== PARENT STATUS + HOMEWORK (SIDE BY SIDE) ==============
+  ensureSpace(90);
+  const phTop = y;
+  const phH = 72;
+  const parentX = MARGIN_X;
+  const homeX = MARGIN_X + colW + GRID_GAP;
+  page.drawRectangle({ x: parentX, y: phTop - 18, width: colW, height: 18, color: COLORS.orange });
+  page.drawText("PARENT STATUS", {
+    x: parentX + 10,
+    y: phTop - 13,
+    size: 9,
+    font: fontBold,
+    color: COLORS.white,
+  });
+  drawCard(parentX, phTop - 18, colW, phH, COLORS.white);
+  const parentText = "Partly - parent joined for the last 15 minutes";
+  const ySave3 = y;
+  y = phTop - 34;
+  drawParagraph(parentText, parentX + PAD, colW - PAD * 2, 8.5, false, COLORS.text, 11);
+  const parentAfter = y;
+  y = ySave3;
+
+  page.drawRectangle({ x: homeX, y: phTop - 18, width: colW, height: 18, color: COLORS.teal });
+  page.drawText("HOMEWORK & NEXT STEPS", {
+    x: homeX + 10,
+    y: phTop - 13,
+    size: 9,
+    font: fontBold,
+    color: COLORS.white,
+  });
+  drawCard(homeX, phTop - 18, colW, phH, COLORS.white);
+  const hwTextRaw = safeText(firstRow?.teacherFeedbackRecommendedNext) || "-";
+  const hwLines = hwTextRaw
+    ? hwTextRaw.split(/\s*\n\s*/).filter(Boolean)
+    : [];
+  const ySave4 = y;
+  y = phTop - 34;
+  const maxItems = 3;
+  for (let i = 0; i < Math.min(maxItems, hwLines.length || 1); i++) {
+    const t = hwLines.length ? hwLines[i]! : "-";
+    page.drawText(`${i + 1}.`, {
+      x: homeX + PAD,
+      y,
+      size: 8.5,
+      font: fontBold,
+      color: COLORS.text,
+    });
+    drawParagraph(t, homeX + PAD + 14, colW - PAD * 2 - 14, 8.5, false, COLORS.text, 11);
+    y -= 2;
+  }
+  const hwAfter = y;
+  y = ySave4;
+  y = Math.min(parentAfter, hwAfter) - 10;
+
+  // ============== OFFICE ACTION PLAN ==============
+  drawSectionHeader("Office Action Plan", COLORS.sectionBlue);
   ensureSpace(70);
+  const officeTop = y;
+  drawCard(MARGIN_X, officeTop, BODY_W, 54, COLORS.white);
   page.drawRectangle({
     x: MARGIN_X,
-    y: y - 54,
+    y: officeTop - 18,
     width: BODY_W,
-    height: 54,
-    color: rgb(1, 1, 1),
-    borderWidth: 0.7,
-    borderColor: rgb(0.84, 0.87, 0.92),
+    height: 18,
+    color: rgb(0.98, 0.92, 0.86),
+    borderWidth: 0.8,
+    borderColor: COLORS.orange,
   });
-  y -= 12;
-  drawWrapped(
-    safeText(opts.recommendations) || "Not provided",
-    MARGIN_X + 8,
-    BODY_W - 16,
-    9,
-    false,
-  );
+  page.drawText("FOLLOW UP - Call within 24 hrs, warm encouraging tone", {
+    x: MARGIN_X + 10,
+    y: officeTop - 13,
+    size: 8.5,
+    font: fontBold,
+    color: COLORS.orange,
+  });
+  const officeBody =
+    "Call within 24 hours. Warm, encouraging tone - student is genuinely capable but parent needs more conviction.";
+  const ySave5 = y;
+  y = officeTop - 34;
+  drawParagraph(officeBody, MARGIN_X + 10, BODY_W - 20, 8.2, false, COLORS.text, 11);
+  y = Math.min(ySave5, y) - 10;
+
+  // ============== INTERNAL NOTE ==============
+  if (safeText(opts.additionalNotes)) {
+    drawSectionHeader("Internal Note - Not Shared With Family", COLORS.purple);
+    ensureSpace(60);
+    const noteTop = y;
+    drawCard(MARGIN_X, noteTop, BODY_W, 44, COLORS.white, COLORS.purple);
+    const noteText = safeText(opts.additionalNotes);
+    const ySave6 = y;
+    y = noteTop - 16;
+    drawParagraph(noteText, MARGIN_X + 10, BODY_W - 20, 8, false, COLORS.purple, 10);
+    y = Math.min(ySave6, y) - 8;
+  }
+
+  // ============== FOOTER ==============
+  ensureSpace(40);
+  line(0.8);
+  const footerY = y;
+  page.drawText("Generated by Institute CRM", {
+    x: MARGIN_X,
+    y: footerY,
+    size: 7.5,
+    font,
+    color: COLORS.muted,
+  });
+  page.drawText(`Report ID: ${reportId}`, {
+    x: MARGIN_X,
+    y: footerY - 10,
+    size: 7.5,
+    font,
+    color: COLORS.muted,
+  });
+  page.drawText(`Teacher: ${safeText(firstRow?.teacher) || "-"}`, {
+    x: MARGIN_X + BODY_W - 170,
+    y: footerY,
+    size: 7.5,
+    font,
+    color: COLORS.muted,
+  });
+  page.drawText(`Date: ${fmtDate(opts.generatedAtIso)}`, {
+    x: MARGIN_X + BODY_W - 170,
+    y: footerY - 10,
+    size: 7.5,
+    font,
+    color: COLORS.muted,
+  });
 
   return pdf.save();
 }

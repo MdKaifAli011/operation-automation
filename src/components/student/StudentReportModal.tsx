@@ -107,6 +107,11 @@ export function StudentReportModal({
   const [manualLevel, setManualLevel] = useState<string>(
     STUDENT_LEVEL_OPTIONS[1] ?? "Average",
   );
+  const [feedbackAttempted, setFeedbackAttempted] = useState<string>("20");
+  const [feedbackCorrect, setFeedbackCorrect] = useState<string>("10");
+  const [feedbackLevel, setFeedbackLevel] = useState<string>(
+    STUDENT_LEVEL_OPTIONS[3] ?? "Very Good",
+  );
   const [selectedSendUrls, setSelectedSendUrls] = useState<string[]>([]);
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const openedOnceRef = useRef(false);
@@ -254,9 +259,9 @@ export function StudentReportModal({
               additionalNotes: "",
               recommendations: "",
               meetRowId,
-              manualQuestionsAttempted: "",
-              manualCorrectAnswers: "",
-              manualStudentLevel: "",
+              manualQuestionsAttempted: feedbackAttempted,
+              manualCorrectAnswers: feedbackCorrect,
+              manualStudentLevel: feedbackLevel,
             }),
           },
         );
@@ -640,6 +645,56 @@ export function StudentReportModal({
                       </p>
                     </section>
                   ) : null}
+
+                  <section className="mb-4 border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="mb-2 text-[11px] font-semibold text-slate-700">
+                      Add assessment details (optional):
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <label className="text-[12px] font-medium text-slate-700">
+                        Attempted
+                        <select
+                          className={cn(SX.select, "mt-1 w-full")}
+                          value={feedbackAttempted}
+                          onChange={(e) => setFeedbackAttempted(e.target.value)}
+                        >
+                          {ATTEMPTED_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[12px] font-medium text-slate-700">
+                        Correct
+                        <select
+                          className={cn(SX.select, "mt-1 w-full")}
+                          value={feedbackCorrect}
+                          onChange={(e) => setFeedbackCorrect(e.target.value)}
+                        >
+                          {correctOptions.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[12px] font-medium text-slate-700">
+                        Level
+                        <select
+                          className={cn(SX.select, "mt-1 w-full")}
+                          value={feedbackLevel}
+                          onChange={(e) => setFeedbackLevel(e.target.value)}
+                        >
+                          {STUDENT_LEVEL_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </section>
 
                   <div className="mb-4">
                     <button
