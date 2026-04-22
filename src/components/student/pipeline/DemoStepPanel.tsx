@@ -640,9 +640,15 @@ export function DemoStepPanel({
             }
           : r,
       );
+      // Activity message: "Demo draft created" for new demos, "Demo scheduled" when Meet link is assigned
+      const activityMessage = editingMeetRowId
+        ? `Demo updated: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`
+        : link
+        ? `Demo scheduled: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`
+        : `Demo draft created: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`;
       await persistDemoRows(patched, {
         kind: "demo",
-        message: `Demo scheduled: ${subj} · ${teach} · ${isoDate} ${timeHmIST} IST`,
+        message: activityMessage,
       });
       setScheduleFormOpen(false);
       await refreshLead();
