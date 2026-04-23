@@ -365,7 +365,7 @@ export function DemoIndexPage() {
             No demos found in this tab.
           </div>
         ) : (
-          <div className="relative overflow-x-auto rounded-lg shadow-sm border border-slate-200/90 bg-white [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.5)_transparent]">
+          <div className="relative overflow-x-auto rounded-none shadow-sm border border-slate-200/90 bg-white [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.5)_transparent]">
             <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
               <thead className="text-[11px] font-semibold text-slate-600">
                 <tr>
