@@ -1,4 +1,3 @@
-import { randomUUID } from "crypto";
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 import mongoose from "mongoose";
@@ -172,7 +171,14 @@ export async function POST(_req: Request, context: Ctx) {
       await removeOldFeePlanFile(oldUrl, id);
     }
 
-    const safeName = `${randomUUID()}.pdf`;
+    // Sanitize student name for filename
+    const rawStudentName = String(lead.studentName ?? "Student").trim() || "Student";
+    const safeStudentName = rawStudentName
+      .replace(/[^a-zA-Z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim();
+    const safeName = `Fee-plan-${safeStudentName}.pdf`;
     const dir = path.join(process.cwd(), "public", "uploads", "fee-plans", id);
     await mkdir(dir, { recursive: true });
     const fullPath = path.join(dir, safeName);
@@ -183,9 +189,7 @@ export async function POST(_req: Request, context: Ctx) {
       fees: {
         ...(meta.fees as object),
         feePlanPdfUrl: pdfUrl,
-        feePlanPdfFileName: `Fee Plan — ${
-          String(lead.studentName ?? "Student").trim() || "Student"
-        }.pdf`,
+        feePlanPdfFileName: `Fee Plan — ${rawStudentName}.pdf`,
         feePlanPdfGeneratedAt: generatedAt,
       },
     });
