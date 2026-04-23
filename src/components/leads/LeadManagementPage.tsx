@@ -281,16 +281,27 @@ export function LeadManagementPage() {
     () => {
       const interestedLeads = ongoingSheetLeads.filter((l) => l.rowTone === "interested");
 
+      // Get today's date in YYYY-MM-DD format for comparison
+      const today = new Date().toISOString().split("T")[0];
+
       // Custom sorting with priority:
-      // 1. Recently moved to Ongoing/Interested (top) - based on date when status changed
-      // 2. Students yet to be scheduled for demo (middle) - no demo with status "Scheduled"
-      // 3. Students in order of pipeline steps (bottom) - 4 steps total
+      // 1. Leads with followUpDate === today (highest priority at top)
+      // 2. Recently moved to Ongoing/Interested (top) - based on date when status changed
+      // 3. Students yet to be scheduled for demo (middle) - no demo with status "Scheduled"
+      // 4. Students in order of pipeline steps (bottom) - 4 steps total
       return interestedLeads.sort((a, b) => {
         const aUpdated = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
         const bUpdated = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
         const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
 
-        // Priority 1: Recently moved students (within last 24 hours)
+        // Priority 1: Leads with followUpDate === today (highest priority)
+        const aFollowUpToday = a.followUpDate === today;
+        const bFollowUpToday = b.followUpDate === today;
+
+        if (aFollowUpToday && !bFollowUpToday) return -1;
+        if (!aFollowUpToday && bFollowUpToday) return 1;
+
+        // Priority 2: Recently moved students (within last 24 hours)
         const aRecentlyMoved = aUpdated > oneDayAgo;
         const bRecentlyMoved = bUpdated > oneDayAgo;
 
@@ -298,18 +309,18 @@ export function LeadManagementPage() {
         if (!aRecentlyMoved && bRecentlyMoved) return 1;
         if (aRecentlyMoved && bRecentlyMoved) return bUpdated - aUpdated;
 
-        // Priority 2: Students yet to be scheduled for demo
+        // Priority 3: Students yet to be scheduled for demo
         // Check if there's any demo with status "Scheduled"
-        const aDemoRows = (a.pipelineMeta as any)?.demo?.rows ?? [];
-        const bDemoRows = (b.pipelineMeta as any)?.demo?.rows ?? [];
+        const aDemoRows = ((a.pipelineMeta as { demo?: { rows?: unknown[] } })?.demo?.rows ?? []) as Array<{ status: string }>;
+        const bDemoRows = ((b.pipelineMeta as { demo?: { rows?: unknown[] } })?.demo?.rows ?? []) as Array<{ status: string }>;
 
-        const aHasScheduledDemo = aDemoRows.some((r: any) => r.status === "Scheduled");
-        const bHasScheduledDemo = bDemoRows.some((r: any) => r.status === "Scheduled");
+        const aHasScheduledDemo = aDemoRows.some((r) => r.status === "Scheduled");
+        const bHasScheduledDemo = bDemoRows.some((r) => r.status === "Scheduled");
 
         if (!aHasScheduledDemo && bHasScheduledDemo) return -1;
         if (aHasScheduledDemo && !bHasScheduledDemo) return 1;
 
-        // Priority 3: Students in order of pipeline steps (0-4)
+        // Priority 4: Students in order of pipeline steps (0-4)
         // Lower steps = less progress = higher priority
         if (a.pipelineSteps !== b.pipelineSteps) {
           return a.pipelineSteps - b.pipelineSteps;
@@ -323,7 +334,12 @@ export function LeadManagementPage() {
   );
 
   const followUpLeads = useMemo(
-    () => filtered.filter((l) => l.sheetTab === "followup"),
+    () => {
+      // Get today's date in YYYY-MM-DD format for comparison
+      const today = new Date().toISOString().split("T")[0];
+      // Only show leads where followUpDate is in the future (greater than today)
+      return filtered.filter((l) => l.followUpDate && l.followUpDate > today);
+    },
     [filtered],
   );
 
@@ -383,7 +399,8 @@ export function LeadManagementPage() {
     ).length;
     /** Ongoing tab: New & Daily + Interested pipeline only. */
     const ongoing = newDaily + ongoingInterestedOnly;
-    const followup = leads.filter((l) => l.sheetTab === "followup").length;
+    const today = new Date().toISOString().split("T")[0];
+    const followup = leads.filter((l) => l.followUpDate && l.followUpDate > today).length;
     const notInterested = leads.filter(
       (l) => l.sheetTab === "not_interested",
     ).length;
@@ -1099,8 +1116,6 @@ export function LeadManagementPage() {
                 ? data.date
                 : format(addDays(new Date(), 1), "yyyy-MM-dd");
             void onUpdateLead(followUpId, {
-              rowTone: "followup_later",
-              sheetTab: "followup",
               followUpDate: fu,
               pipelineMeta: {
                 followUp: {
