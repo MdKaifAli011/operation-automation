@@ -1,4 +1,3 @@
-import { randomUUID } from "crypto";
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 import mongoose from "mongoose";
@@ -114,14 +113,21 @@ export async function POST(_req: Request, context: Ctx) {
     const oldUrl = String(schedule.pdfUrl ?? "").trim();
     if (oldUrl) await removeOldSchedulePlanFile(oldUrl, id);
 
-    const safeName = `${randomUUID()}.pdf`;
+    // Sanitize student name for filename
+    const rawStudentName = String(lead.studentName ?? "Student").trim() || "Student";
+    const safeStudentName = rawStudentName
+      .replace(/[^a-zA-Z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim();
+    const safeName = `Weekly-session-plan-${safeStudentName}.pdf`;
     const dir = path.join(process.cwd(), "public", "uploads", "schedule-plans", id);
     await mkdir(dir, { recursive: true });
     const fullPath = path.join(dir, safeName);
     await writeFile(fullPath, Buffer.from(pdfBytes));
     const pdfUrl = `/uploads/schedule-plans/${id}/${safeName}`;
     const generatedAt = new Date().toISOString();
-    const fileName = `Weekly session plan — ${String(lead.studentName ?? "Student").trim() || "Student"}.pdf`;
+    const fileName = `Weekly session plan — ${rawStudentName}.pdf`;
 
     const merged = mergePipelineMeta(meta as never, {
       schedule: {

@@ -161,14 +161,21 @@ export async function POST(req: Request, context: Ctx) {
     }
     const versionHistory = priorHistory.slice(-40);
 
-    const safeName = `${randomUUID()}.pdf`;
+    // Sanitize student name for filename
+    const rawStudentName = String(lead.studentName ?? "Student").trim() || "Student";
+    const safeStudentName = rawStudentName
+      .replace(/[^a-zA-Z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim();
+    const safeName = `Progress-report-${safeStudentName}.pdf`;
     const dir = path.join(process.cwd(), "public", "uploads", "student-reports", id);
     await mkdir(dir, { recursive: true });
     const fullPath = path.join(dir, safeName);
     await writeFile(fullPath, Buffer.from(pdfBytes));
 
     const pdfUrl = `/uploads/student-reports/${id}/${safeName}`;
-    const fileName = `Progress report — ${String(lead.studentName || "Student").trim() || "Student"}.pdf`;
+    const fileName = `Progress report — ${rawStudentName}.pdf`;
     const existingMeta =
       meta && typeof meta === "object" && !Array.isArray(meta)
         ? { ...meta }
