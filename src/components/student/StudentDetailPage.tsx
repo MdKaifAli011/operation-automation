@@ -200,6 +200,8 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
   const skipNotesAutosave = useRef(true);
+  const [showFollowUpTooltip, setShowFollowUpTooltip] = useState(false);
+  const followUpTooltipRef = useRef<HTMLDivElement>(null);
 
   const [heroEditing, setHeroEditing] = useState(false);
   const [heroDraft, setHeroDraft] = useState<HeroEditDraft | null>(null);
@@ -829,10 +831,48 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
               ) : null}
             </div>
             {lead.followUpDate && (
-              <p className="mt-2 text-[12px] font-medium text-[#e65100]">
-                Next follow-up:{" "}
-                {format(parseISO(lead.followUpDate), "dd MMM yyyy")}
-              </p>
+              <div
+                className="mt-2 relative"
+                onMouseEnter={() => setShowFollowUpTooltip(true)}
+                onMouseLeave={() => setShowFollowUpTooltip(false)}
+              >
+                <p className="text-[12px] font-medium text-[#e65100] cursor-help">
+                  Next follow-up:{" "}
+                  {format(parseISO(lead.followUpDate), "dd MMM yyyy")}
+                </p>
+                {showFollowUpTooltip && (
+                  <div
+                    ref={followUpTooltipRef}
+                    className="absolute left-0 top-full mt-2 z-50 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg"
+                  >
+                    <h4 className="text-xs font-semibold text-slate-900 mb-2">Follow-up Details</h4>
+                    <div className="space-y-1.5 text-[11px]">
+                      <div>
+                        <span className="text-slate-500">Date:</span>{" "}
+                        <span className="font-medium text-slate-900">
+                          {format(parseISO(lead.followUpDate), "dd MMM yyyy")}
+                        </span>
+                      </div>
+                      {(lead.pipelineMeta as any)?.followUp?.reason && (
+                        <div>
+                          <span className="text-slate-500">Reason:</span>{" "}
+                          <span className="font-medium text-slate-900">
+                            {(lead.pipelineMeta as any).followUp.reason}
+                          </span>
+                        </div>
+                      )}
+                      {(lead.pipelineMeta as any)?.followUp?.notes && (
+                        <div>
+                          <span className="text-slate-500">Notes:</span>{" "}
+                          <span className="font-medium text-slate-900">
+                            {(lead.pipelineMeta as any).followUp.notes}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </header>
