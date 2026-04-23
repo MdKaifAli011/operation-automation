@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
+import { IconClipboard } from "@/components/icons/CrmIcons";
 
 type DemoStatus = "Scheduled" | "Cancelled" | "Completed";
 
@@ -98,6 +99,14 @@ export function DemoIndexPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  }, []);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -378,6 +387,7 @@ export function DemoIndexPage() {
                   <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 120 }}>Teacher</th>
                   <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Exam</th>
                   <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Status</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Class Link</th>
                   <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Actions</th>
                 </tr>
               </thead>
@@ -429,6 +439,31 @@ export function DemoIndexPage() {
                         >
                           {demo.status}
                         </span>
+                      </td>
+                      <td className="border border-slate-200/80 px-2 py-1.5">
+                        {demo.meetLinkUrl ? (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={demo.meetLinkUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="max-w-full cursor-pointer break-all text-left font-semibold text-emerald-600 hover:text-emerald-700 underline decoration-1 underline-offset-2"
+                              title="Click to open Meet link in new tab"
+                            >
+                              Class link
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(demo.meetLinkUrl)}
+                              className="shrink-0 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                              title="Copy Meet link"
+                            >
+                              <IconClipboard className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
                       </td>
                       <td className="border border-slate-200/80 px-2 py-1.5">
                         <a
