@@ -365,69 +365,78 @@ export function DemoIndexPage() {
             No demos found in this tab.
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-left text-[13px]">
-              <thead className="bg-slate-50 border-b border-slate-200">
+          <div className="relative overflow-x-auto rounded-lg shadow-sm border border-slate-200/90 bg-white [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.5)_transparent]">
+            <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
+              <thead className="text-[11px] font-semibold text-slate-600">
                 <tr>
-                  <th className="px-4 py-3 font-medium text-slate-700">Date</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">IST Time</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">Student Time</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">Student Name</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">Subject</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">Teacher</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">Exam</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">Status</th>
-                  <th className="px-4 py-3 font-medium text-slate-700">Actions</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 112 }}>Date</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>IST Time</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Student Time</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 168 }}>Student Name</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 120 }}>Subject</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 120 }}>Teacher</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Exam</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Status</th>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
-                {currentDemos.map((demo) => (
-                  <tr key={demo.meetRowId} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-900">{formatDate(demo.isoDate)}</td>
-                    <td className="px-4 py-3 text-slate-900">{formatTime(demo.timeHmIST)}</td>
-                    <td className="px-4 py-3 text-slate-900">
-                      <div>
-                        <div className="font-medium text-slate-900">{formatTime(demo.timeHmIST)}</div>
-                        <div className="text-[11px] text-slate-600">{demo.studentTimeZone}</div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <div className="font-medium text-slate-900">{demo.studentName}</div>
-                        <div className="text-[11px] text-slate-600">{demo.phone}</div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-900">{demo.subject}</td>
-                    <td className="px-4 py-3 text-slate-900">{demo.teacher}</td>
-                    <td className="px-4 py-3 text-slate-900">
-                      {demo.targetExams.length > 0
-                        ? demo.targetExams.map((e) => targetExamLabel(e)).join(", ")
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-1 text-[11px] font-medium",
-                          demo.status === "Scheduled"
-                            ? "bg-blue-50 text-blue-700"
-                            : demo.status === "Completed"
-                            ? "bg-green-50 text-green-700"
-                            : "bg-red-50 text-red-700",
-                        )}
-                      >
-                        {demo.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <a
-                        href={`/students/${demo.leadId}`}
-                        className="text-blue-600 hover:text-blue-700 hover:underline"
-                      >
-                        View Student
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+              <tbody>
+                {currentDemos.map((demo) => {
+                  const rowBg = demo.status === "Scheduled"
+                    ? "bg-sky-50/90"
+                    : demo.status === "Completed"
+                    ? "bg-emerald-50/90"
+                    : demo.status === "Cancelled"
+                    ? "bg-rose-50/90"
+                    : "bg-white";
+                  return (
+                    <tr key={demo.meetRowId} className={cn("min-h-[42px] border-b border-slate-200/80 hover:brightness-[0.99]", rowBg)}>
+                      <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">{formatDate(demo.isoDate)}</td>
+                      <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">{formatTime(demo.timeHmIST)}</td>
+                      <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">
+                        <div>
+                          <div className="font-medium text-slate-900">{formatTime(demo.timeHmIST)}</div>
+                          <div className="text-[11px] text-slate-600">{demo.studentTimeZone}</div>
+                        </div>
+                      </td>
+                      <td className="border border-slate-200/80 px-2 py-1.5">
+                        <div>
+                          <div className="font-medium text-slate-900">{demo.studentName}</div>
+                          <div className="text-[11px] text-slate-600">{demo.phone}</div>
+                        </div>
+                      </td>
+                      <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">{demo.subject}</td>
+                      <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">{demo.teacher}</td>
+                      <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">
+                        {demo.targetExams.length > 0
+                          ? demo.targetExams.map((e) => targetExamLabel(e)).join(", ")
+                          : "—"}
+                      </td>
+                      <td className="border border-slate-200/80 px-2 py-1.5">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-1 text-[11px] font-medium",
+                            demo.status === "Scheduled"
+                              ? "bg-blue-50 text-blue-700"
+                              : demo.status === "Completed"
+                              ? "bg-green-50 text-green-700"
+                              : "bg-red-50 text-red-700",
+                          )}
+                        >
+                          {demo.status}
+                        </span>
+                      </td>
+                      <td className="border border-slate-200/80 px-2 py-1.5">
+                        <a
+                          href={`/students/${demo.leadId}`}
+                          className="text-blue-600 hover:text-blue-700 hover:underline"
+                        >
+                          View Student
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
