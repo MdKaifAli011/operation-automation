@@ -1066,7 +1066,7 @@ export function FeesStepPanel({
               ? "Sending…"
               : feePlanEmailedToParent
                 ? "Send again"
-                : "Email fee plan to parent"}
+                : "Email fee plan"}
           </button>
         </div>
 
