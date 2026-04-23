@@ -369,6 +369,7 @@ export function DemoIndexPage() {
             <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
               <thead className="text-[11px] font-semibold text-slate-600">
                 <tr>
+                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-1 py-2.5 text-center backdrop-blur-sm" style={{ width: 52 }}>#</th>
                   <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 112 }}>Date</th>
                   <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>IST Time</th>
                   <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Student Time</th>
@@ -381,7 +382,7 @@ export function DemoIndexPage() {
                 </tr>
               </thead>
               <tbody>
-                {currentDemos.map((demo) => {
+                {currentDemos.map((demo, rowIndex) => {
                   const rowBg = demo.status === "Scheduled"
                     ? "bg-sky-50/90"
                     : demo.status === "Completed"
@@ -391,6 +392,9 @@ export function DemoIndexPage() {
                     : "bg-white";
                   return (
                     <tr key={demo.meetRowId} className={cn("min-h-[42px] border-b border-slate-200/80 hover:brightness-[0.99]", rowBg)}>
+                      <td className="border border-slate-200/80 px-1 py-1.5 text-center text-xs tabular-nums text-slate-600">
+                        {rowIndex + 1}
+                      </td>
                       <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">{formatDate(demo.isoDate)}</td>
                       <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">{formatTime(demo.timeHmIST)}</td>
                       <td className="border border-slate-200/80 px-2 py-1.5 text-slate-900">
