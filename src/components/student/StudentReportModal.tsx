@@ -14,6 +14,7 @@ import {
 } from "@/lib/studentReportVersions";
 import { prepareStudentReportEmailSentUpdate } from "@/lib/studentReportSendPayload";
 import { PipelineMessageDialog } from "@/components/student/pipeline/PipelineMessageDialog";
+import { randomUuid } from "@/lib/randomUuid";
 
 function ratingLabel(v: string | undefined): string {
   if (!v?.trim()) return "—";
@@ -368,7 +369,7 @@ export function StudentReportModal({
         : [];
       if (oldUrl) {
         priorHist.push({
-          id: crypto.randomUUID(),
+          id: randomUuid(),
           pdfUrl: oldUrl,
           fileName: prevSr?.fileName ?? null,
           generatedAt: prevSr?.generatedAt ?? null,
