@@ -505,9 +505,25 @@ export function LeadManagementPage() {
         case "followup":
           return "bg-amber-100 text-amber-700 border-amber-200";
         case "converted":
-          return "bg-emerald-100 text-emerald-700 border-emerald-200";
+          return "bg-blue-100 text-blue-700 border-blue-200";
         default:
           return "bg-slate-100 text-slate-700 border-slate-200";
+      }
+    };
+    
+    // Define text colors for each tab
+    const getTabTextColor = () => {
+      switch (id) {
+        case "ongoing":
+          return active ? "text-emerald-700" : "text-emerald-600";
+        case "not_interested":
+          return active ? "text-rose-700" : "text-rose-600";
+        case "followup":
+          return active ? "text-amber-700" : "text-amber-600";
+        case "converted":
+          return active ? "text-blue-700" : "text-blue-600";
+        default:
+          return "text-slate-700";
       }
     };
     
@@ -519,6 +535,7 @@ export function LeadManagementPage() {
         className={cn(
           SX.leadTabBtn,
           active ? SX.leadTabActive : SX.leadTabIdle,
+          getTabTextColor(),
         )}
       >
         <span className="truncate">{label}</span>
@@ -548,7 +565,7 @@ export function LeadManagementPage() {
       key: "ongoing",
       label: "Ongoing",
       value: counts.ongoing,
-      accent: "text-primary",
+      accent: "text-emerald-600",
     },
     {
       key: "ni",
@@ -560,14 +577,14 @@ export function LeadManagementPage() {
       key: "followup",
       label: "Follow-up",
       value: counts.followup,
-      accent: "text-emerald-600",
+      accent: "text-amber-600",
     },
     {
       key: "conv",
       label: "Converted",
       sublabel: "Current month",
       value: counts.converted,
-      accent: "text-indigo-600",
+      accent: "text-blue-600",
     },
   ];
 
@@ -885,7 +902,7 @@ export function LeadManagementPage() {
             <div className="space-y-8 px-3 py-4 md:px-4 md:py-5">
               <section aria-label="Today's leads">
                 <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>Today&apos;s Leads</h2>
+                  <h2 className={cn(SX.leadSectionTitle, "text-emerald-700")}>Today&apos;s Leads</h2>
                 </div>
                 {newAndDailyLeads.length === 0 ? (
                   <div
@@ -916,7 +933,7 @@ export function LeadManagementPage() {
 
               <section aria-label="Interested ongoing pipeline">
                 <div className={SX.leadSectionHead}>
-                  <h2 className={SX.leadSectionTitle}>Ongoing (interested)</h2>
+                  <h2 className={cn(SX.leadSectionTitle, "text-emerald-700")}>Ongoing (interested)</h2>
                   <p className={SX.leadSectionMeta}>
                     Status <span className="font-medium">Interested</span> only
                     — other ongoing tones are not listed here.
@@ -966,7 +983,7 @@ export function LeadManagementPage() {
               aria-label="Follow-up leads"
             >
               <div className={SX.leadSectionHead}>
-                <h2 className={SX.leadSectionTitle}>Follow-ups</h2>
+                <h2 className={cn(SX.leadSectionTitle, "text-amber-700")}>Follow-ups</h2>
                 <p className={SX.leadSectionMeta}>
                   {followUpLeads.length} lead
                   {followUpLeads.length === 1 ? "" : "s"} · call or message on
@@ -996,7 +1013,7 @@ export function LeadManagementPage() {
               aria-label="Not interested leads"
             >
               <div className={SX.leadSectionHead}>
-                <h2 className={SX.leadSectionTitle}>Not interested</h2>
+                <h2 className={cn(SX.leadSectionTitle, "text-rose-700")}>Not interested</h2>
                 <p className={SX.leadSectionMeta}>
                   {notInterestedLeads.length} closed lead
                   {notInterestedLeads.length === 1 ? "" : "s"} · archived from
@@ -1026,7 +1043,7 @@ export function LeadManagementPage() {
             >
               <div className={SX.leadSectionHead}>
                 <div className="flex min-w-0 flex-wrap items-baseline gap-2 gap-y-1">
-                  <h2 className={SX.leadSectionTitle}>Enrolled</h2>
+                  <h2 className={cn(SX.leadSectionTitle, "text-blue-700")}>Enrolled</h2>
                 </div>
                 <p className={SX.leadSectionMeta}>
                   {convertedLeadsFiltered.length} enrolled lead
