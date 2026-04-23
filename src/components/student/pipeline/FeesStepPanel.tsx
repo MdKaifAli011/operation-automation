@@ -602,11 +602,12 @@ export function FeesStepPanel({
       const pdfRes = await fetch(`/api/leads/${lead.id}/fee-plan/generate`, {
         method: "POST",
       });
+      // Always refresh lead after PDF generation attempt to pick up the PDF URL
+      await refreshLead();
       if (pdfRes.ok) {
-        await refreshLead();
         pushToast("Fee plan saved. PDF generated.");
       } else {
-        pushToast("Fee plan saved. PDF generation failed.");
+        pushToast("Fee plan saved. PDF generation failed. Please try 'Save again'.");
       }
     } catch (e) {
       pushToast(e instanceof Error ? e.message : "Save failed.");
@@ -1055,9 +1056,11 @@ export function FeesStepPanel({
             className={cn(
               feePlanEmailedToParent ? SX.leadBtnGreen : SX.btnPrimary,
               "h-9 min-w-40 justify-center px-3 text-[12px]",
+              !feePlanPdfUrl && "opacity-50 cursor-not-allowed",
             )}
             disabled={sendingFeeEmail || !feePlanPdfUrl || coursesLoading}
             onClick={() => void sendFeePlanToParent()}
+            title={!feePlanPdfUrl ? "Save the fee plan and generate the PDF first" : undefined}
           >
             {sendingFeeEmail
               ? "Sending…"
