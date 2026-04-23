@@ -102,6 +102,8 @@ type Props = {
   showPipelineColumn?: boolean;
   /** Show optional not-interested remark column (Not interested tab). */
   showNotInterestedRemark?: boolean;
+  /** Show instructions column (Follow-up tab only). */
+  showInstructionsColumn?: boolean;
   /**
    * Ongoing tab: click Data type cell to pick OL / WT / REF / PD (maps to stored channel).
    * Saves immediately; does not require sheet edit mode.
@@ -143,6 +145,7 @@ export function LeadSheetTable({
   followUpDateOnlyWhenDue = false,
   showPipelineColumn = false,
   showNotInterestedRemark = false,
+  showInstructionsColumn = false,
   pickDataTypeOnClick = false,
   leadSourceOptions = [],
   targetExamsColumnTitle = "Target (exams)",
@@ -322,7 +325,9 @@ export function LeadSheetTable({
             >
               Data type
             </SheetTh>
-            <SheetTh w={COL_WIDTHS.instructions}>Instructions</SheetTh>
+            {showInstructionsColumn && (
+              <SheetTh w={COL_WIDTHS.instructions}>Instructions</SheetTh>
+            )}
             {showFollowUpColumn && (
               <SheetTh w={COL_WIDTHS.followUp}>Follow-up</SheetTh>
             )}
@@ -721,11 +726,13 @@ export function LeadSheetTable({
                     leadSourceOptions={leadSourceOptions}
                   />
                 )}
-                <InstructionsCell
-                  lead={lead}
-                  width={COL_WIDTHS.instructions}
-                  tone={tone}
-                />
+                {showInstructionsColumn && (
+                  <InstructionsCell
+                    lead={lead}
+                    width={COL_WIDTHS.instructions}
+                    tone={tone}
+                  />
+                )}
                 {showFollowUpColumn && (
                   <td
                     style={{ width: COL_WIDTHS.followUp }}

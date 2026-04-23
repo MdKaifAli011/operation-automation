@@ -976,6 +976,7 @@ export function LeadManagementPage() {
               <LeadSheetTable
                 showFollowUpColumn
                 showPipelineColumn
+                showInstructionsColumn
                 pickDataTypeOnClick
                 leadSourceOptions={leadSources}
                 actionMenuHideOptions={{ followUp: true }}
