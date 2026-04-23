@@ -95,7 +95,7 @@ export async function buildFeePlanPdfBytes(input: {
     page.drawText(safeText(title), {
       x: left,
       y,
-      size: 11,
+      size: 12,
       font: bold,
       color: rgb(0.08, 0.12, 0.2),
     });
@@ -106,97 +106,99 @@ export async function buildFeePlanPdfBytes(input: {
       x: left,
       y: y - 5,
       width: contentWidth,
-      height: 20,
+      height: 22,
       color: rgb(0.95, 0.97, 1),
+      borderWidth: 0.5,
+      borderColor: rgb(0.87, 0.89, 0.92),
     });
     page.drawText("No.", {
-      x: left + 6,
+      x: left + 8,
       y,
-      size: 8,
+      size: 10,
       font: bold,
       color: rgb(0.25, 0.3, 0.35),
     });
     page.drawText("Fee Description", {
-      x: left + 36,
+      x: left + 38,
       y,
-      size: 8,
+      size: 10,
       font: bold,
       color: rgb(0.25, 0.3, 0.35),
     });
     page.drawText("GST (Tax)", {
-      x: left + 266,
+      x: left + 268,
       y,
-      size: 8,
+      size: 10,
       font: bold,
       color: rgb(0.25, 0.3, 0.35),
     });
     page.drawText("Total Amount (USD)", {
-      x: left + 336,
+      x: left + 338,
       y,
-      size: 8,
+      size: 10,
       font: bold,
       color: rgb(0.25, 0.3, 0.35),
     });
     const dueHead = "Due Date";
-    const dueHeadW = bold.widthOfTextAtSize(dueHead, 8);
+    const dueHeadW = bold.widthOfTextAtSize(dueHead, 10);
     page.drawText("Due Date", {
       x: right - 8 - dueHeadW,
       y,
-      size: 8,
+      size: 10,
       font: bold,
       color: rgb(0.25, 0.3, 0.35),
     });
-    y -= 20;
+    y -= 22;
 
     for (const row of rows) {
-      ensureSpace(20);
+      ensureSpace(22);
       page.drawRectangle({
         x: left,
         y: y - 4,
         width: contentWidth,
-        height: 18,
+        height: 20,
         color: row.no % 2 === 0 ? rgb(0.992, 0.995, 1) : rgb(1, 1, 1),
-        borderWidth: 0.4,
+        borderWidth: 0.5,
         borderColor: rgb(0.87, 0.89, 0.92),
       });
       page.drawText(String(row.no), {
-        x: left + 8,
+        x: left + 10,
         y,
-        size: 8,
+        size: 10,
         font: regular,
         color: rgb(0.12, 0.14, 0.17),
       });
       page.drawText(fitText(row.description, 46), {
-        x: left + 36,
+        x: left + 38,
         y,
-        size: 8,
+        size: 10,
         font: regular,
         color: rgb(0.12, 0.14, 0.17),
       });
       page.drawText(safeText(row.gstText), {
-        x: left + 266,
+        x: left + 268,
         y,
-        size: 8,
+        size: 10,
         font: regular,
         color: rgb(0.12, 0.14, 0.17),
       });
       page.drawText(safeText(row.totalUsdText), {
-        x: left + 336,
+        x: left + 338,
         y,
-        size: 8,
+        size: 10,
         font: bold,
         color: rgb(0.06, 0.16, 0.34),
       });
       const dueText = fitText(row.dueDateText, 18);
-      const dueTextW = regular.widthOfTextAtSize(dueText, 8);
+      const dueTextW = regular.widthOfTextAtSize(dueText, 10);
       page.drawText(dueText, {
         x: right - 8 - dueTextW,
         y,
-        size: 8,
+        size: 10,
         font: regular,
         color: rgb(0.12, 0.14, 0.17),
       });
-      y -= 18;
+      y -= 20;
     }
     y -= 8;
   };
@@ -250,15 +252,20 @@ export async function buildFeePlanPdfBytes(input: {
   }
 
   const metaTop = 724;
+  const hasScholarship = input.scholarshipPct > 0;
   const metaRows: Array<[string, string]> = [
     ["Target exam", input.targetExam || "-"],
     ["Course", input.courseName || "-"],
     ["Student currency", input.currency || "INR"],
-    ["Scholarship %", String(Math.max(0, Math.round(input.scholarshipPct)))],
     ["Total fee (INR)", fmtInr(input.baseTotal)],
-    ["Amount of scholarship (INR)", fmtInr(input.scholarshipAmount)],
-    ["After scholarship total (INR)", fmtInr(input.finalFee)],
   ];
+  if (hasScholarship) {
+    metaRows.push(["Scholarship %", String(Math.max(0, Math.round(input.scholarshipPct)))]);
+    metaRows.push(["Amount of scholarship (INR)", fmtInr(input.scholarshipAmount)]);
+    metaRows.push(["After scholarship total (INR)", fmtInr(input.finalFee)]);
+  } else {
+    metaRows.push(["Net payable (INR)", fmtInr(input.finalFee)]);
+  }
 
   let rowY = metaTop;
   for (const [k, v] of metaRows) {
@@ -266,31 +273,33 @@ export async function buildFeePlanPdfBytes(input: {
       x: left,
       y: rowY - 4,
       width: contentWidth,
-      height: 16,
+      height: 22,
       color: rowY % 2 === 0 ? rgb(0.985, 0.988, 0.995) : rgb(1, 1, 1),
+      borderWidth: 0.5,
+      borderColor: rgb(0.87, 0.89, 0.92),
     });
     page.drawText(k, {
-      x: left + 4,
-      y: rowY,
-      size: 9,
+      x: left + 6,
+      y: rowY + 3,
+      size: 11,
       font: bold,
       color: rgb(0.35, 0.4, 0.45),
     });
     page.drawText(safeText(v), {
       x: left + 192,
-      y: rowY,
-      size: 10,
+      y: rowY + 3,
+      size: 11,
       font: regular,
       color: rgb(0.11, 0.13, 0.15),
     });
-    rowY -= 18;
+    rowY -= 22;
   }
 
-  const tableTop = rowY - 12;
+  const tableTop = rowY - 24;
   page.drawText("Payment schedule", {
     x: left,
-    y: tableTop + 14,
-    size: 11,
+    y: tableTop + 18,
+    size: 12,
     font: bold,
     color: rgb(0.1, 0.12, 0.2),
   });
@@ -298,47 +307,49 @@ export async function buildFeePlanPdfBytes(input: {
     x: left,
     y: tableTop - 12,
     width: contentWidth,
-    height: 24,
+    height: 26,
     color: rgb(0.94, 0.96, 0.98),
+    borderWidth: 0.5,
+    borderColor: rgb(0.87, 0.89, 0.92),
   });
-  page.drawText("#", { x: left + 8, y: tableTop - 4, size: 9, font: bold, color: rgb(0.23, 0.25, 0.3) });
-  page.drawText("Amount (INR)", { x: left + 58, y: tableTop - 4, size: 9, font: bold, color: rgb(0.23, 0.25, 0.3) });
-  page.drawText("Due date", { x: left + 300, y: tableTop - 4, size: 9, font: bold, color: rgb(0.23, 0.25, 0.3) });
+  page.drawText("#", { x: left + 10, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
+  page.drawText("Amount (INR)", { x: left + 60, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
+  page.drawText("Due date", { x: left + 300, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
 
   const lines =
     input.installments.length > 0
       ? input.installments
       : [{ no: 1, amountInr: input.finalFee, dueDate: input.dueDate || "" }];
 
-  y = tableTop - 34;
+  y = tableTop - 36;
   for (const ln of lines) {
     page.drawRectangle({
       x: left,
       y: y - 6,
       width: contentWidth,
-      height: 22,
+      height: 24,
       color: ln.no % 2 === 0 ? rgb(0.99, 0.99, 1) : rgb(1, 1, 1),
       borderWidth: 0.5,
       borderColor: rgb(0.87, 0.89, 0.92),
     });
     page.drawText(String(ln.no), {
-      x: left + 8,
+      x: left + 10,
       y,
-      size: 10,
+      size: 11,
       font: regular,
       color: rgb(0.1, 0.12, 0.15),
     });
     page.drawText(fmtInr(ln.amountInr), {
-      x: left + 58,
+      x: left + 60,
       y,
-      size: 10,
+      size: 11,
       font: bold,
       color: rgb(0.05, 0.15, 0.35),
     });
     page.drawText(fmtDate(ln.dueDate), {
       x: left + 300,
       y,
-      size: 10,
+      size: 11,
       font: regular,
       color: rgb(0.1, 0.12, 0.15),
     });
