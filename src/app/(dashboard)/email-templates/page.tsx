@@ -31,6 +31,7 @@ type TemplateRow = {
   subject: string;
   bodyHtml: string;
   enabled: boolean;
+  isDefault: boolean;
 };
 
 const PIPELINE_ORDER: EmailTemplateKey[] = [
@@ -108,11 +109,13 @@ function TemplateEditorPanel({
   patchRow,
   copiedPh,
   setCopiedPh,
+  setDefaultTemplate,
 }: {
   r: TemplateRow;
   patchRow: (key: EmailTemplateKey, patch: Partial<TemplateRow>) => void;
   copiedPh: string | null;
   setCopiedPh: Dispatch<SetStateAction<string | null>>;
+  setDefaultTemplate: (key: EmailTemplateKey) => Promise<void>;
 }) {
   const meta = EMAIL_TEMPLATE_META[r.key];
   const previewVars = useMemo(() => getPreviewSampleVars(r.key), [r.key]);
@@ -166,25 +169,40 @@ function TemplateEditorPanel({
               on again.
             </p>
           </div>
-          <label className="flex cursor-pointer select-none items-center gap-3 border border-[#e0e0e0] bg-[#fafafa] px-4 py-3 sm:shrink-0">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded-none border-[#bdbdbd] text-[#1565c0] focus:ring-2 focus:ring-[#1565c0]/30"
-              checked={r.enabled}
-              onChange={(e) =>
-                patchRow(r.key, {
-                  enabled: e.target.checked,
-                })
-              }
-            />
-            <span className="text-sm font-semibold text-[#212121]">
-              {r.enabled ? (
-                <span className="text-[#2e7d32]">On — will send</span>
-              ) : (
-                <span className="text-[#9e9e9e]">Off — blocked</span>
+          <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
+            <label className="flex cursor-pointer select-none items-center gap-3 border border-[#e0e0e0] bg-[#fafafa] px-4 py-3">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded-none border-[#bdbdbd] text-[#1565c0] focus:ring-2 focus:ring-[#1565c0]/30"
+                checked={r.enabled}
+                onChange={(e) =>
+                  patchRow(r.key, {
+                    enabled: e.target.checked,
+                  })
+                }
+              />
+              <span className="text-sm font-semibold text-[#212121]">
+                {r.enabled ? (
+                  <span className="text-[#2e7d32]">On — will send</span>
+                ) : (
+                  <span className="text-[#9e9e9e]">Off — blocked</span>
+                )}
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={() => void setDefaultTemplate(r.key)}
+              disabled={r.isDefault}
+              className={cn(
+                "px-4 py-3 text-sm font-semibold transition-opacity",
+                r.isDefault
+                  ? "border border-[#ffd54f] bg-[#fff9c4] text-[#f57f17] cursor-default"
+                  : "border border-[#e0e0e0] bg-white text-[#424242] hover:bg-[#fafafa]"
               )}
-            </span>
-          </label>
+            >
+              {r.isDefault ? "Default Template" : "Set as Default"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -430,6 +448,56 @@ export default function EmailTemplatesPage() {
     setExpandedKeys(new Set());
   }, []);
 
+  const setDefaultTemplate = useCallback(async (key: EmailTemplateKey) => {
+    try {
+      const res = await fetch("/api/email-templates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setDefault: key }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error || "Failed to set default template.");
+      }
+      const data = (await res.json()) as {
+        templates?: TemplateRow[];
+        smtpConfigured?: boolean;
+      };
+      if (Array.isArray(data.templates)) {
+        setRows(data.templates as TemplateRow[]);
+      }
+      setSmtpConfigured(Boolean(data.smtpConfigured));
+      setSavedAt(new Date().toISOString());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to set default template.");
+    }
+  }, []);
+
+  const setDefaultAllTemplates = useCallback(async () => {
+    try {
+      const res = await fetch("/api/email-templates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setDefaultAll: true }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error || "Failed to set all templates as default.");
+      }
+      const data = (await res.json()) as {
+        templates?: TemplateRow[];
+        smtpConfigured?: boolean;
+      };
+      if (Array.isArray(data.templates)) {
+        setRows(data.templates as TemplateRow[]);
+      }
+      setSmtpConfigured(Boolean(data.smtpConfigured));
+      setSavedAt(new Date().toISOString());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to set all templates as default.");
+    }
+  }, []);
+
   return (
     <div className="space-y-8">
       {/* Title + actions */}
@@ -473,6 +541,14 @@ export default function EmailTemplatesPage() {
               className={btnOutline}
             >
               Refresh
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void setDefaultAllTemplates()}
+              className={btnOutline}
+            >
+              Set Default All
             </button>
             <button
               type="button"
@@ -742,6 +818,11 @@ export default function EmailTemplatesPage() {
                         >
                           {r.enabled ? "Active" : "Paused"}
                         </span>
+                        {r.isDefault && (
+                          <span className="border border-[#ffd54f] bg-[#fff9c4] px-2 py-0.5 text-xs font-semibold text-[#f57f17]">
+                            Default
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1.5 text-xs leading-relaxed text-[#757575]">
                         {meta?.description ?? r.description}
@@ -761,6 +842,7 @@ export default function EmailTemplatesPage() {
                         patchRow={patchRow}
                         copiedPh={copiedPh}
                         setCopiedPh={setCopiedPh}
+                        setDefaultTemplate={setDefaultTemplate}
                       />
                     </div>
                   ) : null}

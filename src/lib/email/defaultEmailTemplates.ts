@@ -118,7 +118,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
     description:
       "Automatic family email when a trial is scheduled, completed, or canceled — premium layout; link only when scheduled.",
     sortOrder: 15,
-    subject: "{{studentName}} Analysis Session Reporte For {{targetExams}} - TestprepKart",
+    subject: "{{studentName}} Analysis Session Report For {{targetExams}} - TestprepKart",
     bodyHtml: emailShell({
       preHeader: "Academic Enrolments · Session Analysis Report",
       badge: "Report Ready",

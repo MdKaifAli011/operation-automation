@@ -9,6 +9,7 @@ const EmailTemplateSchema = new Schema(
     bodyHtml: { type: String, required: true },
     enabled: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
+    isDefault: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

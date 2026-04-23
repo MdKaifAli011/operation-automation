@@ -24,6 +24,7 @@ export async function GET() {
         bodyHtml: d.bodyHtml as string,
         enabled: Boolean(d.enabled),
         sortOrder: typeof d.sortOrder === "number" ? d.sortOrder : 0,
+        isDefault: Boolean(d.isDefault),
         updatedAt: d.updatedAt,
       })),
       smtpConfigured: isMailConfigured(),
@@ -39,11 +40,14 @@ export async function GET() {
 
 type PutBody = {
   restoreDefaults?: boolean;
+  setDefault?: string;
+  setDefaultAll?: boolean;
   templates?: Array<{
     key: string;
     subject?: string;
     bodyHtml?: string;
     enabled?: boolean;
+    isDefault?: boolean;
   }>;
 };
 
@@ -55,15 +59,69 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
   const items = body.templates;
-  if (!body.restoreDefaults && (!Array.isArray(items) || items.length === 0)) {
+  if (!body.restoreDefaults && (!Array.isArray(items) || items.length === 0) && !body.setDefault && !body.setDefaultAll) {
     return NextResponse.json(
-      { error: "Expected templates array." },
+      { error: "Expected templates array or setDefault or setDefaultAll." },
       { status: 400 },
     );
   }
   try {
     await connectDB();
     await ensureDefaultTemplates();
+    
+    // Handle setting all templates as default
+    if (body.setDefaultAll) {
+      await EmailTemplateModel.updateMany({}, { $set: { isDefault: true } });
+      const docs = await EmailTemplateModel.find({})
+        .sort({ sortOrder: 1, key: 1 })
+        .lean();
+      return NextResponse.json({
+        templates: docs.map((d) => ({
+          key: d.key as string,
+          name: d.name as string,
+          description: (d.description as string) ?? "",
+          subject: d.subject as string,
+          bodyHtml: d.bodyHtml as string,
+          enabled: Boolean(d.enabled),
+          sortOrder: typeof d.sortOrder === "number" ? d.sortOrder : 0,
+          isDefault: Boolean(d.isDefault),
+          updatedAt: d.updatedAt,
+        })),
+        smtpConfigured: isMailConfigured(),
+      });
+    }
+    
+    // Handle setting default template
+    if (body.setDefault) {
+      if (!isEmailTemplateKey(body.setDefault)) {
+        return NextResponse.json({ error: "Invalid template key." }, { status: 400 });
+      }
+      // Unset all defaults
+      await EmailTemplateModel.updateMany({}, { $set: { isDefault: false } });
+      // Set the specified template as default
+      await EmailTemplateModel.updateOne(
+        { key: body.setDefault },
+        { $set: { isDefault: true } }
+      );
+      const docs = await EmailTemplateModel.find({})
+        .sort({ sortOrder: 1, key: 1 })
+        .lean();
+      return NextResponse.json({
+        templates: docs.map((d) => ({
+          key: d.key as string,
+          name: d.name as string,
+          description: (d.description as string) ?? "",
+          subject: d.subject as string,
+          bodyHtml: d.bodyHtml as string,
+          enabled: Boolean(d.enabled),
+          sortOrder: typeof d.sortOrder === "number" ? d.sortOrder : 0,
+          isDefault: Boolean(d.isDefault),
+          updatedAt: d.updatedAt,
+        })),
+        smtpConfigured: isMailConfigured(),
+      });
+    }
+    
     if (body.restoreDefaults) {
       for (const def of DEFAULT_EMAIL_TEMPLATES) {
         await EmailTemplateModel.updateOne(
@@ -76,6 +134,7 @@ export async function PUT(req: Request) {
               bodyHtml: def.bodyHtml,
               enabled: true,
               sortOrder: def.sortOrder,
+              isDefault: false,
             },
           },
           { upsert: true },
@@ -93,6 +152,7 @@ export async function PUT(req: Request) {
           bodyHtml: d.bodyHtml as string,
           enabled: Boolean(d.enabled),
           sortOrder: typeof d.sortOrder === "number" ? d.sortOrder : 0,
+          isDefault: Boolean(d.isDefault),
           updatedAt: d.updatedAt,
         })),
         smtpConfigured: isMailConfigured(),
@@ -111,6 +171,7 @@ export async function PUT(req: Request) {
       if (subject !== undefined) patch.subject = subject;
       if (bodyHtml !== undefined) patch.bodyHtml = bodyHtml;
       if (typeof row.enabled === "boolean") patch.enabled = row.enabled;
+      if (typeof row.isDefault === "boolean") patch.isDefault = row.isDefault;
       if (Object.keys(patch).length === 0) continue;
       await EmailTemplateModel.updateOne({ key }, { $set: patch });
     }
@@ -126,6 +187,7 @@ export async function PUT(req: Request) {
         bodyHtml: d.bodyHtml as string,
         enabled: Boolean(d.enabled),
         sortOrder: typeof d.sortOrder === "number" ? d.sortOrder : 0,
+        isDefault: Boolean(d.isDefault),
         updatedAt: d.updatedAt,
       })),
       smtpConfigured: isMailConfigured(),
