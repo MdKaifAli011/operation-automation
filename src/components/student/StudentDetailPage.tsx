@@ -188,10 +188,6 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   }, [initialLead.id]);
 
   useEffect(() => {
-    const maxStep = Math.min(PIPELINE_TOTAL, Math.max(1, completed + 1));
-    if (activeStep > maxStep) setActiveStep(maxStep);
-  }, [completed, activeStep]);
-  useEffect(() => {
     if (!pipelineUnlocked && activeStep !== 1) {
       setActiveStep(1);
     }
@@ -914,12 +910,12 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                   />
                 )}
                 {activeStep === 3 && (
-              <FeesStepPanel
-                lead={lead}
-                onPatchLead={patchLead}
-                refreshLead={refreshLead}
-              />
-            )}
+                  <FeesStepPanel
+                    lead={lead}
+                    onPatchLead={patchLead}
+                    refreshLead={refreshLead}
+                  />
+                )}
                 {activeStep === 4 && (
                   <ScheduleStepPanel
                     lead={lead}
@@ -1231,8 +1227,6 @@ function Stepper({
             const lockHint =
               !unlocked
                 ? "Locked until lead action is set to Interested."
-                : s.n >= 2
-                ? `Complete ${PIPELINE_STEP_LABELS[s.n - 2]} first`
                 : "";
             return (
               <button

@@ -93,11 +93,10 @@ export function computePipelineStepsFromMeta(
   return 4;
 }
 
-/** Step numbers 1–4. User can open step `s` only if previous steps are done (`completed >= s - 1`). */
+/** Step numbers 1–4. User can open any step regardless of completion status. */
 export function canAccessPipelineStep(completed: number, step: number): boolean {
   if (step < 1 || step > 4) return false;
-  if (step === 1) return true;
-  return completed >= step - 1;
+  return true;
 }
 
 /** Next step in footer: only if current step is completed. */
