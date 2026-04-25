@@ -104,6 +104,7 @@ export function DemoIndexPage() {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [selectedDemo, setSelectedDemo] = useState<Demo | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<DemoStatus | null>(null);
+  const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
@@ -493,7 +494,9 @@ export function DemoIndexPage() {
         <DemoStatusConfirmDialog
           demo={selectedDemo}
           newStatus={selectedStatus}
+          loading={statusUpdateLoading}
           onConfirm={async () => {
+            setStatusUpdateLoading(true);
             try {
               const res = await fetch("/api/demos", {
                 method: "POST",
@@ -509,13 +512,15 @@ export function DemoIndexPage() {
                 throw new Error(data.error || "Failed to update demo status");
               }
               await refreshDemos({ force: true });
+              // Auto-close dialog on success
+              setStatusDialogOpen(false);
+              setSelectedDemo(null);
+              setSelectedStatus(null);
             } catch (e) {
               console.error("Failed to update demo status:", e);
               alert(e instanceof Error ? e.message : "Failed to update demo status");
             } finally {
-              setStatusDialogOpen(false);
-              setSelectedDemo(null);
-              setSelectedStatus(null);
+              setStatusUpdateLoading(false);
             }
           }}
           onCancel={() => {

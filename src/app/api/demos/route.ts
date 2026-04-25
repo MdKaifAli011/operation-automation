@@ -3,7 +3,6 @@ import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
 import type { DemoTableRowPersisted } from "@/lib/leadPipelineMetaTypes";
 import { mergePipelineMeta } from "@/lib/pipeline";
-import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
 
 export async function GET() {
   try {
@@ -124,15 +123,25 @@ export async function POST(request: Request) {
     // Send email notification based on status change
     if (newStatus) {
       try {
-        await sendLeadPipelineEmail(lead.id, {
-          templateKey: "demo_status_update",
-          meetRowId,
-          demoStatusEmail: {
-            status: newStatus,
-            notifyParent: true,
-            notifyFaculty: false,
-          },
+        // Call the send-email API directly from server side
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const emailRes = await fetch(`${baseUrl}/api/leads/${encodeURIComponent(lead.id)}/send-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            templateKey: "demo_status_update",
+            meetRowId,
+            demoStatusEmail: {
+              status: newStatus,
+              notifyParent: true,
+              notifyFaculty: false,
+            },
+          }),
         });
+        if (!emailRes.ok) {
+          const errorData = await emailRes.json().catch(() => ({}));
+          console.error("Failed to send email:", errorData.error || "Unknown error");
+        }
       } catch (emailError) {
         console.error("Failed to send email:", emailError);
         // Don't fail the request if email fails
