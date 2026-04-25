@@ -5,8 +5,10 @@ import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 import { IconClipboard } from "@/components/icons/CrmIcons";
+import { DemoStatusActions } from "@/components/demos/DemoStatusActions";
+import { DemoStatusConfirmDialog } from "@/components/demos/DemoStatusConfirmDialog";
 
-type DemoStatus = "Scheduled" | "Cancelled" | "Completed";
+export type DemoStatus = "Scheduled" | "Cancelled" | "Completed";
 
 type Demo = {
   leadId: string;
@@ -99,6 +101,9 @@ export function DemoIndexPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [selectedDemo, setSelectedDemo] = useState<Demo | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<DemoStatus | null>(null);
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
@@ -245,7 +250,7 @@ export function DemoIndexPage() {
           {[
             { key: "scheduled" as const, label: "Schedule", count: scheduledDemos.length },
             { key: "cancelled" as const, label: "Cancel", count: cancelledDemos.length },
-            { key: "completed" as const, label: "Conduct", count: completedDemos.length },
+            { key: "completed" as const, label: "Conducted", count: completedDemos.length },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -466,12 +471,14 @@ export function DemoIndexPage() {
                         )}
                       </td>
                       <td className="border border-slate-200/80 px-2 py-1.5">
-                        <a
-                          href={`/students/${demo.leadId}`}
-                          className="text-blue-600 hover:text-blue-700 hover:underline"
-                        >
-                          View Student
-                        </a>
+                        <DemoStatusActions
+                          demo={demo}
+                          onStatusChange={(status) => {
+                            setSelectedDemo(demo);
+                            setSelectedStatus(status);
+                            setStatusDialogOpen(true);
+                          }}
+                        />
                       </td>
                     </tr>
                   );
@@ -481,6 +488,43 @@ export function DemoIndexPage() {
           </div>
         )}
       </div>
+
+      {statusDialogOpen && selectedDemo && selectedStatus && (
+        <DemoStatusConfirmDialog
+          demo={selectedDemo}
+          newStatus={selectedStatus}
+          onConfirm={async () => {
+            try {
+              const res = await fetch("/api/demos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  leadId: selectedDemo.leadId,
+                  meetRowId: selectedDemo.meetRowId,
+                  newStatus: selectedStatus,
+                }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                throw new Error(data.error || "Failed to update demo status");
+              }
+              await refreshDemos({ force: true });
+            } catch (e) {
+              console.error("Failed to update demo status:", e);
+              alert(e instanceof Error ? e.message : "Failed to update demo status");
+            } finally {
+              setStatusDialogOpen(false);
+              setSelectedDemo(null);
+              setSelectedStatus(null);
+            }
+          }}
+          onCancel={() => {
+            setStatusDialogOpen(false);
+            setSelectedDemo(null);
+            setSelectedStatus(null);
+          }}
+        />
+      )}
     </div>
   );
 }

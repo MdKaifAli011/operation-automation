@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
 import type { DemoTableRowPersisted } from "@/lib/leadPipelineMetaTypes";
+import { mergePipelineMeta } from "@/lib/pipeline";
+import { sendLeadPipelineEmail } from "@/lib/leadPipelineEmailClient";
 
 export async function GET() {
   try {
@@ -69,6 +71,79 @@ export async function GET() {
     console.error("Error fetching demos:", error);
     return NextResponse.json(
       { error: "Failed to fetch demos" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    await connectDB();
+    const body = await request.json();
+    const { leadId, meetRowId, newStatus } = body;
+
+    if (!leadId || !meetRowId || !newStatus) {
+      return NextResponse.json(
+        { error: "Missing required fields: leadId, meetRowId, newStatus" },
+        { status: 400 }
+      );
+    }
+
+    const lead = await LeadModel.findById(leadId);
+    if (!lead) {
+      return NextResponse.json(
+        { error: "Lead not found" },
+        { status: 404 }
+      );
+    }
+
+    const meta = lead.pipelineMeta as { demo?: { rows?: DemoTableRowPersisted[] } } | undefined;
+    const rows = meta?.demo?.rows ?? [];
+    
+    const rowIndex = rows.findIndex((r) => String(r.meetRowId) === String(meetRowId));
+    if (rowIndex === -1) {
+      return NextResponse.json(
+        { error: "Demo row not found" },
+        { status: 404 }
+      );
+    }
+
+    // Update the demo status
+    const updatedRows = [...rows];
+    updatedRows[rowIndex] = { ...updatedRows[rowIndex], status: newStatus };
+
+    // Merge the updated demo rows
+    const updatedMeta = mergePipelineMeta(lead.pipelineMeta || {}, {
+      demo: { rows: updatedRows },
+    });
+
+    // Update the lead
+    lead.pipelineMeta = updatedMeta;
+    await lead.save();
+
+    // Send email notification based on status change
+    if (newStatus) {
+      try {
+        await sendLeadPipelineEmail(lead.id, {
+          templateKey: "demo_status_update",
+          meetRowId,
+          demoStatusEmail: {
+            status: newStatus,
+            notifyParent: true,
+            notifyFaculty: false,
+          },
+        });
+      } catch (emailError) {
+        console.error("Failed to send email:", emailError);
+        // Don't fail the request if email fails
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error updating demo status:", error);
+    return NextResponse.json(
+      { error: "Failed to update demo status" },
       { status: 500 }
     );
   }
