@@ -8,10 +8,10 @@ import { cn } from "@/lib/cn";
 import { AddAllLeadDialog } from "@/components/all-leads/AddAllLeadDialog";
 import { ImportAllLeadExcelControl, type ImportAllLeadExcelControlHandle } from "@/components/all-leads/ImportAllLeadExcelControl";
 import { ExportAllLeadsDialog } from "@/components/all-leads/ExportAllLeadsDialog";
+import { AllLeadActionsMenu } from "@/components/all-leads/AllLeadActionsMenu";
 import { useLeadSources } from "@/hooks/useLeadSources";
 import { rowToneBg, rowToneNameLinkClass } from "@/components/leads/row-styles";
 import { formatLeadPhone } from "@/lib/phone-display";
-import { downloadAllLeadCsvTemplateFile } from "@/lib/all-lead-csv";
 
 type AllLeadTab = "today" | "old";
 
@@ -368,29 +368,12 @@ export default function AllLeadsPage() {
             onImported={async () => {
               await refreshLeads({ force: true, showLoading: true });
             }}
-            showTriggerButton={true}
+            showTriggerButton={false}
           />
-          <button
-            type="button"
-            className={cn(
-              SX.leadBtnOutline,
-              "h-9 px-3 text-[13px] font-semibold",
-            )}
-            onClick={() => setExportDialogOpen(true)}
-          >
-            Export
-          </button>
-          <button
-            type="button"
-            className={cn(
-              SX.leadBtnOutline,
-              "h-9 px-3 text-[13px] font-semibold",
-            )}
-            onClick={() => downloadAllLeadCsvTemplateFile()}
-            title="Download CSV template"
-          >
-            Template
-          </button>
+          <AllLeadActionsMenu
+            onImport={() => importExcelRef.current?.open()}
+            onExportCsv={() => setExportDialogOpen(true)}
+          />
         </div>
       </header>
 
