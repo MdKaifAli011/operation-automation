@@ -44,6 +44,12 @@ const NAV_GROUPS: NavGroup[] = [
     sublabel: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
   },
   {
+    id: "all-leads",
+    label: "All Leads",
+    Icon: IconClipboard,
+    items: [{ href: "/all-leads", label: "All Leads", Icon: IconClipboard }],
+  },
+  {
     id: "demo",
     label: "Demo Index",
     Icon: IconCalendar,

@@ -2,16 +2,17 @@ import { format, isValid, parse } from "date-fns";
 import type { Lead, RowTone, SheetTabId } from "./types";
 import { formatTargetExams } from "./lead-display";
 
-/** Lowercase headers — export and import round-trip (case-insensitive on import). */
+/** Lowercase headers — export and import round-trip (case-insensitive on import). Order matches All Leads template + additional Lead Dashboard fields. */
 export const LEAD_CSV_EXPORT_HEADERS = [
+  "parent name",
+  "email",
+  "phone",
+  "class",
+  "country",
+  "course",
   "date",
   "student name",
-  "parent name",
   "data type",
-  "grade",
-  "target (exams)",
-  "country",
-  "phone",
   "status",
   "follow-up",
 ] as const;
@@ -25,6 +26,7 @@ export type LeadImportColumnKey =
   | "targetExams"
   | "country"
   | "phone"
+  | "email"
   | "rowTone"
   | "followUpDate"
   | "pipelineSteps"
@@ -63,6 +65,11 @@ const HEADER_ALIASES: [string, LeadImportColumnKey][] = [
   ["parent", "parentName"],
   ["guardian name", "parentName"],
   ["guardian", "parentName"],
+  ["email", "email"],
+  ["email id", "email"],
+  ["emailid", "email"],
+  ["email address", "email"],
+  ["mail", "email"],
   ["data type", "dataType"],
   ["datatype", "dataType"],
   ["data_type", "dataType"],
@@ -132,14 +139,15 @@ const HEADER_LOOKUP = (() => {
 
 function headerToKey(h: string): LeadImportColumnKey | null {
   const n = normalizeImportHeader(h);
+  if (n === "parent name") return "parentName";
+  if (n === "email") return "email";
+  if (n === "phone") return "phone";
+  if (n === "class") return "grade";
+  if (n === "country") return "country";
+  if (n === "course") return "targetExams";
   if (n === "date") return "date";
   if (n === "student name") return "studentName";
-  if (n === "parent name") return "parentName";
   if (n === "data type") return "dataType";
-  if (n === "grade") return "grade";
-  if (n === "target (exams)") return "targetExams";
-  if (n === "country") return "country";
-  if (n === "phone") return "phone";
   if (n === "status") return "rowTone";
   if (n === "follow-up") return "followUpDate";
   return null;
@@ -269,14 +277,15 @@ const ROW_TONE_EXPORT: Record<RowTone, string> = {
 
 export function leadToExportRow(lead: Lead): string[] {
   return [
+    lead.parentName || "",
+    lead.email || "",
+    lead.phone || "",
+    lead.grade || "",
+    lead.country || "",
+    formatTargetExams(lead.targetExams).replace(/^—$/, ""),
     lead.date,
     lead.studentName,
-    lead.parentName,
     lead.dataType,
-    lead.grade,
-    formatTargetExams(lead.targetExams).replace(/^—$/, ""),
-    lead.country,
-    lead.phone,
     ROW_TONE_EXPORT[lead.rowTone],
     lead.followUpDate ?? "",
   ];
@@ -408,7 +417,7 @@ export function parseLeadImportRows(
     issues.push({
       row: 1,
       message:
-        "No recognizable columns. Use headers like: date, student name, parent name, data type, grade, target (exams), country, phone, status, follow-up (any case).",
+        "No recognizable columns. Use headers like: parent name, email, phone, class, country, course, date, student name, data type, status, follow-up (any case).",
     });
     return { leads: [], issues };
   }
@@ -424,6 +433,7 @@ export function parseLeadImportRows(
     const dateParsed = dateRaw ? parseLeadDateValue(dateRaw) : null;
     const date = dateParsed ?? today;
     const parentName = cell(row, idx, "parentName").trim();
+    const email = cell(row, idx, "email").trim();
     const dataType = cell(row, idx, "dataType").trim() || "Organic";
     const grade = cell(row, idx, "grade").trim() || "12th";
     const targetExams = parseTargetExamsValue(cell(row, idx, "targetExams"));
@@ -440,6 +450,7 @@ export function parseLeadImportRows(
       followUpDate,
       studentName,
       parentName,
+      email,
       dataType,
       grade,
       targetExams,
