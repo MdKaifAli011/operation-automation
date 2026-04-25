@@ -143,7 +143,7 @@ export const SX = {
   leadSectionMeta: "max-w-xl text-[12px] leading-snug text-slate-500",
   leadGridFlush: "rounded-none border-t-0",
   leadPopover:
-    "absolute left-0 top-full z-50 mt-1.5 w-[280px] rounded-none border border-slate-200 bg-white p-3 text-slate-800 shadow-lg shadow-slate-900/10",
+    "absolute left-0 top-full z-[250] mt-1.5 w-[280px] rounded-none border border-slate-200 bg-white p-3 text-slate-800 shadow-lg shadow-slate-900/10",
   leadBtnGreen:
     "inline-flex h-9 items-center rounded-none border border-success bg-success px-3.5 text-[13px] font-medium text-white shadow-sm shadow-emerald-900/10 transition-colors hover:bg-[#27692a]",
   leadBtnOutline:
