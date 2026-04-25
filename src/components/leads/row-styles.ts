@@ -1,4 +1,4 @@
-import type { RowTone } from "@/lib/types";
+import type { Lead, RowTone } from "@/lib/types";
 
 /** Student name link color aligned to row status (reference UI). */
 export function rowToneNameLinkClass(tone: RowTone): string {
@@ -33,4 +33,12 @@ export function rowToneBg(tone: RowTone): string {
     default:
       return "bg-white";
   }
+}
+
+/** Returns orange background for leads with follow-up dates, otherwise uses rowToneBg. */
+export function rowToneBgWithFollowUp(lead: Lead): string {
+  if (lead.followUpDate?.trim()) {
+    return "bg-orange-50/90";
+  }
+  return rowToneBg(lead.rowTone);
 }

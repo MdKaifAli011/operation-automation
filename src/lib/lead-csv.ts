@@ -14,7 +14,6 @@ export const LEAD_CSV_EXPORT_HEADERS = [
   "student name",
   "data type",
   "status",
-  "follow-up",
 ] as const;
 
 export type LeadImportColumnKey =
@@ -287,7 +286,6 @@ export function leadToExportRow(lead: Lead): string[] {
     lead.studentName,
     lead.dataType,
     ROW_TONE_EXPORT[lead.rowTone],
-    lead.followUpDate ?? "",
   ];
 }
 

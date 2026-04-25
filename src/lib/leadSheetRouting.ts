@@ -30,7 +30,11 @@ export function isLeadInNewDailyView(lead: Lead): boolean {
   }
 }
 
-/** Ongoing Students tab: pipeline work — excludes untouched New intakes (see Today's Data). */
+/** Ongoing Students tab: pipeline work — excludes untouched New intakes (see Today's Data) unless they have a follow-up date. */
 export function isLeadInOngoingPipeline(lead: Lead): boolean {
+  // Include leads with follow-up dates even if they're in new/today state
+  if (lead.followUpDate?.trim()) {
+    return true;
+  }
   return lead.sheetTab === "ongoing" && lead.rowTone !== "new";
 }

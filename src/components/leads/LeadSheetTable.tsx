@@ -10,7 +10,7 @@ import { formatTargetExams } from "@/lib/lead-display";
 import { cn } from "@/lib/cn";
 import { SX } from "@/components/student/student-excel-ui";
 import { formatLeadPhone } from "@/lib/phone-display";
-import { rowToneBg, rowToneNameLinkClass } from "./row-styles";
+import { rowToneBg, rowToneBgWithFollowUp, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 import { InterestedCourseDialog } from "./InterestedCourseDialog";
 import {
@@ -341,7 +341,7 @@ export function LeadSheetTable({
         </thead>
         <tbody>
           {leads.map((lead, rowIndex) => {
-            const tone = rowToneBg(lead.rowTone);
+            const tone = variant === "standard" ? rowToneBgWithFollowUp(lead) : rowToneBg(lead.rowTone);
             const followUpRaw = lead.followUpDate?.trim();
             const showFollowUpCellDate = Boolean(
               followUpRaw &&

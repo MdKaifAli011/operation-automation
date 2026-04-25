@@ -916,7 +916,7 @@ export function LeadManagementPage() {
                 ) : (
                   <LeadSheetTable
                     variant="standard"
-                    showFollowUpColumn
+                    showFollowUpColumn={false}
                     followUpDateOnlyWhenDue
                     showPipelineColumn={false}
                     pickDataTypeOnClick
