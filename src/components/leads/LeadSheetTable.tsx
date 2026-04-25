@@ -424,27 +424,62 @@ export function LeadSheetTable({
                     </button>
                   )}
                 </DataCell>
-                <TextCell
-                  lead={lead}
-                  field="parentName"
-                  width={COL_WIDTHS.parentName}
-                  selected={
+                <td
+                  style={{
+                    width: COL_WIDTHS.parentName,
+                    minWidth: COL_WIDTHS.parentName,
+                  }}
+                  className={cn(
+                    "border border-slate-200/80 px-2 py-1.5",
                     selectedCell?.leadId === lead.id &&
-                    selectedCell.field === "parentName"
-                  }
-                  onSelect={() =>
+                      selectedCell.field === "parentName" &&
+                      !(
+                        activeEdit?.leadId === lead.id &&
+                        activeEdit.field === "parentName"
+                      ) &&
+                      "grid-cell-focus",
+                    tone,
+                  )}
+                  onClick={() =>
                     setSelectedCell({ leadId: lead.id, field: "parentName" })
                   }
-                  editing={
-                    activeEdit?.leadId === lead.id &&
-                    activeEdit.field === "parentName"
-                  }
-                  onEdit={() => startEdit(lead.id, "parentName")}
-                  onDraftPatch={onDraftPatch}
-                  onCancelEdit={() => setEditing(null)}
-                  tone={tone}
-                  sheetEditMode={sheetEditMode}
-                />
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    startEdit(lead.id, "parentName");
+                  }}
+                >
+                  {activeEdit?.leadId === lead.id &&
+                  activeEdit.field === "parentName" ? (
+                    <input
+                      className="w-full rounded-md border border-primary bg-white px-1 py-1"
+                      defaultValue={lead.parentName}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditing(null);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        onDraftPatch(lead.id, {
+                          parentName: e.target.value,
+                        });
+                        setEditing(null);
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <Link
+                      href={`/students/${lead.id}`}
+                      className={cn(
+                        "underline underline-offset-2",
+                        rowToneNameLinkClass(lead.rowTone),
+                      )}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {lead.parentName || "—"}
+                    </Link>
+                  )}
+                </td>
                 <td
                   style={{
                     width: COL_WIDTHS.studentName,

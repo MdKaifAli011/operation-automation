@@ -32,7 +32,7 @@ function parseCreateBody(body: unknown): Partial<Lead> | null {
         : typeof b.followUpDate === "string"
           ? b.followUpDate
           : null,
-    studentName: studentName || "Unknown",
+    studentName: studentName || "Add Student Name",
     parentName:
       typeof b.parentName === "string" ? b.parentName.trim() : "",
     dataType:

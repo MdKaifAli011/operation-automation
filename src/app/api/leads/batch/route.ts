@@ -88,7 +88,7 @@ function normalizeImportRow(
         ? row.date
         : new Date().toISOString().slice(0, 10),
     followUpDate,
-    studentName: studentName || "Unknown",
+    studentName: studentName || "Add Student Name",
     parentName:
       typeof row.parentName === "string" ? row.parentName.trim() : "",
     dataType: rawDataType || "Organic",

@@ -20,7 +20,7 @@ const AllLeadSchema = new Schema(
       default: () => new Date().toISOString().slice(0, 10),
     },
     followUpDate: { type: String, default: null },
-    studentName: { type: String, trim: true, default: "Unknown" },
+    studentName: { type: String, trim: true, default: "Add Student Name" },
     parentName: { type: String, default: "", trim: true },
     dataType: { type: String, trim: true, default: "Organic" },
     grade: { type: String, trim: true, default: "12th" },

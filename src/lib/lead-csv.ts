@@ -428,7 +428,7 @@ export function parseLeadImportRows(
     if (!row.some((c) => c.trim())) continue;
     const studentNameRaw = cell(row, idx, "studentName");
     const phoneRaw = cell(row, idx, "phone");
-    const studentName = studentNameRaw || "Unknown";
+    const studentName = studentNameRaw || "Add Student Name";
     const dateRaw = cell(row, idx, "date");
     const dateParsed = dateRaw ? parseLeadDateValue(dateRaw) : null;
     const date = dateParsed ?? today;

@@ -276,7 +276,7 @@ export function parseAllLeadImportRows(
     const targetExams = parseTargetExamsValue(cell(row, idx, "targetExams"));
     
     // Generate student name from parent name if not provided
-    const studentName = parentName || "Unknown";
+    const studentName = parentName || "Add Student Name";
     
     leads.push({
       date: today,
