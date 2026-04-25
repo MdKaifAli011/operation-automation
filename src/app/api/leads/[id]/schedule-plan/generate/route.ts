@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
@@ -6,30 +6,11 @@ import connectDB from "@/lib/mongodb";
 import LeadModel from "@/models/Lead";
 import { mergePipelineMeta } from "@/lib/pipeline";
 import { buildSchedulePlanPdfBytes } from "@/lib/schedulePlanPdf";
+import { generateUniqueFilename } from "@/lib/pdfFilenameUtils";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-function uploadsPathForSchedulePlan(publicUrl: string, leadId: string): string | null {
-  const prefix = `/uploads/schedule-plans/${leadId}/`;
-  if (!publicUrl.startsWith(prefix)) return null;
-  const rest = publicUrl.slice(prefix.length);
-  if (!rest || rest.includes("..") || rest.includes("/") || rest.includes("\\")) {
-    return null;
-  }
-  return path.join(process.cwd(), "public", "uploads", "schedule-plans", leadId, rest);
-}
-
-async function removeOldSchedulePlanFile(publicUrl: string, leadId: string) {
-  const full = uploadsPathForSchedulePlan(publicUrl, leadId);
-  if (!full) return;
-  try {
-    await unlink(full);
-  } catch {
-    /* ignore */
-  }
-}
 
 export async function POST(_req: Request, context: Ctx) {
   try {
@@ -110,9 +91,6 @@ export async function POST(_req: Request, context: Ctx) {
       logoPngBytes: logoPngBytes ? new Uint8Array(logoPngBytes) : null,
     });
 
-    const oldUrl = String(schedule.pdfUrl ?? "").trim();
-    if (oldUrl) await removeOldSchedulePlanFile(oldUrl, id);
-
     // Sanitize student name for filename
     const rawStudentName = String(lead.studentName ?? "Student").trim() || "Student";
     const safeStudentName = rawStudentName
@@ -120,9 +98,10 @@ export async function POST(_req: Request, context: Ctx) {
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .trim();
-    const safeName = `Weekly-session-plan-${safeStudentName}.pdf`;
+    const baseName = `Weekly-session-plan-${safeStudentName}`;
     const dir = path.join(process.cwd(), "public", "uploads", "schedule-plans", id);
     await mkdir(dir, { recursive: true });
+    const safeName = await generateUniqueFilename(dir, baseName, "pdf");
     const fullPath = path.join(dir, safeName);
     await writeFile(fullPath, Buffer.from(pdfBytes));
     const pdfUrl = `/uploads/schedule-plans/${id}/${safeName}`;

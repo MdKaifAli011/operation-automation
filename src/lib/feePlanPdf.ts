@@ -75,6 +75,37 @@ export async function buildFeePlanPdfBytes(input: {
     ? await pdf.embedPng(input.logoPngBytes)
     : null;
 
+  // Design System - Color Palette
+  const colors = {
+    // Primary brand colors
+    primary: rgb(0.094, 0.369, 0.69), // Professional blue #1860B0
+    primaryDark: rgb(0.047, 0.267, 0.549), // Darker blue #0C448C
+    primaryLight: rgb(0.906, 0.941, 0.969), // Light blue background #E7F0F7
+    
+    // Accent colors
+    accent: rgb(0.027, 0.604, 0.604), // Teal #079A9A
+    success: rgb(0.133, 0.545, 0.133), // Green #228B22
+    warning: rgb(0.855, 0.647, 0.125), // Gold #DAA520
+    
+    // Neutral colors
+    darkText: rgb(0.125, 0.145, 0.169), // #202535
+    mediumText: rgb(0.337, 0.396, 0.463), // #566576
+    lightText: rgb(0.533, 0.596, 0.663), // #8898A9
+    
+    // Background colors
+    bgPrimary: rgb(1, 1, 1),
+    bgSecondary: rgb(0.98, 0.988, 0.996), // #FAFCFE
+    bgTableHeader: rgb(0.094, 0.369, 0.69), // Match primary
+    bgTableRowEven: rgb(0.976, 0.988, 0.996), // #F9FCFE
+    bgTableRowOdd: rgb(1, 1, 1),
+    bgHighlight: rgb(0.945, 0.973, 0.996), // #F1F8FE
+    
+    // Border colors
+    borderLight: rgb(0.863, 0.902, 0.933), // #DCE6EE
+    borderMedium: rgb(0.722, 0.784, 0.843), // #B8C8D7
+    borderDark: rgb(0.094, 0.369, 0.69), // Match primary
+  };
+
   const left = 42;
   const right = 553;
   const contentWidth = right - left;
@@ -90,117 +121,158 @@ export async function buildFeePlanPdfBytes(input: {
     }
   };
 
-  const drawOptionTable = (title: string, rows: FeeOptionRow[]) => {
-    ensureSpace(40);
-    page.drawText(safeText(title), {
-      x: left,
-      y,
-      size: 12,
-      font: bold,
-      color: rgb(0.08, 0.12, 0.2),
-    });
-    // Keep a clear visual gap between option heading and table.
-    y -= 24;
-    ensureSpace(24);
+  const drawOptionTable = (title: string, rows: FeeOptionRow[], optionNum: number) => {
+    ensureSpace(100);
+    
+    // Option badge and title
+    const badgeColors = [
+      { bg: rgb(0.204, 0.596, 0.859), border: rgb(0.114, 0.506, 0.769) }, // Blue
+      { bg: rgb(0.235, 0.702, 0.443), border: rgb(0.145, 0.612, 0.353) }, // Green
+      { bg: rgb(0.573, 0.439, 0.859), border: rgb(0.483, 0.349, 0.769) }, // Purple
+    ];
+    
+    const badgeColor = badgeColors[optionNum - 1] || badgeColors[0];
+    
+    // Badge
     page.drawRectangle({
       x: left,
-      y: y - 5,
-      width: contentWidth,
+      y: y - 18,
+      width: 75,
       height: 22,
-      color: rgb(0.95, 0.97, 1),
-      borderWidth: 0.5,
-      borderColor: rgb(0.87, 0.89, 0.92),
+      color: badgeColor.bg,
     });
-    page.drawText("No.", {
-      x: left + 8,
-      y,
-      size: 10,
+    
+    const optionText = `OPTION ${optionNum}`;
+    const optionTextWidth = bold.widthOfTextAtSize(optionText, 9);
+    page.drawText(optionText, {
+      x: left + (75 - optionTextWidth) / 2,
+      y: y - 12,
+      size: 9,
       font: bold,
-      color: rgb(0.25, 0.3, 0.35),
+      color: rgb(1, 1, 1),
     });
-    page.drawText("Fee Description", {
-      x: left + 38,
-      y,
-      size: 10,
+    
+    // Title
+    page.drawText(safeText(title.replace(/^Option \d+ - /, "")), {
+      x: left + 85,
+      y: y - 12,
+      size: 11,
       font: bold,
-      color: rgb(0.25, 0.3, 0.35),
+      color: colors.darkText,
     });
-    page.drawText("GST (Tax)", {
-      x: left + 268,
-      y,
-      size: 10,
-      font: bold,
-      color: rgb(0.25, 0.3, 0.35),
+    
+    y -= 36;
+    ensureSpace(50);
+    
+    // Table header
+    page.drawRectangle({
+      x: left,
+      y: y - 20,
+      width: contentWidth,
+      height: 24,
+      color: colors.bgTableHeader,
     });
-    page.drawText("Total Amount (USD)", {
-      x: left + 338,
-      y,
-      size: 10,
-      font: bold,
-      color: rgb(0.25, 0.3, 0.35),
+    
+    // Column headers with better spacing
+    const headers = [
+      { text: "#", x: left + 15, align: "center" },
+      { text: "Description", x: left + 50, align: "left" },
+      { text: "GST", x: left + 295, align: "right" },
+      { text: "Amount (USD)", x: left + 395, align: "right" },
+      { text: "Due Date", x: right - 10, align: "right" },
+    ];
+    
+    headers.forEach(header => {
+      const textWidth = bold.widthOfTextAtSize(header.text, 9);
+      let xPos = header.x;
+      if (header.align === "center") xPos = header.x - textWidth / 2;
+      if (header.align === "right") xPos = header.x - textWidth;
+      
+      page.drawText(header.text, {
+        x: xPos,
+        y: y - 11,
+        size: 9,
+        font: bold,
+        color: rgb(1, 1, 1),
+      });
     });
-    const dueHead = "Due Date";
-    const dueHeadW = bold.widthOfTextAtSize(dueHead, 10);
-    page.drawText("Due Date", {
-      x: right - 8 - dueHeadW,
-      y,
-      size: 10,
-      font: bold,
-      color: rgb(0.25, 0.3, 0.35),
-    });
-    y -= 22;
-
+    
+    y -= 24;
+    
+    // Table rows
     for (const row of rows) {
-      ensureSpace(22);
+      ensureSpace(26);
+      
+      // Alternating row colors with subtle hover effect
+      const rowColor = row.no % 2 === 0 ? colors.bgTableRowEven : colors.bgTableRowOdd;
+      
       page.drawRectangle({
         x: left,
-        y: y - 4,
+        y: y - 22,
         width: contentWidth,
-        height: 20,
-        color: row.no % 2 === 0 ? rgb(0.992, 0.995, 1) : rgb(1, 1, 1),
+        height: 24,
+        color: rowColor,
         borderWidth: 0.5,
-        borderColor: rgb(0.87, 0.89, 0.92),
+        borderColor: colors.borderLight,
       });
-      page.drawText(String(row.no), {
-        x: left + 10,
-        y,
-        size: 10,
+      
+      // Row number (centered)
+      const noText = String(row.no);
+      const noTextWidth = regular.widthOfTextAtSize(noText, 9);
+      page.drawText(noText, {
+        x: left + 15 - noTextWidth / 2,
+        y: y - 12,
+        size: 9,
         font: regular,
-        color: rgb(0.12, 0.14, 0.17),
+        color: colors.mediumText,
       });
-      page.drawText(fitText(row.description, 46), {
-        x: left + 38,
-        y,
-        size: 10,
+      
+      // Description
+      page.drawText(fitText(row.description, 52), {
+        x: left + 50,
+        y: y - 12,
+        size: 9,
         font: regular,
-        color: rgb(0.12, 0.14, 0.17),
+        color: colors.darkText,
       });
-      page.drawText(safeText(row.gstText), {
-        x: left + 268,
-        y,
-        size: 10,
+      
+      // GST (right-aligned)
+      const gstText = safeText(row.gstText);
+      const gstTextWidth = regular.widthOfTextAtSize(gstText, 9);
+      page.drawText(gstText, {
+        x: left + 295 - gstTextWidth,
+        y: y - 12,
+        size: 9,
         font: regular,
-        color: rgb(0.12, 0.14, 0.17),
+        color: colors.mediumText,
       });
-      page.drawText(safeText(row.totalUsdText), {
-        x: left + 338,
-        y,
-        size: 10,
+      
+      // Total amount (right-aligned, bold)
+      const totalText = safeText(row.totalUsdText);
+      const totalTextWidth = bold.widthOfTextAtSize(totalText, 9);
+      page.drawText(totalText, {
+        x: left + 395 - totalTextWidth,
+        y: y - 12,
+        size: 9,
         font: bold,
-        color: rgb(0.06, 0.16, 0.34),
+        color: colors.primary,
       });
-      const dueText = fitText(row.dueDateText, 18);
-      const dueTextW = regular.widthOfTextAtSize(dueText, 10);
+      
+      // Due date (right-aligned)
+      const dueText = fitText(row.dueDateText, 20);
+      const dueTextWidth = regular.widthOfTextAtSize(dueText, 9);
       page.drawText(dueText, {
-        x: right - 8 - dueTextW,
-        y,
-        size: 10,
+        x: right - 10 - dueTextWidth,
+        y: y - 12,
+        size: 9,
         font: regular,
-        color: rgb(0.12, 0.14, 0.17),
+        color: colors.darkText,
       });
-      y -= 20;
+      
+      y -= 24;
     }
-    y -= 8;
+    
+    y -= 20;
   };
 
   page.drawRectangle({
@@ -295,10 +367,10 @@ export async function buildFeePlanPdfBytes(input: {
     rowY -= 22;
   }
 
-  const tableTop = rowY - 24;
+  const tableTop = rowY - 40;
   page.drawText("Payment schedule", {
     x: left,
-    y: tableTop + 18,
+    y: tableTop + 30,
     size: 12,
     font: bold,
     color: rgb(0.1, 0.12, 0.2),
@@ -312,9 +384,15 @@ export async function buildFeePlanPdfBytes(input: {
     borderWidth: 0.5,
     borderColor: rgb(0.87, 0.89, 0.92),
   });
-  page.drawText("#", { x: left + 10, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
-  page.drawText("Amount (INR)", { x: left + 60, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
-  page.drawText("Due date", { x: left + 300, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
+  // Center the # column
+  const hashHead = "#";
+  const hashHeadW = bold.widthOfTextAtSize(hashHead, 10);
+  page.drawText(hashHead, { x: left + 30 - hashHeadW / 2, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
+  page.drawText("Amount (INR)", { x: left + 70, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
+  // Right-align Due date column
+  const dueHead = "Due date";
+  const dueHeadW = bold.widthOfTextAtSize(dueHead, 10);
+  page.drawText(dueHead, { x: right - 8 - dueHeadW, y: tableTop - 2, size: 10, font: bold, color: rgb(0.23, 0.25, 0.3) });
 
   const lines =
     input.installments.length > 0
@@ -332,22 +410,28 @@ export async function buildFeePlanPdfBytes(input: {
       borderWidth: 0.5,
       borderColor: rgb(0.87, 0.89, 0.92),
     });
-    page.drawText(String(ln.no), {
-      x: left + 10,
+    // Center the # column
+    const noText = String(ln.no);
+    const noTextW = regular.widthOfTextAtSize(noText, 11);
+    page.drawText(noText, {
+      x: left + 30 - noTextW / 2,
       y,
       size: 11,
       font: regular,
       color: rgb(0.1, 0.12, 0.15),
     });
     page.drawText(fmtInr(ln.amountInr), {
-      x: left + 60,
+      x: left + 70,
       y,
       size: 11,
       font: bold,
       color: rgb(0.05, 0.15, 0.35),
     });
-    page.drawText(fmtDate(ln.dueDate), {
-      x: left + 300,
+    // Right-align Due date column
+    const dueText = fmtDate(ln.dueDate);
+    const dueTextW = regular.widthOfTextAtSize(dueText, 11);
+    page.drawText(dueText, {
+      x: right - 8 - dueTextW,
       y,
       size: 11,
       font: regular,
@@ -388,14 +472,14 @@ export async function buildFeePlanPdfBytes(input: {
     color: rgb(0.45, 0.48, 0.52),
   });
 
-  y = y - 22;
+  y = y - 30;
   if (y < 280) {
     page = pdf.addPage([pageW, pageH]);
     y = pageH - 54;
   }
-  drawOptionTable("Option 1 - Pay in USD (No GST)", input.option1Rows);
-  drawOptionTable("Option 2 - Indian NRE (No GST)", input.option2Rows);
-  drawOptionTable("Option 3 - Indian NRO (GST)", input.option3Rows);
+  drawOptionTable("Option 1 - Pay in USD (No GST)", input.option1Rows, 1);
+  drawOptionTable("Option 2 - Indian NRE (No GST)", input.option2Rows, 2);
+  drawOptionTable("Option 3 - Indian NRO (GST)", input.option3Rows, 3);
 
   return pdf.save();
 }

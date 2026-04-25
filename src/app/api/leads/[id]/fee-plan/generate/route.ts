@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import mongoose from "mongoose";
 import { format, parseISO } from "date-fns";
@@ -13,32 +13,13 @@ import {
 } from "@/lib/feeStepComputations";
 import { DEFAULT_INSTITUTE } from "@/lib/instituteProfileTypes";
 import { mergePipelineMeta } from "@/lib/pipeline";
+import { generateUniqueFilename } from "@/lib/pdfFilenameUtils";
 import InstituteProfileSettingsModel from "@/models/InstituteProfileSettings";
 import LeadModel from "@/models/Lead";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-function uploadsPathForFeePlan(publicUrl: string, leadId: string): string | null {
-  const prefix = `/uploads/fee-plans/${leadId}/`;
-  if (!publicUrl.startsWith(prefix)) return null;
-  const rest = publicUrl.slice(prefix.length);
-  if (!rest || rest.includes("..") || rest.includes("/") || rest.includes("\\")) {
-    return null;
-  }
-  return path.join(process.cwd(), "public", "uploads", "fee-plans", leadId, rest);
-}
-
-async function removeOldFeePlanFile(publicUrl: string, leadId: string) {
-  const full = uploadsPathForFeePlan(publicUrl, leadId);
-  if (!full) return;
-  try {
-    await unlink(full);
-  } catch {
-    /* ignore */
-  }
-}
 
 export async function POST(_req: Request, context: Ctx) {
   try {
@@ -165,12 +146,6 @@ export async function POST(_req: Request, context: Ctx) {
       logoPngBytes: logoPngBytes ? new Uint8Array(logoPngBytes) : null,
     });
 
-    const oldUrl =
-      typeof fees.feePlanPdfUrl === "string" ? fees.feePlanPdfUrl.trim() : "";
-    if (oldUrl) {
-      await removeOldFeePlanFile(oldUrl, id);
-    }
-
     // Sanitize student name for filename
     const rawStudentName = String(lead.studentName ?? "Student").trim() || "Student";
     const safeStudentName = rawStudentName
@@ -178,9 +153,10 @@ export async function POST(_req: Request, context: Ctx) {
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .trim();
-    const safeName = `Fee-plan-${safeStudentName}.pdf`;
+    const baseName = `Fee-plan-${safeStudentName}`;
     const dir = path.join(process.cwd(), "public", "uploads", "fee-plans", id);
     await mkdir(dir, { recursive: true });
+    const safeName = await generateUniqueFilename(dir, baseName, "pdf");
     const fullPath = path.join(dir, safeName);
     await writeFile(fullPath, Buffer.from(pdfBytes));
     const pdfUrl = `/uploads/fee-plans/${id}/${safeName}`;

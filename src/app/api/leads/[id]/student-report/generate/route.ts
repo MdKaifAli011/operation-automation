@@ -8,6 +8,7 @@ import LeadModel from "@/models/Lead";
 import { buildStudentReportPdfBytes } from "@/lib/studentReportPdf";
 import { computePipelineStepsFromMeta, mergePipelineMeta } from "@/lib/pipeline";
 import { serializeLead } from "@/lib/serializers";
+import { generateUniqueFilename } from "@/lib/pdfFilenameUtils";
 
 export const runtime = "nodejs";
 
@@ -168,9 +169,10 @@ export async function POST(req: Request, context: Ctx) {
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .trim();
-    const safeName = `Progress-report-${safeStudentName}.pdf`;
+    const baseName = `Progress-report-${safeStudentName}`;
     const dir = path.join(process.cwd(), "public", "uploads", "student-reports", id);
     await mkdir(dir, { recursive: true });
+    const safeName = await generateUniqueFilename(dir, baseName, "pdf");
     const fullPath = path.join(dir, safeName);
     await writeFile(fullPath, Buffer.from(pdfBytes));
 
