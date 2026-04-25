@@ -26,6 +26,9 @@ export function DemoStatusActions({ demo, onStatusChange }: Props) {
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
+      // Don't close if clicking inside the dropdown (even though it's portaled)
+      const dropdown = document.querySelector('[role="menu"]');
+      if (dropdown?.contains(e.target as Node)) return;
       if (wrapRef.current?.contains(e.target as Node)) return;
       setOpen(false);
       setPosition(null);
