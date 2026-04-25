@@ -11,6 +11,7 @@ const PAGE_H = 842;
 const MARGIN_X = 30;
 const BODY_W = PAGE_W - MARGIN_X * 2;
 const MARGIN_BOTTOM = 34;
+const SECTION_GAP = 24;
 
 function safe(input: string | undefined | null): string {
   return String(input ?? "")
@@ -63,9 +64,45 @@ export async function buildSchedulePlanPdfBytes(opts: {
 
   const ensureSpace = (need: number) => {
     if (y - need < MARGIN_BOTTOM) {
+      addFooter(page, pdf.getPageCount());
       page = pdf.addPage([PAGE_W, PAGE_H]);
       y = PAGE_H - 26;
     }
+  };
+
+  const addFooter = (currentPage: any, pageNum: number) => {
+    const footerY = 20;
+    
+    // Footer separator line
+    currentPage.drawLine({
+      start: { x: MARGIN_X, y: footerY + 8 },
+      end: { x: MARGIN_X + BODY_W, y: footerY + 8 },
+      thickness: 0.5,
+      color: rgb(0.75, 0.8, 0.87),
+    });
+    
+    // Footer text
+    currentPage.drawText(
+      "This weekly session plan is confidential and prepared exclusively for the mentioned student.",
+      {
+        x: MARGIN_X,
+        y: footerY,
+        size: 7,
+        font,
+        color: rgb(0.45, 0.5, 0.58),
+      }
+    );
+    
+    // Page number
+    const pageText = `Page ${pageNum}`;
+    const pageTextWidth = font.widthOfTextAtSize(pageText, 7);
+    currentPage.drawText(pageText, {
+      x: MARGIN_X + BODY_W - pageTextWidth,
+      y: footerY,
+      size: 7,
+      font,
+      color: rgb(0.45, 0.5, 0.58),
+    });
   };
 
   const drawWrapped = (
@@ -227,6 +264,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
     },
   );
   y -= 28;
+  y -= SECTION_GAP;
 
   drawSectionTitle("1. Programme Overview");
   drawTable({
@@ -241,6 +279,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
       ],
     ],
   });
+  y -= SECTION_GAP;
 
   drawSectionTitle("2. Weekly Session Structure");
   const weeklyRows = (opts.weeklyRows.length > 0 ? opts.weeklyRows : []).map((r) => [
@@ -260,6 +299,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
     drawWrapped("No weekly session rows configured.", MARGIN_X, BODY_W, 10, false, rgb(0.4, 0.45, 0.52));
     y -= 6;
   }
+  y -= SECTION_GAP;
 
   drawSectionTitle("3. Key Milestones & Examination Timelines");
   const milestoneRows = (opts.milestones.length > 0 ? opts.milestones : []).map((m, i) => [
@@ -278,6 +318,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
     drawWrapped("No milestones configured.", MARGIN_X, BODY_W, 10, false, rgb(0.4, 0.45, 0.52));
     y -= 6;
   }
+  y -= SECTION_GAP;
 
   drawSectionTitle("4. Study & Preparation Guidelines");
   ensureSpace(44);
@@ -323,6 +364,9 @@ export async function buildSchedulePlanPdfBytes(opts: {
     drawWrapped(line, MARGIN_X + 12, BODY_W - 12, 9.3);
     y -= 1;
   }
+
+  // Add footer to the last page
+  addFooter(page, pdf.getPageCount());
 
   return pdf.save();
 }
