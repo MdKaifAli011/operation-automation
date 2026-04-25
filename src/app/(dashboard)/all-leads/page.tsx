@@ -9,6 +9,8 @@ import { AddAllLeadDialog } from "@/components/all-leads/AddAllLeadDialog";
 import { ImportAllLeadExcelControl, type ImportAllLeadExcelControlHandle } from "@/components/all-leads/ImportAllLeadExcelControl";
 import { ExportAllLeadsDialog } from "@/components/all-leads/ExportAllLeadsDialog";
 import { AllLeadActionsMenu } from "@/components/all-leads/AllLeadActionsMenu";
+import { AllLeadRowActions } from "@/components/all-leads/AllLeadRowActions";
+import { AllLeadActionConfirmDialog } from "@/components/all-leads/AllLeadActionConfirmDialog";
 import { useLeadSources } from "@/hooks/useLeadSources";
 import { rowToneBg, rowToneNameLinkClass } from "@/components/leads/row-styles";
 import { formatLeadPhone } from "@/lib/phone-display";
@@ -110,6 +112,10 @@ export default function AllLeadsPage() {
   const [dateTo, setDateTo] = useState("");
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [actionDialogOpen, setActionDialogOpen] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<"course_brochure" | "bank_details" | "fee_details" | null>(null);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const importExcelRef = useRef<ImportAllLeadExcelControlHandle>(null);
@@ -534,7 +540,7 @@ export default function AllLeadsPage() {
                         <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
                         <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
                         <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
-                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Status</th>
+                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -573,8 +579,14 @@ export default function AllLeadsPage() {
                             <td style={{ width: 96, minWidth: 96 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-slate-600", tone)}>
                               {lead.country}
                             </td>
-                            <td style={{ width: 112, minWidth: 112 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-slate-600", tone)}>
-                              {lead.rowTone}
+                            <td style={{ width: 112, minWidth: 112 }} className={cn("border border-slate-200/80 px-2 py-1.5", tone)}>
+                              <AllLeadRowActions
+                                onAction={(action) => {
+                                  setSelectedLead(lead);
+                                  setSelectedAction(action);
+                                  setActionDialogOpen(true);
+                                }}
+                              />
                             </td>
                           </tr>
                         );
@@ -602,7 +614,7 @@ export default function AllLeadsPage() {
                         <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
                         <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
                         <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
-                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Status</th>
+                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -641,8 +653,14 @@ export default function AllLeadsPage() {
                             <td style={{ width: 96, minWidth: 96 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-slate-600", tone)}>
                               {lead.country}
                             </td>
-                            <td style={{ width: 112, minWidth: 112 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-slate-600", tone)}>
-                              {lead.rowTone}
+                            <td style={{ width: 112, minWidth: 112 }} className={cn("border border-slate-200/80 px-2 py-1.5", tone)}>
+                              <AllLeadRowActions
+                                onAction={(action) => {
+                                  setSelectedLead(lead);
+                                  setSelectedAction(action);
+                                  setActionDialogOpen(true);
+                                }}
+                              />
                             </td>
                           </tr>
                         );
@@ -670,6 +688,62 @@ export default function AllLeadsPage() {
         open={exportDialogOpen}
         onOpenChange={setExportDialogOpen}
       />
+
+      {actionDialogOpen && selectedLead && selectedAction && (
+        <AllLeadActionConfirmDialog
+          lead={selectedLead}
+          action={selectedAction}
+          loading={actionLoading}
+          onConfirm={async () => {
+            setActionLoading(true);
+            try {
+              // Determine email template key based on action
+              let templateKey: string;
+              switch (selectedAction) {
+                case "course_brochure":
+                  templateKey = "brochure_email";
+                  break;
+                case "bank_details":
+                  templateKey = "bank_details_email";
+                  break;
+                case "fee_details":
+                  templateKey = "fee_details_email";
+                  break;
+              }
+
+              const res = await fetch(`/api/leads/${encodeURIComponent(selectedLead.id)}/send-email`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  templateKey,
+                  brochureEmail: {
+                    selectionKeys: selectedLead.targetExams,
+                    includeStudentReportPdf: false,
+                  },
+                }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                throw new Error(data.error || "Failed to send email");
+              }
+              await refreshLeads({ force: true });
+              setActionDialogOpen(false);
+              setSelectedLead(null);
+              setSelectedAction(null);
+            } catch (e) {
+              console.error("Failed to send email:", e);
+              alert(e instanceof Error ? e.message : "Failed to send email");
+            } finally {
+              setActionLoading(false);
+            }
+          }}
+          onCancel={() => {
+            setActionDialogOpen(false);
+            setSelectedLead(null);
+            setSelectedAction(null);
+          }}
+        />
+      )}
     </div>
   );
 }
