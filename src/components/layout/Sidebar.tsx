@@ -137,7 +137,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "group/sidebar fixed left-0 top-0 z-40 flex h-full flex-col border-r border-slate-200/90 bg-white/95 shadow-[2px_0_12px_-4px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-[width] duration-200 ease-out",
+        "group/sidebar fixed left-0 top-0 z-[150] flex h-full flex-col border-r border-slate-200/90 bg-white/95 shadow-[2px_0_12px_-4px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-[width] duration-200 ease-out",
         "w-[var(--sidebar-collapsed)] hover:w-[var(--sidebar-expanded)] max-md:w-[var(--sidebar-collapsed)] max-md:hover:w-[var(--sidebar-collapsed)]",
       )}
       style={{ transitionProperty: "width" }}

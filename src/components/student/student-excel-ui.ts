@@ -113,7 +113,7 @@ export const SX = {
   /** Lead Management — light CRM shell */
   leadPageRoot: "mx-auto flex w-full max-w-[1600px] flex-col gap-5",
   leadWorkbook:
-    "overflow-hidden rounded-none border border-slate-200/80 bg-white shadow-sm shadow-slate-900/[0.03]",
+    "rounded-none border border-slate-200/80 bg-white shadow-sm shadow-slate-900/[0.03]",
   leadToolbar:
     "flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-slate-100 bg-white px-3 py-2.5 md:px-4",
   leadToolbarIconBtn:

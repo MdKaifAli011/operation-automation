@@ -1191,7 +1191,7 @@ function SheetTh({
       style={{ width: w, minWidth: w }}
       title={title}
       className={cn(
-        "sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm",
+        "sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm",
         className,
       )}
     >

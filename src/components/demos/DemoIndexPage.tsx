@@ -378,17 +378,17 @@ export function DemoIndexPage() {
             <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
               <thead className="text-[11px] font-semibold text-slate-600">
                 <tr>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-1 py-2.5 text-center backdrop-blur-sm" style={{ width: 52 }}>#</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 112 }}>Date</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>IST Time</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Student Time</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 168 }}>Student Name</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 120 }}>Subject</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 120 }}>Teacher</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Exam</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Status</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Class Link</th>
-                  <th className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Actions</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-1 py-2.5 text-center backdrop-blur-sm" style={{ width: 52 }}>#</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 112 }}>Date</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>IST Time</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Student Time</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 168 }}>Student Name</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 120 }}>Subject</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 120 }}>Teacher</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Exam</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Status</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 140 }}>Class Link</th>
+                  <th className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm" style={{ width: 100 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>

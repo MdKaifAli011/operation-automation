@@ -18,7 +18,6 @@ import {
   digitsOnly,
   normalizeDialCodeInput,
   optionForCountry,
-  validateNationalNumber,
 } from "@/lib/country-phone";
 import { useTargetExamOptions } from "@/hooks/useTargetExamOptions";
 import { formatLeadPhone } from "@/lib/phone-display";
@@ -203,15 +202,11 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   const [heroDraft, setHeroDraft] = useState<HeroEditDraft | null>(null);
   const [heroSaving, setHeroSaving] = useState(false);
   const [heroError, setHeroError] = useState<string | null>(null);
-  const [heroNationalBlurredOnce, setHeroNationalBlurredOnce] = useState(false);
-  const [heroNationalFocused, setHeroNationalFocused] = useState(false);
 
   useEffect(() => {
     setHeroEditing(false);
     setHeroDraft(null);
     setHeroError(null);
-    setHeroNationalBlurredOnce(false);
-    setHeroNationalFocused(false);
   }, [lead.id]);
 
   useEffect(() => {
@@ -251,26 +246,10 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
   }, [notes, lead.id, patchLead]);
   const [callOpen, setCallOpen] = useState(false);
 
-  const heroNationalDigits = useMemo(
-    () => (heroDraft ? digitsOnly(heroDraft.nationalNumber) : ""),
-    [heroDraft],
-  );
-
   const heroPhoneFieldError = useMemo(() => {
-    if (!heroDraft) return null;
-    if (heroNationalDigits.length > 0) {
-      return validateNationalNumber(heroDraft.country, heroNationalDigits);
-    }
-    if (heroNationalBlurredOnce && !heroNationalFocused) {
-      return "Enter the phone number.";
-    }
+    // Phone validation removed - allow any phone number
     return null;
-  }, [
-    heroDraft,
-    heroNationalDigits,
-    heroNationalBlurredOnce,
-    heroNationalFocused,
-  ]);
+  }, []);
 
   const cancelHeroEdit = useCallback(() => {
     setHeroEditing(false);
@@ -280,8 +259,6 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
 
   const beginHeroEdit = useCallback(() => {
     setHeroError(null);
-    setHeroNationalBlurredOnce(false);
-    setHeroNationalFocused(false);
     const country = LEAD_COUNTRY_OPTIONS.some((c) => c.value === lead.country)
       ? lead.country
       : LEAD_COUNTRY_OPTIONS[0]!.value;
@@ -312,12 +289,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
       return;
     }
     const national = digitsOnly(heroDraft.nationalNumber);
-    const phoneErr = validateNationalNumber(heroDraft.country, national);
-    if (phoneErr) {
-      setHeroNationalBlurredOnce(true);
-      setHeroError(phoneErr);
-      return;
-    }
+    // Phone validation removed - allow any phone number
     if (heroDraft.targetExams.length === 0) {
       setHeroError("Select at least one target exam.");
       return;
@@ -353,7 +325,7 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
     } finally {
       setHeroSaving(false);
     }
-  }, [heroDraft, leadSources, patchLead]);
+  }, [heroDraft, leadSources, patchLead, leadRef]);
 
   const heroPhoneFeedbackId = `${heroFormId}-phone-feedback`;
   const heroPhoneInvalid = Boolean(heroPhoneFieldError);
@@ -569,14 +541,6 @@ export function StudentDetailPage({ lead: initialLead }: Props) {
                             ...heroDraft,
                             nationalNumber: digitsOnly(e.target.value),
                           });
-                        }}
-                        onFocus={() => {
-                          setHeroError(null);
-                          setHeroNationalFocused(true);
-                        }}
-                        onBlur={() => {
-                          setHeroNationalFocused(false);
-                          setHeroNationalBlurredOnce(true);
                         }}
                         placeholder={heroNationalHint}
                         inputMode="numeric"

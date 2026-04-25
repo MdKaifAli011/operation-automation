@@ -111,6 +111,10 @@ export function LeadManagementPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
+  const [notInterestedMonthFilter, setNotInterestedMonthFilter] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [convertedNameSearch, setConvertedNameSearch] = useState("");
   const importExcelRef = useRef<ImportExcelControlHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -348,6 +352,21 @@ export function LeadManagementPage() {
     [filtered],
   );
 
+  /** Not interested tab: filtered by selected month/year. */
+  const notInterestedLeadsFiltered = useMemo(() => {
+    let list = notInterestedLeads;
+    // Month/year filter
+    if (notInterestedMonthFilter) {
+      const [year, month] = notInterestedMonthFilter.split("-").map(Number);
+      list = list.filter((l) => {
+        const d = new Date(l.date);
+        if (Number.isNaN(d.getTime())) return false;
+        return d.getFullYear() === year && d.getMonth() + 1 === month;
+      });
+    }
+    return list;
+  }, [notInterestedLeads, notInterestedMonthFilter]);
+
   /** Converted · full pipeline (before month filter). */
   const convertedLeadsFullPipeline = useMemo(
     () =>
@@ -393,12 +412,11 @@ export function LeadManagementPage() {
   );
 
   const counts = useMemo(() => {
-    const newDaily = leads.filter(isLeadInNewDailyView).length;
     const ongoingInterestedOnly = leads.filter(
       (l) => isLeadInOngoingPipeline(l) && l.rowTone === "interested",
     ).length;
-    /** Ongoing tab: New & Daily + Interested pipeline only. */
-    const ongoing = newDaily + ongoingInterestedOnly;
+    /** Ongoing tab: Interested pipeline only (excludes New & Daily). */
+    const ongoing = ongoingInterestedOnly;
     const today = new Date().toISOString().split("T")[0];
     const followup = leads.filter((l) => l.followUpDate && l.followUpDate > today).length;
     const notInterested = leads.filter(
@@ -477,13 +495,12 @@ export function LeadManagementPage() {
 
   const tabCounts = useMemo(
     () => ({
-      ongoing: newAndDailyLeads.length + ongoingInterestedLeads.length,
+      ongoing: ongoingInterestedLeads.length,
       not_interested: notInterestedLeads.length,
       followup: followUpLeads.length,
       converted: convertedLeadsThisMonth.length,
     }),
     [
-      newAndDailyLeads.length,
       ongoingInterestedLeads.length,
       notInterestedLeads.length,
       followUpLeads.length,
@@ -692,6 +709,7 @@ export function LeadManagementPage() {
       </div>
 
       <div className={SX.leadWorkbook}>
+        {/* Toolbar - not sticky */}
         <div ref={toolbarRef} className={SX.leadToolbar}>
           <div className="relative">
             <button
@@ -890,7 +908,8 @@ export function LeadManagementPage() {
           </div>
         </div>
 
-        <div className={SX.leadTabBar}>
+        {/* Sticky tabs only */}
+        <div className={cn(SX.leadTabBar, "sticky top-[72px] z-[100] bg-white border-b border-slate-200 shadow-sm")}>
           {tabBtn("ongoing", "Ongoing")}
           {tabBtn("not_interested", "Not Interested")}
           {tabBtn("followup", "Follow-ups")}
@@ -1013,26 +1032,51 @@ export function LeadManagementPage() {
               aria-label="Not interested leads"
             >
               <div className={SX.leadSectionHead}>
-                <h2 className={cn(SX.leadSectionTitle, "text-rose-700")}>Not interested</h2>
+                <div className="flex min-w-0 flex-wrap items-baseline gap-2 gap-y-1">
+                  <h2 className={cn(SX.leadSectionTitle, "text-rose-700")}>Not interested</h2>
+                </div>
                 <p className={SX.leadSectionMeta}>
-                  {notInterestedLeads.length} closed lead
-                  {notInterestedLeads.length === 1 ? "" : "s"} · archived from
+                  {notInterestedLeadsFiltered.length} closed lead
+                  {notInterestedLeadsFiltered.length === 1 ? "" : "s"} · filtered by month · archived from
                   active work · Status shows pipeline progress at close
                 </p>
               </div>
-              <LeadSheetTable
-                showFollowUpColumn={false}
-                showPipelineColumn
-                showNotInterestedRemark
-                interestedLabel="Mark as Interested"
-                actionMenuHideOptions={{ notInterested: true }}
-                className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
-                leads={applyDraftToList(notInterestedLeads)}
-                sheetEditMode={sheetEditMode}
-                onDraftPatch={onDraftPatch}
-                onUpdateLead={onUpdateLead}
-                visibleIds={notInterestedLeads.map((l) => l.id)}
-              />
+
+              {/* Month/year filter */}
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-b border-slate-200/90 bg-white px-1 pb-3">
+                <label className="flex items-center gap-1.5 text-[12px] text-slate-700">
+                  <span className="font-medium">Month:</span>
+                  <input
+                    type="month"
+                    className={cn(SX.input, "w-40 text-[12px]")}
+                    value={notInterestedMonthFilter}
+                    onChange={(e) => setNotInterestedMonthFilter(e.target.value)}
+                  />
+                </label>
+              </div>
+
+              {notInterestedLeadsFiltered.length === 0 ? (
+                <div
+                  className="mt-3 border border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-600"
+                  role="status"
+                >
+                  No not interested leads in the selected month. Try a different month.
+                </div>
+              ) : (
+                <LeadSheetTable
+                  showFollowUpColumn={false}
+                  showPipelineColumn
+                  showNotInterestedRemark
+                  interestedLabel="Mark as Interested"
+                  actionMenuHideOptions={{ notInterested: true }}
+                  className={cn(SX.leadGridFlush, "border-x-0", "mt-3")}
+                  leads={applyDraftToList(notInterestedLeadsFiltered)}
+                  sheetEditMode={sheetEditMode}
+                  onDraftPatch={onDraftPatch}
+                  onUpdateLead={onUpdateLead}
+                  visibleIds={notInterestedLeadsFiltered.map((l) => l.id)}
+                />
+              )}
             </section>
           )}
 

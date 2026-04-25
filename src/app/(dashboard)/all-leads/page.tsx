@@ -544,14 +544,14 @@ export default function AllLeadsPage() {
                   <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
                     <thead className="text-[11px] font-semibold text-slate-600">
                       <tr>
-                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Date</th>
-                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Parent name</th>
-                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Student name</th>
-                        <th style={{ width: 124, minWidth: 124 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Phone</th>
-                        <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
-                        <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
-                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
-                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Status</th>
+                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Date</th>
+                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Parent name</th>
+                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Student name</th>
+                        <th style={{ width: 124, minWidth: 124 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Phone</th>
+                        <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
+                        <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
+                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
+                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -612,14 +612,14 @@ export default function AllLeadsPage() {
                   <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
                     <thead className="text-[11px] font-semibold text-slate-600">
                       <tr>
-                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Date</th>
-                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Parent name</th>
-                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Student name</th>
-                        <th style={{ width: 124, minWidth: 124 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Phone</th>
-                        <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
-                        <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
-                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
-                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-20 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Status</th>
+                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Date</th>
+                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Parent name</th>
+                        <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Student name</th>
+                        <th style={{ width: 124, minWidth: 124 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Phone</th>
+                        <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
+                        <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
+                        <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
+                        <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Status</th>
                       </tr>
                     </thead>
                     <tbody>
