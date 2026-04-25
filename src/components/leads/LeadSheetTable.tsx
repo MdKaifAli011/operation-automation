@@ -304,9 +304,9 @@ export function LeadSheetTable({
                 <span className="font-normal text-slate-500">#</span>
               )}
             </SheetTh>
-            <SheetTh w={COL_WIDTHS.date}>Date</SheetTh>
-            <SheetTh w={COL_WIDTHS.studentName}>Student name</SheetTh>
             <SheetTh w={COL_WIDTHS.parentName}>Parent name</SheetTh>
+            <SheetTh w={COL_WIDTHS.studentName}>Student name</SheetTh>
+            <SheetTh w={COL_WIDTHS.date}>Date</SheetTh>
             <SheetTh w={COL_WIDTHS.grade}>Grade</SheetTh>
             <SheetTh w={COL_WIDTHS.targetExams}>{targetExamsColumnTitle}</SheetTh>
             <SheetTh w={COL_WIDTHS.country}>Country</SheetTh>
@@ -377,53 +377,27 @@ export function LeadSheetTable({
                     <span>{rowIndex + 1}</span>
                   )}
                 </td>
-                <DataCell
-                  width={COL_WIDTHS.date}
+                <TextCell
+                  lead={lead}
+                  field="parentName"
+                  width={COL_WIDTHS.parentName}
                   selected={
                     selectedCell?.leadId === lead.id &&
-                    selectedCell.field === "date"
+                    selectedCell.field === "parentName"
                   }
                   onSelect={() =>
-                    setSelectedCell({ leadId: lead.id, field: "date" })
+                    setSelectedCell({ leadId: lead.id, field: "parentName" })
                   }
                   editing={
                     activeEdit?.leadId === lead.id &&
-                    activeEdit.field === "date"
+                    activeEdit.field === "parentName"
                   }
-                  onEditStart={() => startEdit(lead.id, "date")}
+                  onEdit={() => startEdit(lead.id, "parentName")}
+                  onDraftPatch={onDraftPatch}
+                  onCancelEdit={() => setEditing(null)}
+                  tone={tone}
                   sheetEditMode={sheetEditMode}
-                >
-                  {activeEdit?.leadId === lead.id &&
-                  activeEdit.field === "date" ? (
-                    <input
-                      type="date"
-                      className="w-full rounded-md border border-primary bg-white px-1 py-1 text-[13px]"
-                      defaultValue={lead.date}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
-                          e.preventDefault();
-                          setEditing(null);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        onDraftPatch(lead.id, { date: e.target.value });
-                        setEditing(null);
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="w-full text-left"
-                      onClick={() =>
-                        setSelectedCell({ leadId: lead.id, field: "date" })
-                      }
-                      onDoubleClick={() => startEdit(lead.id, "date")}
-                    >
-                      {format(parseISO(lead.date), "dd/MM/yyyy")}
-                    </button>
-                  )}
-                </DataCell>
+                />
                 <td
                   style={{
                     width: COL_WIDTHS.studentName,
@@ -480,27 +454,53 @@ export function LeadSheetTable({
                     </Link>
                   )}
                 </td>
-                <TextCell
-                  lead={lead}
-                  field="parentName"
-                  width={COL_WIDTHS.parentName}
+                <DataCell
+                  width={COL_WIDTHS.date}
                   selected={
                     selectedCell?.leadId === lead.id &&
-                    selectedCell.field === "parentName"
+                    selectedCell.field === "date"
                   }
                   onSelect={() =>
-                    setSelectedCell({ leadId: lead.id, field: "parentName" })
+                    setSelectedCell({ leadId: lead.id, field: "date" })
                   }
                   editing={
                     activeEdit?.leadId === lead.id &&
-                    activeEdit.field === "parentName"
+                    activeEdit.field === "date"
                   }
-                  onEdit={() => startEdit(lead.id, "parentName")}
-                  onDraftPatch={onDraftPatch}
-                  onCancelEdit={() => setEditing(null)}
-                  tone={tone}
+                  onEditStart={() => startEdit(lead.id, "date")}
                   sheetEditMode={sheetEditMode}
-                />
+                >
+                  {activeEdit?.leadId === lead.id &&
+                  activeEdit.field === "date" ? (
+                    <input
+                      type="date"
+                      className="w-full rounded-md border border-primary bg-white px-1 py-1 text-[13px]"
+                      defaultValue={lead.date}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditing(null);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        onDraftPatch(lead.id, { date: e.target.value });
+                        setEditing(null);
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="w-full text-left"
+                      onClick={() =>
+                        setSelectedCell({ leadId: lead.id, field: "date" })
+                      }
+                      onDoubleClick={() => startEdit(lead.id, "date")}
+                    >
+                      {format(parseISO(lead.date), "dd/MM/yyyy")}
+                    </button>
+                  )}
+                </DataCell>
                 <TextCell
                   lead={lead}
                   field="grade"
