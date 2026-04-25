@@ -137,7 +137,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
       thickness: 1,
       color: rgb(0.78, 0.82, 0.87),
     });
-    y -= 12;
+    y -= 6;
   };
 
   const drawTable = (optsTable: {
@@ -292,7 +292,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
   if (weeklyRows.length > 0) {
     drawTable({
       headers: ["Session", "Day", "Time (IST)", "Subject", "Session Duration"],
-      colWidths: [95, 110, 130, 140, BODY_W - 95 - 110 - 130 - 140],
+      colWidths: [80, 90, 110, 120, BODY_W - 80 - 90 - 110 - 120],
       rows: weeklyRows,
     });
   } else {
@@ -321,6 +321,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
   y -= SECTION_GAP;
 
   drawSectionTitle("4. Study & Preparation Guidelines");
+  y -= SECTION_GAP;
   ensureSpace(44);
   page.drawText("General Guidelines", {
     x: MARGIN_X,
@@ -342,7 +343,7 @@ export async function buildSchedulePlanPdfBytes(opts: {
     drawWrapped(line, MARGIN_X + 12, BODY_W - 12, 9.3);
     y -= 1;
   }
-  y -= 8;
+  y -= SECTION_GAP;
   ensureSpace(24);
   page.drawText("Mock Tests & Revision Schedule", {
     x: MARGIN_X,
