@@ -15,16 +15,18 @@ type PostBody = {
 };
 
 /**
- * POST: Add email jobs to queue for batch processing
- * Instead of sending emails directly, adds them to the queue
- * The worker processes them one by one
+ * POST: Add email jobs to queue only (no immediate processing)
+ * Jobs will be processed by the background worker
  */
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as PostBody;
     const { leadIds, actions, brochureEmail } = body;
 
+    console.log("Batch send request body:", { leadIds, actions, brochureEmail });
+
     if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      console.error("Invalid leadIds:", leadIds);
       return NextResponse.json(
         { error: "leadIds is required and must be a non-empty array" },
         { status: 400 }
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
     }
 
     if (!Array.isArray(actions) || actions.length === 0) {
+      console.error("Invalid actions:", actions);
       return NextResponse.json(
         { error: "actions is required and must be a non-empty array" },
         { status: 400 }
@@ -40,12 +43,24 @@ export async function POST(req: Request) {
 
     await connectDB();
 
+    // Map UI action names to template keys
+    const actionToTemplateKey: Record<string, string> = {
+      "brochure": "brochure",
+      "bank_details": "bank_details",
+      "fee_details": "fees",
+    };
+    
+    const mappedActions = actions.map(a => actionToTemplateKey[a] || a);
+
     // Fetch all leads
+    console.log("Fetching leads with IDs:", leadIds);
     const leads = await AllLeadModel.find({ _id: { $in: leadIds } });
+    console.log("Found leads:", leads.length);
     
     if (leads.length === 0) {
+      console.error("No leads found for IDs:", leadIds);
       return NextResponse.json(
-        { error: "No leads found" },
+        { error: "No leads found. Please check if the selected leads exist." },
         { status: 404 }
       );
     }
@@ -56,6 +71,7 @@ export async function POST(req: Request) {
       const to = lead.email || lead.parentEmail;
       if (!to) {
         // Mark lead as failed if no email
+        console.log("Marking lead as failed (no email):", lead._id.toString(), lead.studentName);
         await AllLeadModel.updateOne(
           { _id: lead._id },
           { emailStatus: "failed", emailError: "No email address" }
@@ -63,16 +79,18 @@ export async function POST(req: Request) {
         continue;
       }
 
+      console.log("Adding job to queue for lead:", lead._id.toString(), lead.studentName, "email:", to);
       const job = await EmailQueueModel.create({
         leadId: lead._id.toString(),
         leadName: lead.studentName,
         toEmail: to,
-        actions,
+        actions: mappedActions,
         brochureEmail,
         status: "pending",
       });
 
       // Mark lead as queued
+      console.log("Marking lead as queued:", lead._id.toString(), lead.studentName);
       await AllLeadModel.updateOne(
         { _id: lead._id },
         { emailStatus: "queued" }
@@ -80,6 +98,9 @@ export async function POST(req: Request) {
 
       jobs.push(job._id.toString());
     }
+
+    console.log("Added", jobs.length, "jobs to queue for", jobs.length, "leads");
+    console.log("Only these", jobs.length, "leads will have their status updated");
 
     return NextResponse.json({
       success: true,

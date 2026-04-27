@@ -102,6 +102,9 @@ function serializeAllLead(doc: AllLeadDocument) {
     rowTone: doc.rowTone,
     sheetTab: doc.sheetTab,
     notInterestedRemark: doc.notInterestedRemark,
+    emailStatus: doc.emailStatus || "not_sent",
+    emailSentAt: doc.emailSentAt || null,
+    emailError: doc.emailError || null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };

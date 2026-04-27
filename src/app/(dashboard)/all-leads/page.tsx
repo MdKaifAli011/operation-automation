@@ -926,17 +926,36 @@ export default function AllLeadsPage() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-              throw new Error(data.error || "Failed to send emails");
+              throw new Error(data.error || "Failed to queue emails");
             }
             
-            // Show success message
-            const successCount = data.results?.filter((r: { success: boolean }) => r.success).length || 0;
-            alert(`Successfully sent emails to ${successCount} lead(s).`);
-            
-            await refreshLeads({ force: true });
+            // Close modal immediately
             setSendModalOpen(false);
-            // Clear selection after sending
             setSelectedLeadIds((prev) => ({ ...prev, [mainTab]: new Set() }));
+            
+            // Show message that emails are being processed
+            alert(`${data.queued} email(s) queued for sending. Status will update in the table.`);
+            
+            // Refresh leads to show queued status
+            await refreshLeads({ force: true });
+            
+            // Trigger the queue worker to start processing
+            fetch("/api/email-queue/process", { method: "POST" }).catch(console.error);
+            
+            // Poll for status updates every 3 seconds for 30 seconds
+            let pollCount = 0;
+            const pollInterval = setInterval(async () => {
+              pollCount++;
+              if (pollCount >= 10) {
+                clearInterval(pollInterval);
+                return;
+              }
+              await refreshLeads({ force: true });
+              // Trigger worker again if there might be more jobs
+              if (pollCount < 5) {
+                fetch("/api/email-queue/process", { method: "POST" }).catch(console.error);
+              }
+            }, 3000);
           } catch (e) {
             console.error("Failed to send emails:", e);
             alert(e instanceof Error ? e.message : "Failed to send emails");
