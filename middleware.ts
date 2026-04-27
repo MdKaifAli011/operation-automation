@@ -16,9 +16,18 @@ export function middleware(request: NextRequest) {
   const authToken = request.cookies.get("auth-token")?.value;
 
   if (!authToken) {
-    // Redirect to login page if not authenticated
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    // Check if it's an API route
+    if (pathname.startsWith("/api")) {
+      // Return 401 Unauthorized for API routes
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    } else {
+      // Redirect to login page for page routes
+      const loginUrl = new URL("/login", request.url);
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
   // Allow authenticated requests
