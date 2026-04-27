@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
+// Force dynamic rendering to ensure middleware runs on every request
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
