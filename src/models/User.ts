@@ -69,9 +69,6 @@ const userSchema = new Schema<IUser>(
   }
 );
 
-// Index for email lookup
-userSchema.index({ email: 1 });
-
 // Virtual for checking if account is locked
 userSchema.virtual("isLocked").get(function() {
   return !!(this.lockUntil && this.lockUntil > new Date());

@@ -25,6 +25,21 @@ export async function validateSessionToken(token: string): Promise<AuthUser | nu
       return null;
     }
     
+    // Handle env-based admin login
+    if (userId === "env-admin") {
+      const envEmail = process.env.ADMIN_EMAIL || process.env.INITIAL_ADMIN_EMAIL;
+      const envName = process.env.ADMIN_NAME || "Administrator";
+      if (envEmail) {
+        return {
+          id: "env-admin",
+          email: envEmail,
+          name: envName,
+          role: "admin"
+        };
+      }
+      return null;
+    }
+    
     // Connect to database if needed
     if (mongoose.connection.readyState !== 1) {
       await mongoose.connect(process.env.MONGODB_URI!);

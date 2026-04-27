@@ -694,33 +694,36 @@ export default function AllLeadsPage() {
           lead={selectedLead}
           action={selectedAction}
           loading={actionLoading}
-          onConfirm={async () => {
+          onConfirm={async (selectedBrochures?: string[]) => {
             setActionLoading(true);
             try {
               // Determine email template key based on action
               let templateKey: string;
               switch (selectedAction) {
                 case "course_brochure":
-                  templateKey = "brochure_email";
+                  templateKey = "brochure";
                   break;
                 case "bank_details":
-                  templateKey = "bank_details_email";
+                  templateKey = "bank_details";
                   break;
                 case "fee_details":
-                  templateKey = "fee_details_email";
+                  templateKey = "fees";
                   break;
               }
 
-              const res = await fetch(`/api/leads/${encodeURIComponent(selectedLead.id)}/send-email`, {
+              const body: Record<string, unknown> = { templateKey };
+              
+              if (selectedAction === "course_brochure" && selectedBrochures) {
+                body.brochureEmail = {
+                  selectionKeys: selectedBrochures,
+                  includeStudentReportPdf: false,
+                };
+              }
+
+              const res = await fetch(`/api/all-leads/${encodeURIComponent(selectedLead.id)}/send-email`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  templateKey,
-                  brochureEmail: {
-                    selectionKeys: selectedLead.targetExams,
-                    includeStudentReportPdf: false,
-                  },
-                }),
+                body: JSON.stringify(body),
               });
               const data = await res.json().catch(() => ({}));
               if (!res.ok) {

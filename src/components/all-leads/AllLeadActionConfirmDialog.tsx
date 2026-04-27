@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 type ActionType = "course_brochure" | "bank_details" | "fee_details";
 
 type Lead = {
@@ -13,11 +15,13 @@ type Props = {
   lead: Lead;
   action: ActionType;
   loading?: boolean;
-  onConfirm: () => void;
+  onConfirm: (selectedBrochures?: string[]) => void;
   onCancel: () => void;
 };
 
 export function AllLeadActionConfirmDialog({ lead, action, loading = false, onConfirm, onCancel }: Props) {
+  const [selectedBrochures, setSelectedBrochures] = useState<string[]>(lead.targetExams);
+
   const getActionTitle = (act: ActionType) => {
     switch (act) {
       case "course_brochure":
@@ -32,7 +36,7 @@ export function AllLeadActionConfirmDialog({ lead, action, loading = false, onCo
   const getActionMessage = (act: ActionType) => {
     switch (act) {
       case "course_brochure":
-        return `Send the course brochure for ${lead.targetExams.join(", ")} to ${lead.studentName}.`;
+        return `Select the course brochures to send to ${lead.studentName}.`;
       case "bank_details":
         return `Send the bank details for payment to ${lead.studentName}.`;
       case "fee_details":
@@ -48,6 +52,22 @@ export function AllLeadActionConfirmDialog({ lead, action, loading = false, onCo
         return <BankDetailsIcon />;
       case "fee_details":
         return <FeeDetailsIcon />;
+    }
+  };
+
+  const toggleBrochure = (exam: string) => {
+    setSelectedBrochures((prev) =>
+      prev.includes(exam)
+        ? prev.filter((e) => e !== exam)
+        : [...prev, exam]
+    );
+  };
+
+  const handleConfirm = () => {
+    if (action === "course_brochure") {
+      onConfirm(selectedBrochures);
+    } else {
+      onConfirm();
     }
   };
 
@@ -80,6 +100,29 @@ export function AllLeadActionConfirmDialog({ lead, action, loading = false, onCo
           </div>
         </div>
 
+        {action === "course_brochure" && (
+          <div className="mb-4">
+            <p className="text-sm font-medium text-slate-700 mb-2">Select Brochures:</p>
+            <div className="space-y-2">
+              {lead.targetExams.map((exam) => (
+                <label
+                  key={exam}
+                  className="flex items-center gap-2.5 p-2.5 border border-slate-200 rounded-none bg-white hover:bg-slate-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedBrochures.includes(exam)}
+                    onChange={() => toggleBrochure(exam)}
+                    disabled={loading}
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm text-slate-700">{exam}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <p className="text-sm text-slate-600 mb-6">
           {getActionMessage(action)}
         </p>
@@ -95,8 +138,8 @@ export function AllLeadActionConfirmDialog({ lead, action, loading = false, onCo
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            disabled={loading}
+            onClick={handleConfirm}
+            disabled={loading || (action === "course_brochure" && selectedBrochures.length === 0)}
             className="h-9 px-4 text-[13px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {loading ? (

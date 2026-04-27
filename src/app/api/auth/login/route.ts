@@ -50,7 +50,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate email domain
+    // Check against env credentials first (for admin login without database)
+    const envEmail = process.env.ADMIN_EMAIL || process.env.INITIAL_ADMIN_EMAIL;
+    const envPassword = process.env.ADMIN_PASSWORD || process.env.INITIAL_ADMIN_PASSWORD;
+    const envName = process.env.ADMIN_NAME || "Administrator";
+
+    if (envEmail && envPassword && email.toLowerCase() === envEmail.toLowerCase() && password === envPassword) {
+      // Create session token for env-based admin
+      const sessionToken = Buffer.from(`env-admin:${Date.now()}`).toString('base64');
+      
+      const response = NextResponse.json({
+        success: true,
+        user: {
+          id: "env-admin",
+          email: envEmail,
+          name: envName,
+          role: "admin"
+        }
+      });
+
+      response.cookies.set("auth-token", sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 24 * 60 * 60 // 24 hours
+      });
+
+      return response;
+    }
+
+    // Validate email domain for database users
     if (!email.endsWith("@testprepkart.com")) {
       return NextResponse.json(
         { error: "Only testprepkart.com email addresses are allowed" },
@@ -76,7 +105,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Connect to database
+    // Connect to database for regular user login
     if (mongoose.connection.readyState !== 1) {
       await mongoose.connect(process.env.MONGODB_URI!);
     }
