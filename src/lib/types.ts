@@ -74,6 +74,12 @@ export type Lead = {
   callHistory?: CallHistoryEntry[];
   /** Optional remark when the lead was marked not interested. */
   notInterestedRemark?: string | null;
+  /** Email sending status */
+  emailStatus?: "not_sent" | "queued" | "sent" | "failed";
+  /** Timestamp when email was last sent */
+  emailSentAt?: string | null;
+  /** Error message if email failed */
+  emailError?: string | null;
 };
 
 export type FacultyAssignment = {

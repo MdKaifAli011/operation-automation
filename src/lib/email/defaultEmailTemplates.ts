@@ -9,6 +9,8 @@ export type DefaultTemplateSeed = {
   sortOrder: number;
 };
 
+const EMAIL_LOGO_URL = "https://testprepkart.com/self-study/logo.png";
+
 function emailShell(opts: {
   preHeader: string;
   badge: string;
@@ -22,7 +24,7 @@ function emailShell(opts: {
         <tr>
           <td valign="middle" style="padding-right:20px;">
             <div style="display:inline-block;background:#ffffff;border-radius:8px;padding:7px 16px;border:1px solid #e2e8f0;">
-              <img src="{{logoUrl}}" alt="Logo" style="height:28px;width:auto;display:block;" />
+              <img src="${EMAIL_LOGO_URL}" alt="Logo" style="height:28px;width:auto;display:block;" />
             </div>
           </td>
           <td valign="middle" align="right">
@@ -41,7 +43,7 @@ ${opts.body}
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
         <tr>
           <td valign="top" style="padding:0 20px 16px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
-            <div style="display:inline-block;background:#ffffff;border-radius:8px;padding:5px 12px;margin-bottom:8px;border:1px solid #e2e8f0;"><img src="{{logoUrl}}" alt="Logo" style="height:22px;width:auto;display:block;" /></div>
+            <div style="display:inline-block;background:#ffffff;border-radius:8px;padding:5px 12px;margin-bottom:8px;border:1px solid #e2e8f0;"><img src="${EMAIL_LOGO_URL}" alt="Logo" style="height:22px;width:auto;display:block;" /></div>
             <div style="font-size:11px;color:#64748b;line-height:1.6;">Empowering students to achieve<br/>their medical aspirations.</div>
           </td>
           <td valign="top" align="right" style="padding:0 0 16px;border-bottom:1px solid rgba(255,255,255,0.08);">
@@ -55,13 +57,14 @@ ${opts.body}
         </tr>
         <tr>
           <td valign="middle" style="padding-top:14px;font-size:11px;color:#475569;">
-            <span style="vertical-align:middle;">© 2025</span>
-            <img src="{{logoUrl}}" alt="Logo" style="height:13px;width:auto;display:inline-block;vertical-align:middle;margin:0 7px;" />
+            <span style="vertical-align:middle;"> 2025</span>
+            <img src="${EMAIL_LOGO_URL}" alt="Logo" style="height:13px;width:auto;display:inline-block;vertical-align:middle;margin:0 7px;" />
             <span style="vertical-align:middle;">All rights reserved.</span>
           </td>
           <td valign="middle" align="right" style="padding-top:14px;">
-            <a href="#" style="font-size:11px;color:#64748b;text-decoration:none;margin-right:16px;">Privacy Policy</a>
-            <a href="#" style="font-size:11px;color:#64748b;text-decoration:none;">Unsubscribe</a>
+            <div style="font-size:10px;color:#64748b;">
+              <a href="#" style="color:#64748b;text-decoration:none;">Unsubscribe</a>
+            </div>
           </td>
         </tr>
       </table>
@@ -263,6 +266,7 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultTemplateSeed[] = [
   <p style="font-size:13.5px;color:#7f1d1d;line-height:1.75;margin:0 0 10px;">To avoid an additional 18% GST, we strongly recommend paying via <strong>NRE Account, Wire Transfer,</strong> or remittance platforms such as <strong>Remitly or Wise.</strong></p>
   <p style="font-size:13.5px;color:#7f1d1d;line-height:1.75;margin:0;">Payments made through an <strong>NRO account</strong> attract an additional 18% tax as per Indian regulations. Please plan accordingly.</p>
 </div>
+{{feeBankDetailsHtml}}
 <p style="margin:24px 0 0;font-size:14px;color:#475569;line-height:1.8;">Should you have any questions about the fee structure, payment plans, or any other aspect of the programme, please reach out — we are always happy to help.</p>
 <div style="margin-top:14px;">
   <div style="font-size:13.5px;color:#64748b;"><strong style="display:block;font-size:14px;color:#0f2a4a;">Warm regards,</strong>Enrolments Team</div>

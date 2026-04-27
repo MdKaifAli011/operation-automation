@@ -47,6 +47,23 @@ const AllLeadSchema = new Schema(
       trim: true,
       maxlength: 2000,
     },
+    /** Email sending status */
+    emailStatus: {
+      type: String,
+      enum: ["not_sent", "queued", "sent", "failed"],
+      default: "not_sent",
+    },
+    /** Timestamp when email was last sent */
+    emailSentAt: {
+      type: Date,
+      default: null,
+    },
+    /** Error message if email failed */
+    emailError: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   { timestamps: true },
 );

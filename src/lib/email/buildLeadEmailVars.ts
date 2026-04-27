@@ -61,7 +61,7 @@ function escapeAttr(s: string): string {
 }
 
 const EMAIL_LOGO_URL =
-  "https://testprepkart.com/self-study/_next/image?url=%2Fself-study%2Flogo.png&w=640&q=75";
+  "https://testprepkart.com/self-study/logo.png";
 
 export function buildLeadPipelineBaseVars(lead: LeanLead): LeadPipelineBaseVars {
   const targetExams = Array.isArray(lead.targetExams)

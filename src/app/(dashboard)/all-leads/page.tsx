@@ -11,6 +11,7 @@ import { ExportAllLeadsDialog } from "@/components/all-leads/ExportAllLeadsDialo
 import { AllLeadActionsMenu } from "@/components/all-leads/AllLeadActionsMenu";
 import { AllLeadRowActions } from "@/components/all-leads/AllLeadRowActions";
 import { AllLeadActionConfirmDialog } from "@/components/all-leads/AllLeadActionConfirmDialog";
+import { SendActionModal } from "@/components/all-leads/SendActionModal";
 import { useLeadSources } from "@/hooks/useLeadSources";
 import { rowToneBg, rowToneNameLinkClass } from "@/components/leads/row-styles";
 import { formatLeadPhone } from "@/lib/phone-display";
@@ -117,9 +118,45 @@ export default function AllLeadsPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<{ today: Set<string>; old: Set<string> }>({
+    today: new Set(),
+    old: new Set(),
+  });
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [sendLoading, setSendLoading] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const importExcelRef = useRef<ImportAllLeadExcelControlHandle>(null);
   const leadSources = useLeadSources();
+
+  const handleSelectAll = (tab: AllLeadTab, leads: Lead[], checked: boolean) => {
+    setSelectedLeadIds((prev) => ({
+      ...prev,
+      [tab]: checked ? new Set(leads.map((lead) => lead.id)) : new Set(),
+    }));
+  };
+
+  const handleSelectRow = (tab: AllLeadTab, leadId: string, checked: boolean) => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev[tab]);
+      if (checked) {
+        next.add(leadId);
+      } else {
+        next.delete(leadId);
+      }
+      return {
+        ...prev,
+        [tab]: next,
+      };
+    });
+  };
+
+  const isAllSelected = (tab: AllLeadTab, leads: Lead[]) => {
+    return leads.length > 0 && leads.every((lead) => selectedLeadIds[tab].has(lead.id));
+  };
+
+  const isIndeterminate = (tab: AllLeadTab, leads: Lead[]) => {
+    return selectedLeadIds[tab].size > 0 && !isAllSelected(tab, leads);
+  };
 
   const setLeadsAndCache = useCallback((next: Lead[]) => {
     writeAllLeadsCache(next);
@@ -215,20 +252,8 @@ export default function AllLeadsPage() {
       });
     }
     
-    if (mainTab === "today") {
-      list = list.filter((l) => l.date === today);
-    } else {
-      // Old Lead tab - apply date range filter
-      if (dateFrom) {
-        list = list.filter((l) => l.date >= dateFrom);
-      }
-      if (dateTo) {
-        list = list.filter((l) => l.date <= dateTo);
-      }
-    }
-    
     return sortLeads(list, sortKey, sortDir);
-  }, [leads, search, mainTab, dateFrom, dateTo, sortKey, sortDir, today]);
+  }, [leads, search, sortKey, sortDir]);
 
   const todayLeads = useMemo(
     () => filtered.filter((l) => l.date === today),
@@ -236,8 +261,18 @@ export default function AllLeadsPage() {
   );
 
   const oldLeads = useMemo(
-    () => filtered.filter((l) => l.date !== today),
-    [filtered, today],
+    () => {
+      let list = filtered.filter((l) => l.date !== today);
+      // Apply date range filter for old leads
+      if (dateFrom) {
+        list = list.filter((l) => l.date >= dateFrom);
+      }
+      if (dateTo) {
+        list = list.filter((l) => l.date <= dateTo);
+      }
+      return list;
+    },
+    [filtered, today, dateFrom, dateTo],
   );
 
   const tabCounts = useMemo(
@@ -516,6 +551,24 @@ export default function AllLeadsPage() {
               {sortDir === "asc" ? "↑" : "↓"}
             </button>
           </div>
+
+          {/* Send Button (appears when rows are selected) - Right side */}
+          {selectedLeadIds[mainTab].size > 0 && (
+            <button
+              type="button"
+              className={cn(
+                "h-9 px-4 text-[13px] font-medium transition-colors",
+                "border border-blue-600 bg-blue-600 text-white shadow-sm",
+                "hover:bg-blue-700 hover:border-blue-700",
+                "focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600/20",
+              )}
+              onClick={() => {
+                setSendModalOpen(true);
+              }}
+            >
+              Send ({selectedLeadIds[mainTab].size})
+            </button>
+          )}
         </div>
 
         <div className={SX.leadTabBar}>
@@ -533,6 +586,19 @@ export default function AllLeadsPage() {
                   <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
                     <thead className="text-[11px] font-semibold text-slate-600">
                       <tr>
+                        <th style={{ width: 48, minWidth: 48 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-center backdrop-blur-sm">
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected("today", todayLeads)}
+                            ref={(el) => {
+                              if (el) {
+                                el.indeterminate = isIndeterminate("today", todayLeads);
+                              }
+                            }}
+                            onChange={(e) => handleSelectAll("today", todayLeads, e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 cursor-pointer"
+                          />
+                        </th>
                         <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Date</th>
                         <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Parent name</th>
                         <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Student name</th>
@@ -540,6 +606,7 @@ export default function AllLeadsPage() {
                         <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
                         <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
                         <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
+                        <th style={{ width: 100, minWidth: 100 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email Status</th>
                         <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Action</th>
                       </tr>
                     </thead>
@@ -554,6 +621,14 @@ export default function AllLeadsPage() {
                               tone,
                             )}
                           >
+                            <td style={{ width: 48, minWidth: 48 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-center", tone)}>
+                              <input
+                                type="checkbox"
+                                checked={selectedLeadIds["today"].has(lead.id)}
+                                onChange={(e) => handleSelectRow("today", lead.id, e.target.checked)}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 cursor-pointer"
+                              />
+                            </td>
                             <td style={{ width: 96, minWidth: 96 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-xs tabular-nums text-slate-600", tone)}>
                               {format(parseISO(lead.date), "dd/MM/yyyy")}
                             </td>
@@ -578,6 +653,32 @@ export default function AllLeadsPage() {
                             </td>
                             <td style={{ width: 96, minWidth: 96 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-slate-600", tone)}>
                               {lead.country}
+                            </td>
+                            <td style={{ width: 100, minWidth: 100 }} className={cn("border border-slate-200/80 px-2 py-1.5", tone)}>
+                              {lead.emailStatus === "sent" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                                  Sent
+                                </span>
+                              )}
+                              {lead.emailStatus === "queued" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                  Queued
+                                </span>
+                              )}
+                              {lead.emailStatus === "failed" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                                  Failed
+                                </span>
+                              )}
+                              {lead.emailStatus === "not_sent" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                  Not Sent
+                                </span>
+                              )}
                             </td>
                             <td style={{ width: 112, minWidth: 112 }} className={cn("border border-slate-200/80 px-2 py-1.5", tone)}>
                               <AllLeadRowActions
@@ -607,6 +708,19 @@ export default function AllLeadsPage() {
                   <table className="w-max min-w-full border-collapse text-[13px] antialiased" style={{ tableLayout: "fixed" }}>
                     <thead className="text-[11px] font-semibold text-slate-600">
                       <tr>
+                        <th style={{ width: 48, minWidth: 48 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-center backdrop-blur-sm">
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected("old", oldLeads)}
+                            ref={(el) => {
+                              if (el) {
+                                el.indeterminate = isIndeterminate("old", oldLeads);
+                              }
+                            }}
+                            onChange={(e) => handleSelectAll("old", oldLeads, e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 cursor-pointer"
+                          />
+                        </th>
                         <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Date</th>
                         <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Parent name</th>
                         <th style={{ width: 168, minWidth: 168 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Student name</th>
@@ -614,6 +728,7 @@ export default function AllLeadsPage() {
                         <th style={{ width: 176, minWidth: 176 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email</th>
                         <th style={{ width: 140, minWidth: 140 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Target Exams</th>
                         <th style={{ width: 96, minWidth: 96 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Country</th>
+                        <th style={{ width: 100, minWidth: 100 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Email Status</th>
                         <th style={{ width: 112, minWidth: 112 }} className="sticky top-0 z-10 border border-slate-200/90 bg-slate-50/98 px-2 py-2.5 text-left backdrop-blur-sm">Action</th>
                       </tr>
                     </thead>
@@ -628,6 +743,14 @@ export default function AllLeadsPage() {
                               tone,
                             )}
                           >
+                            <td style={{ width: 48, minWidth: 48 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-center", tone)}>
+                              <input
+                                type="checkbox"
+                                checked={selectedLeadIds["old"].has(lead.id)}
+                                onChange={(e) => handleSelectRow("old", lead.id, e.target.checked)}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 cursor-pointer"
+                              />
+                            </td>
                             <td style={{ width: 96, minWidth: 96 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-xs tabular-nums text-slate-600", tone)}>
                               {format(parseISO(lead.date), "dd/MM/yyyy")}
                             </td>
@@ -652,6 +775,32 @@ export default function AllLeadsPage() {
                             </td>
                             <td style={{ width: 96, minWidth: 96 }} className={cn("border border-slate-200/80 px-2 py-1.5 text-slate-600", tone)}>
                               {lead.country}
+                            </td>
+                            <td style={{ width: 100, minWidth: 100 }} className={cn("border border-slate-200/80 px-2 py-1.5", tone)}>
+                              {lead.emailStatus === "sent" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                                  Sent
+                                </span>
+                              )}
+                              {lead.emailStatus === "queued" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                  Queued
+                                </span>
+                              )}
+                              {lead.emailStatus === "failed" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                                  Failed
+                                </span>
+                              )}
+                              {lead.emailStatus === "not_sent" && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                  Not Sent
+                                </span>
+                              )}
                             </td>
                             <td style={{ width: 112, minWidth: 112 }} className={cn("border border-slate-200/80 px-2 py-1.5", tone)}>
                               <AllLeadRowActions
@@ -747,6 +896,55 @@ export default function AllLeadsPage() {
           }}
         />
       )}
+
+      <SendActionModal
+        isOpen={sendModalOpen}
+        selectedCount={selectedLeadIds[mainTab].size}
+        targetExams={Array.from(new Set(mainTab === "today" ? todayLeads.flatMap(l => l.targetExams) : oldLeads.flatMap(l => l.targetExams)))}
+        loading={sendLoading}
+        onClose={() => setSendModalOpen(false)}
+        onConfirm={async (actions, selectedBrochures) => {
+          setSendLoading(true);
+          try {
+            const leadIds = Array.from(selectedLeadIds[mainTab]);
+            const body: Record<string, unknown> = {
+              leadIds,
+              actions,
+            };
+            
+            if (actions.includes("brochure") && selectedBrochures) {
+              body.brochureEmail = {
+                selectionKeys: selectedBrochures,
+                includeStudentReportPdf: false,
+              };
+            }
+
+            const res = await fetch("/api/all-leads/batch-send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              throw new Error(data.error || "Failed to send emails");
+            }
+            
+            // Show success message
+            const successCount = data.results?.filter((r: { success: boolean }) => r.success).length || 0;
+            alert(`Successfully sent emails to ${successCount} lead(s).`);
+            
+            await refreshLeads({ force: true });
+            setSendModalOpen(false);
+            // Clear selection after sending
+            setSelectedLeadIds((prev) => ({ ...prev, [mainTab]: new Set() }));
+          } catch (e) {
+            console.error("Failed to send emails:", e);
+            alert(e instanceof Error ? e.message : "Failed to send emails");
+          } finally {
+            setSendLoading(false);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -3,12 +3,15 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import AllLeadModel from "@/models/AllLead";
 import EmailTemplateModel from "@/models/EmailTemplate";
+import ExamBrochureTemplateModel from "@/models/ExamBrochureTemplate";
 import { ensureDefaultTemplates } from "@/lib/email/ensureDefaultTemplates";
 import { renderTemplate } from "@/lib/email/renderTemplate";
 import { sendMail } from "@/lib/email/sendMail";
 import { buildBrochureBundleEmailVars } from "@/lib/email/buildBrochureBundleEmailVars";
 import {
   ensureBrochureBundleHtmlInRenderedHtml,
+  ensureFeeDetailsInRenderedHtml,
+  ensureFeeBankDetailsInRenderedHtml,
 } from "@/lib/email/templateRenderedEnsures";
 import { getEnrollmentTeamBccEmails } from "@/lib/email/enrollmentRecipients";
 import { normalizeMailRecipients } from "@/lib/email/mailRecipients";
@@ -16,6 +19,9 @@ import {
   isEmailTemplateKey,
   type EmailTemplateKey,
 } from "@/lib/email/templateKeys";
+import { brochureItemsFromDoc } from "@/lib/examBrochureTemplates";
+import { buildFeeDetailsHtmlForLead } from "@/lib/email/buildFeeDetailsForEmail";
+import { mergeFeeEmailVarsWithBankDetails } from "@/lib/email/feeBankDetailsForEmail";
 
 export const runtime = "nodejs";
 
@@ -61,6 +67,9 @@ export async function POST(
       return NextResponse.json({ error: "AllLead not found." }, { status: 404 });
     }
 
+    // Fetch exam brochure templates for brochure resolution
+    const brochureDocs = await ExamBrochureTemplateModel.find({}).lean();
+
     const tmpl = await EmailTemplateModel.findOne({ key: templateKey });
     if (!tmpl) {
       return NextResponse.json(
@@ -97,12 +106,47 @@ export async function POST(
         );
       }
       const sel = body.brochureEmail.selectionKeys;
-      const keys = Array.isArray(sel) ? sel.map((k) => String(k ?? "").trim()).filter(Boolean) : [];
+      const examNames = Array.isArray(sel) ? sel.map((k) => String(k ?? "").trim()).filter(Boolean) : [];
       const includePdf = body.brochureEmail.includeStudentReportPdf === true;
 
-      if (keys.length === 0 && !includePdf) {
+      if (examNames.length === 0 && !includePdf) {
         return NextResponse.json(
           { error: "Select at least one brochure or include student report PDF." },
+          { status: 400 },
+        );
+      }
+
+      // Build composite keys from exam names
+      const compositeKeys: string[] = [];
+      const leadExams = Array.isArray(allLead.targetExams) ? allLead.targetExams : [];
+      
+      for (const examName of examNames) {
+        // Find matching exam in lead's target exams
+        const matchingExam = leadExams.find(
+          (e: string) => e.toLowerCase() === examName.toLowerCase()
+        );
+        
+        if (!matchingExam) {
+          continue; // Skip if exam not in lead's target exams
+        }
+
+        // Find brochure items for this exam
+        for (const doc of brochureDocs) {
+          const docExam = typeof doc.exam === "string" ? doc.exam.trim() : "";
+          if (docExam.toLowerCase() !== matchingExam.toLowerCase()) continue;
+          
+          for (const b of brochureItemsFromDoc(doc)) {
+            const composite = `${matchingExam}-${b.key}`;
+            if (!compositeKeys.includes(composite)) {
+              compositeKeys.push(composite);
+            }
+          }
+        }
+      }
+
+      if (compositeKeys.length === 0 && !includePdf) {
+        return NextResponse.json(
+          { error: "No valid brochures found for selected exams." },
           { status: 400 },
         );
       }
@@ -119,7 +163,7 @@ export async function POST(
             phone: allLead.phone,
           } as { studentName: string; parentName: string; email: string; targetExams: string[]; grade: string; country: string; phone: string },
           {
-            selectionKeys: keys,
+            selectionKeys: compositeKeys,
             includeStudentReportPdf: includePdf,
           },
         );
@@ -143,9 +187,15 @@ export async function POST(
     }
 
     if (templateKey === "fees" || templateKey === "bank_details") {
-      // For AllLead records, we don't have pipelineMeta, so skip the complex merge
-      // The email template itself should contain the fee/bank details
-      // vars already contains basic student info
+      // Build fee details HTML based on grade and target exams
+      const feeDetailsHtml = await buildFeeDetailsHtmlForLead({
+        targetExams: allLead.targetExams,
+        grade: allLead.grade,
+      });
+      vars.feeSummaryHtml = feeDetailsHtml;
+      
+      // Merge bank details
+      vars = await mergeFeeEmailVarsWithBankDetails(allLead, vars);
     }
 
     const subject = renderTemplate(String(tmpl.subject), vars);
@@ -170,6 +220,39 @@ export async function POST(
           String(tmpl.bodyHtml),
           htmlTeam,
           varsTeam.brochureBundleHtml ?? "",
+        );
+        const subjectTeam = renderTemplate(String(tmpl.subject), varsTeam);
+        await sendMail({ to: bcc, subject: subjectTeam, html: htmlTeam });
+      }
+    } else if (templateKey === "fees" || templateKey === "bank_details") {
+      html = ensureFeeDetailsInRenderedHtml(
+        String(tmpl.bodyHtml),
+        html,
+        vars.feeSummaryHtml ?? "",
+      );
+      html = ensureFeeBankDetailsInRenderedHtml(
+        String(tmpl.bodyHtml),
+        html,
+        vars.feeBankDetailsHtml ?? "",
+      );
+      const bccList = getEnrollmentTeamBccEmails();
+      const { to: toNorm, bcc } = normalizeMailRecipients(to, undefined, bccList);
+      await sendMail({ to: toNorm, subject, html });
+      if (bcc) {
+        const varsTeam: Record<string, string> = {
+          ...vars,
+          recipientGreeting: "Enrollment Team",
+        };
+        let htmlTeam = renderTemplate(String(tmpl.bodyHtml), varsTeam);
+        htmlTeam = ensureFeeDetailsInRenderedHtml(
+          String(tmpl.bodyHtml),
+          htmlTeam,
+          varsTeam.feeSummaryHtml ?? "",
+        );
+        htmlTeam = ensureFeeBankDetailsInRenderedHtml(
+          String(tmpl.bodyHtml),
+          htmlTeam,
+          varsTeam.feeBankDetailsHtml ?? "",
         );
         const subjectTeam = renderTemplate(String(tmpl.subject), varsTeam);
         await sendMail({ to: bcc, subject: subjectTeam, html: htmlTeam });

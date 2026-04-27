@@ -294,6 +294,9 @@ export function parseAllLeadImportRows(
       rowTone: "new",
       sheetTab: "today",
       notInterestedRemark: null,
+      emailStatus: "not_sent",
+      emailSentAt: null,
+      emailError: null,
     });
   }
   if (leads.length === 0 && issues.length === 0) {
