@@ -143,6 +143,36 @@ export const ImportExcelControl = forwardRef<
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
+  // Listen for import-excel-file event from UploadedExcelModal
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ fileUrl: string; fileName: string }>;
+      const { fileUrl, fileName } = ce.detail;
+
+      // Fetch the file from the URL and create a File object
+      fetch(fileUrl)
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Failed to fetch file");
+          const blob = await res.blob();
+          const file = new File([blob], fileName, { type: blob.type });
+
+          // Open dialog and set the file
+          resetForm();
+          setPickedFile(file);
+          setPickedName(fileName);
+          setOpen(true);
+        })
+        .catch((err) => {
+          console.error("Failed to load uploaded file:", err);
+          setMessage("Failed to load uploaded file. Please try again.");
+          setOpen(true);
+        });
+    };
+
+    window.addEventListener("import-excel-file", handler);
+    return () => window.removeEventListener("import-excel-file", handler);
+  }, [resetForm]);
+
   const openDialog = useCallback(() => {
     resetForm();
     setOpen(true);

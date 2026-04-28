@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { Lead } from "@/models/Lead";
+import Lead from "@/models/Lead";
 import { mergePipelineMeta } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Prepare lead data with defaults
-    const leadData: any = {
+    const leadData: Record<string, unknown> = {
       studentName: body.studentName?.trim() || "Add Student Name",
       parentName: body.parentName?.trim() || "",
       phone: body.phone?.trim() || "",
