@@ -22,44 +22,10 @@ const ALLOWED_TYPES = [
 const ALLOWED_EXTENSIONS = [".xls", ".xlsx", ".csv"];
 
 /**
- * Check if upload is authorized
- * - If UPLOAD_EXCEL_API_KEY is set, requires valid x-api-key header
- * - If not set, allows public access (open endpoint)
- */
-function authorize(req: NextRequest): { authorized: boolean; message?: string } {
-  const expectedKey = process.env.UPLOAD_EXCEL_API_KEY?.trim();
-
-  // If no API key is configured, allow public access
-  if (!expectedKey) {
-    return { authorized: true };
-  }
-
-  const apiKey = req.headers.get("x-api-key")?.trim();
-
-  if (!apiKey) {
-    return {
-      authorized: false,
-      message: "API key required. Provide x-api-key header.",
-    };
-  }
-
-  if (apiKey !== expectedKey) {
-    return {
-      authorized: false,
-      message: "Invalid API key.",
-    };
-  }
-
-  return { authorized: true };
-}
-
-/**
  * POST /api/upload-excel
  * Upload an Excel file and save it to the server
  *
- * Authentication (optional):
- *   - Set UPLOAD_EXCEL_API_KEY in .env to require API key
- *   - Without UPLOAD_EXCEL_API_KEY, endpoint is public
+ * Public endpoint - no authentication required
  *
  * Request:
  *   Content-Type: multipart/form-data
@@ -70,15 +36,6 @@ function authorize(req: NextRequest): { authorized: boolean; message?: string } 
  */
 export async function POST(req: NextRequest) {
   try {
-    // Check authorization
-    const auth = authorize(req);
-    if (!auth.authorized) {
-      return NextResponse.json(
-        { error: auth.message },
-        { status: 401 }
-      );
-    }
-
     // Parse multipart form data
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -164,8 +121,7 @@ export async function GET() {
   return NextResponse.json({
     description: "Upload Excel files to the server",
     authentication: {
-      public: "If UPLOAD_EXCEL_API_KEY is not set, endpoint is public",
-      apiKey: "If UPLOAD_EXCEL_API_KEY is set, provide x-api-key header",
+      public: "No authentication required - fully public endpoint",
     },
     request: {
       method: "POST",
@@ -183,7 +139,7 @@ export async function GET() {
       uploadedAt: "string - ISO timestamp",
     },
     example: {
-      curl: `curl -X POST \\\n  -F "file=@data.xlsx" \\\n  ${process.env.UPLOAD_EXCEL_API_KEY ? "-H \"x-api-key: YOUR_API_KEY\" \\\n  " : ""}http://your-domain.com/api/upload-excel`,
+      curl: `curl -X POST \\\n  -F "file=@data.xlsx" \\\n  http://your-domain.com/api/upload-excel`,
     },
   });
 }
