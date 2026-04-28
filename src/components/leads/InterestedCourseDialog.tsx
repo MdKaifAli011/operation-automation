@@ -26,7 +26,9 @@ export function InterestedCourseDialog({ lead, onClose, onConfirm }: Props) {
 
   useEffect(() => {
     if (!lead) return;
-    setSelected([...(lead.targetExams ?? [])]);
+    // Deduplicate target exams to prevent duplicate checkboxes
+    const deduplicated = Array.from(new Set(lead.targetExams ?? []));
+    setSelected(deduplicated);
     setError(null);
   }, [lead]);
 
