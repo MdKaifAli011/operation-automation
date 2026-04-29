@@ -26,12 +26,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get("date");
     
-    // Parse filter date or use today
-    const filterDate = dateParam 
-      ? new Date(dateParam + "T00:00:00") 
-      : new Date();
-    
-    const filterDateStr = filterDate.toISOString().split("T")[0]; // YYYY-MM-DD
+    // Get today's date in local timezone (YYYY-MM-DD)
+    const now = new Date();
+    const filterDateStr = dateParam || now.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD format
 
     let files: UploadedFile[] = [];
 
@@ -46,7 +43,8 @@ export async function GET(req: NextRequest) {
           
           if (stats.isFile()) {
             const uploadedAt = stats.mtime;
-            const fileDateStr = uploadedAt.toISOString().split("T")[0];
+            // Get file date in local timezone
+            const fileDateStr = uploadedAt.toLocaleDateString('en-CA');
             
             // Filter by date (only show files from the specified date)
             if (fileDateStr !== filterDateStr) {
