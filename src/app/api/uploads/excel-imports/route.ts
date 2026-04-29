@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { readdir, stat } from "fs/promises";
 import path from "path";
 
@@ -15,22 +15,12 @@ export type UploadedFile = {
 };
 
 /**
- * GET /api/uploads/excel-imports?date=YYYY-MM-DD
- * List uploaded files with optional date filter
- * Query params:
- *   - date: Filter files by date (YYYY-MM-DD format), defaults to today
+ * GET /api/uploads/excel-imports
+ * List all uploaded files (JSON, Excel, CSV) - no date filter
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    // Get date parameter, default to today
-    const { searchParams } = new URL(req.url);
-    const dateParam = searchParams.get("date");
-    
-    // Get today's date in local timezone (YYYY-MM-DD)
-    const now = new Date();
-    const filterDateStr = dateParam || now.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD format
-
-    let files: UploadedFile[] = [];
+    const files: UploadedFile[] = [];
 
     try {
       const entries = await readdir(UPLOAD_DIR);
@@ -43,13 +33,6 @@ export async function GET(req: NextRequest) {
           
           if (stats.isFile()) {
             const uploadedAt = stats.mtime;
-            // Get file date in local timezone
-            const fileDateStr = uploadedAt.toLocaleDateString('en-CA');
-            
-            // Filter by date (only show files from the specified date)
-            if (fileDateStr !== filterDateStr) {
-              continue;
-            }
             
             // Parse timestamp and original name from filename format: {timestamp}_{random}_{originalName}
             const parts = fileName.split("_");
@@ -83,7 +66,6 @@ export async function GET(req: NextRequest) {
       success: true,
       files,
       count: files.length,
-      filterDate: filterDateStr,
     });
 
   } catch (error) {

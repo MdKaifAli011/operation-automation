@@ -117,10 +117,10 @@ export function UploadedExcelModal({ open, onClose, onSelectFile }: Props) {
           id={`${formId}-title`}
           className="text-[15px] font-bold tracking-tight text-slate-900"
         >
-          Today's Leads
+          Lead From Platform
         </h2>
         <p className="mt-1 text-[12px] leading-snug text-slate-600">
-          Select today's uploaded file (JSON, CSV, or Excel) to import leads.
+          Select a file (JSON, CSV, or Excel) to import leads. All uploaded files are shown.
         </p>
       </div>
 
@@ -136,10 +136,10 @@ export function UploadedExcelModal({ open, onClose, onSelectFile }: Props) {
         ) : files.length === 0 ? (
           <div className="py-8 text-center">
             <p className="text-[13px] text-slate-600">
-              No files uploaded today.
+              No uploaded files found.
             </p>
             <p className="mt-1 text-[12px] text-slate-500">
-              Files uploaded today will appear here.
+              Upload files via API to see them here.
             </p>
           </div>
         ) : (
