@@ -52,6 +52,8 @@ export function UploadedExcelModal({ open, onClose, onSelectFile }: Props) {
     if (!open) return;
 
     let cancelled = false;
+    setLoading(true);
+    setError(null);
 
     fetch("/api/uploads/excel-imports")
       .then(async (res) => {

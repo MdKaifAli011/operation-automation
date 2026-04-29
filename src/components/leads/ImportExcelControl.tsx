@@ -40,6 +40,12 @@ type PreviewState = {
   issues: ParseIssue[];
 };
 
+type ImportExcelFileEventDetail = {
+  fileUrl: string;
+  fileName: string;
+  deleteFileName?: string;
+};
+
 async function fileToGrid(file: File): Promise<string[][]> {
   const lower = file.name.toLowerCase();
   
@@ -108,6 +114,7 @@ export const ImportExcelControl = forwardRef<
   const [parseError, setParseError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const d = dialogRef.current;
@@ -169,14 +176,15 @@ export const ImportExcelControl = forwardRef<
     setParseError(null);
     setParsing(false);
     setMessage(null);
+    setFileToDelete(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
   // Listen for import-excel-file event from UploadedExcelModal
   useEffect(() => {
     const handler = (e: Event) => {
-      const ce = e as CustomEvent<{ fileUrl: string; fileName: string }>;
-      const { fileUrl, fileName } = ce.detail;
+      const ce = e as CustomEvent<ImportExcelFileEventDetail>;
+      const { fileUrl, fileName, deleteFileName } = ce.detail;
 
       // Fetch the file from the URL and create a File object
       fetch(fileUrl)
@@ -189,6 +197,7 @@ export const ImportExcelControl = forwardRef<
           resetForm();
           setPickedFile(file);
           setPickedName(fileName);
+          setFileToDelete(deleteFileName ?? null);
           setOpen(true);
         })
         .catch((err) => {
@@ -245,13 +254,27 @@ export const ImportExcelControl = forwardRef<
         return;
       }
       await onImported();
+      let deleteNote = "";
+      if (fileToDelete) {
+        const deleteRes = await fetch("/api/uploads/excel-imports/delete", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: fileToDelete }),
+        });
+        if (deleteRes.ok) {
+          deleteNote = " File deleted after import.";
+        } else {
+          deleteNote = " Imported, but file could not be deleted.";
+        }
+      }
       const skipped = preview.issues.length;
       setMessage(
-        `Imported ${preview.leads.length} lead${preview.leads.length === 1 ? "" : "s"}.${skipped ? ` ${skipped} row(s) had warnings (see above).` : ""}`,
+        `Imported ${preview.leads.length} lead${preview.leads.length === 1 ? "" : "s"}.${skipped ? ` ${skipped} row(s) had warnings (see above).` : ""}${deleteNote}`,
       );
       setPickedName(null);
       setPickedFile(null);
       setPreview(null);
+      setFileToDelete(null);
       if (inputRef.current) inputRef.current.value = "";
     } catch (e) {
       setMessage(
@@ -336,7 +359,7 @@ export const ImportExcelControl = forwardRef<
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".json,.csv,.xlsx,.xls,text/csv,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="sr-only"
             aria-label="Choose CSV or Excel file"
             onChange={(e) => {
@@ -361,7 +384,7 @@ export const ImportExcelControl = forwardRef<
               {pickedName ? pickedName : "Click to choose file"}
             </span>
             <span className="text-[11px] text-slate-500">
-              .csv, .xlsx, or .xls
+              .json, .csv, .xlsx, or .xls
             </span>
           </button>
 

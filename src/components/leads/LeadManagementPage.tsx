@@ -1202,7 +1202,11 @@ export function LeadManagementPage() {
           // Trigger import with selected file
           window.dispatchEvent(
             new CustomEvent("import-excel-file", {
-              detail: { fileUrl: file.fileUrl, fileName: file.originalName || file.fileName },
+              detail: {
+                fileUrl: file.fileUrl,
+                fileName: file.originalName || file.fileName,
+                deleteFileName: file.fileName,
+              },
             }),
           );
         }}
