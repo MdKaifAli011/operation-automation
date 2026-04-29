@@ -10,16 +10,7 @@ const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "excel-imports"
 // Max file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-// Allowed Excel MIME types
-const ALLOWED_TYPES = [
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/octet-stream", // Some Excel files may have this
-  "text/csv",
-];
-
-// Allowed file extensions
-const ALLOWED_EXTENSIONS = [".xls", ".xlsx", ".csv"];
+// Accept any file type - no restrictions on MIME type or extension
 
 /**
  * POST /api/upload-excel
@@ -55,23 +46,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: `Invalid file type: ${file.type}. Only Excel files (.xls, .xlsx, .csv) are allowed.` },
-        { status: 400 }
-      );
-    }
+    // Accept any file type - no validation needed
 
-    // Validate file extension
+    // Get original filename
     const originalName = file.name;
-    const ext = path.extname(originalName).toLowerCase();
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      return NextResponse.json(
-        { error: `Invalid file extension: ${ext}. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}` },
-        { status: 400 }
-      );
-    }
 
     // Generate unique filename with timestamp
     const timestamp = Date.now();
@@ -119,7 +97,7 @@ export async function POST(req: NextRequest) {
  */
 export async function GET() {
   return NextResponse.json({
-    description: "Upload Excel files to the server",
+    description: "Upload any file to the server (CSV, Excel, JSON, or any type)",
     authentication: {
       public: "No authentication required - fully public endpoint",
     },
@@ -127,7 +105,7 @@ export async function GET() {
       method: "POST",
       contentType: "multipart/form-data",
       body: {
-        file: "File - Excel file (.xls, .xlsx, .csv), max 10MB",
+        file: "File - Any type (CSV, Excel, JSON, etc.), max 10MB",
       },
     },
     response: {
