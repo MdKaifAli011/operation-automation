@@ -13,7 +13,6 @@ import { formatLeadPhone } from "@/lib/phone-display";
 import { rowToneBg, rowToneBgWithFollowUp, rowToneNameLinkClass } from "./row-styles";
 import { PipelineDots } from "./PipelineDots";
 import { InterestedCourseDialog } from "./InterestedCourseDialog";
-import { UploadedExcelModal, type UploadedFile } from "./UploadedExcelModal";
 import {
   dataTypeToShortLabel,
   type LeadSourceOption,
@@ -172,8 +171,6 @@ export function LeadSheetTable({
   const [interestedCourseLead, setInterestedCourseLead] =
     useState<Lead | null>(null);
   const [enrolledConfirmLead, setEnrolledConfirmLead] = useState<Lead | null>(null);
-  const [uploadedExcelOpen, setUploadedExcelOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const dataTypeMenuRef = useRef<HTMLDivElement>(null);
@@ -976,18 +973,6 @@ export function LeadSheetTable({
                 Enrolled
               </button>
             ) : null}
-            <div className="my-1 border-t border-slate-100" />
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full px-3 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
-              onClick={() => {
-                setActionMenu(null);
-                setUploadedExcelOpen(true);
-              }}
-            >
-              Lead From Platform
-            </button>
           </div>,
           document.body,
         )}
@@ -1033,19 +1018,6 @@ export function LeadSheetTable({
           followUpDate: null,
         });
         setEnrolledConfirmLead(null);
-      }}
-    />
-    <UploadedExcelModal
-      open={uploadedExcelOpen}
-      onClose={() => setUploadedExcelOpen(false)}
-      onSelectFile={(file) => {
-        setSelectedFile(file);
-        // Trigger import logic - could open ImportExcelControl with the selected file
-        window.dispatchEvent(
-          new CustomEvent("import-excel-file", {
-            detail: { fileUrl: file.fileUrl, fileName: file.originalName || file.fileName },
-          }),
-        );
       }}
     />
     </>

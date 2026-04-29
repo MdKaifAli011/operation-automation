@@ -12,6 +12,7 @@ import {
   type ImportExcelControlHandle,
 } from "./ImportExcelControl";
 import { LeadSheetTable } from "./LeadSheetTable";
+import { UploadedExcelModal, type UploadedFile } from "./UploadedExcelModal";
 import { SX } from "@/components/student/student-excel-ui";
 import { cn } from "@/lib/cn";
 import { isLeadConvertedInCurrentMonth, getLeadConversionReferenceIso } from "@/lib/leadConversionMonth";
@@ -118,6 +119,8 @@ export function LeadManagementPage() {
   const [convertedNameSearch, setConvertedNameSearch] = useState("");
   const importExcelRef = useRef<ImportExcelControlHandle>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const [uploadedExcelOpen, setUploadedExcelOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   const leadSources = useLeadSources();
   const { activeValues: targetExamFilterOptions, labelFor: targetExamLabel } =
     useTargetExamOptions();
@@ -664,6 +667,7 @@ export function LeadManagementPage() {
           <LeadSheetActionsMenu
             onImport={() => importExcelRef.current?.open()}
             onExportCsv={() => setExportDialogOpen(true)}
+            onLeadFromPlatform={() => setUploadedExcelOpen(true)}
           />
         </div>
       </header>
@@ -1168,8 +1172,7 @@ export function LeadManagementPage() {
       />
 
       <FollowUpDialog
-        key={followUpId ?? "followup-dialog-closed"}
-        open={followUpId !== null}
+        open={!!followUpId}
         onClose={() => setFollowUpId(null)}
         onSubmit={(data) => {
           if (followUpId) {
@@ -1189,6 +1192,19 @@ export function LeadManagementPage() {
               },
             });
           }
+        }}
+      />
+      <UploadedExcelModal
+        open={uploadedExcelOpen}
+        onClose={() => setUploadedExcelOpen(false)}
+        onSelectFile={(file) => {
+          setSelectedFile(file);
+          // Trigger import with selected file
+          window.dispatchEvent(
+            new CustomEvent("import-excel-file", {
+              detail: { fileUrl: file.fileUrl, fileName: file.originalName || file.fileName },
+            }),
+          );
         }}
       />
     </div>

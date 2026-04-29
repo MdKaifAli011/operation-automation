@@ -10,9 +10,10 @@ import { UploadIcon } from "./ImportExcelControl";
 type Props = {
   onImport: () => void;
   onExportCsv: () => void;
+  onLeadFromPlatform?: () => void;
 };
 
-export function LeadSheetActionsMenu({ onImport, onExportCsv }: Props) {
+export function LeadSheetActionsMenu({ onImport, onExportCsv, onLeadFromPlatform }: Props) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -52,6 +53,19 @@ export function LeadSheetActionsMenu({ onImport, onExportCsv }: Props) {
             "absolute right-0 top-full z-[100] mt-1 min-w-[14.5rem] rounded-none border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10",
           )}
         >
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] font-medium text-slate-800 transition-colors hover:bg-slate-50"
+            onClick={() => {
+              setOpen(false);
+              onLeadFromPlatform?.();
+            }}
+          >
+            <PlatformIcon className="shrink-0 text-slate-500" />
+            Lead From Platform
+          </button>
+          <div className="my-1 border-t border-slate-100" />
           <button
             type="button"
             role="menuitem"
@@ -108,6 +122,27 @@ function IconDotsVertical({ title }: { title?: string }) {
       <circle cx="12" cy="5" r="1.75" />
       <circle cx="12" cy="12" r="1.75" />
       <circle cx="12" cy="19" r="1.75" />
+    </svg>
+  );
+}
+
+function PlatformIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      aria-hidden
+    >
+      <path
+        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
