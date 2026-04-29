@@ -42,10 +42,39 @@ type PreviewState = {
 
 async function fileToGrid(file: File): Promise<string[][]> {
   const lower = file.name.toLowerCase();
+  
+  // Handle JSON files
+  if (lower.endsWith(".json")) {
+    const text = await file.text();
+    const jsonData = JSON.parse(text);
+    
+    // Convert JSON array to grid format
+    if (Array.isArray(jsonData) && jsonData.length > 0) {
+      const firstRow = jsonData[0];
+      const headers = Object.keys(firstRow);
+      
+      // Map JSON keys to expected column names (convert snake_case to readable)
+      const headerRow = headers.map(h => {
+        // Convert snake_case to title case
+        return h.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+      });
+      
+      const dataRows = jsonData.map((row: Record<string, unknown>) => {
+        return headers.map(h => String(row[h] ?? ""));
+      });
+      
+      return [headerRow, ...dataRows];
+    }
+    return [];
+  }
+  
+  // Handle CSV files
   if (lower.endsWith(".csv")) {
     const text = await file.text();
     return parseCsvText(text);
   }
+  
+  // Handle Excel files
   const buf = await file.arrayBuffer();
   const XLSX = await import("@e965/xlsx");
   const wb = XLSX.read(buf, { type: "array", cellDates: false, raw: false });

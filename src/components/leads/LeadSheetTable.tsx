@@ -986,7 +986,7 @@ export function LeadSheetTable({
                 setUploadedExcelOpen(true);
               }}
             >
-              Import from Uploaded Excel
+              Today's Leads
             </button>
           </div>,
           document.body,
